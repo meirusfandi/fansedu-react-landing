@@ -79,6 +79,9 @@ function App() {
                 <a href="#features" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Keunggulan
                 </a>
+                <a href="#request" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#request')}>
+                  Request Bidang
+                </a>
                 <a href="#contact" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#contact')}>
                   Kontak
                 </a>
@@ -112,6 +115,9 @@ function App() {
             </a>
             <a href="#features" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#features')}>
               Keunggulan
+            </a>
+            <a href="#request" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#request')}>
+              Request Bidang
             </a>
             <a href="#contact" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#contact')}>
               Kontak
@@ -309,6 +315,31 @@ function App() {
         </div>
       </section>
 
+      <section id="request" className="py-24 relative bg-[var(--bg-secondary)]">
+        <div className="absolute inset-0 grid-bg opacity-50"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="feature-card rounded-3xl p-8 lg:p-12 text-center reveal">
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6">
+              Request Bidang Lainnya
+            </span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6">
+              Ingin Request <span className="text-[var(--accent)]">Bidang Lainnya?</span>
+            </h2>
+            <p className="text-[var(--fg-muted)] text-lg max-w-3xl mx-auto mb-8">
+              Jika Anda membutuhkan program pelatihan di bidang selain OSN Informatika, tim kami siap menerima masukan dan menyesuaikan kebutuhan belajar Anda.
+            </p>
+            <a
+              href="https://wa.me/6285121277161?text=Halo%20Fansedu%2C%20saya%20ingin%20request%20program%20bidang%20lainnya."
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary px-8 py-4 rounded-full font-semibold text-center inline-block"
+            >
+              Kirim Request
+            </a>
+          </div>
+        </div>
+      </section>
+
       <section id="contact" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -393,6 +424,9 @@ function App() {
                 </a>
                 <a href="#features" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Keunggulan
+                </a>
+                <a href="#request" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#request')}>
+                  Request Bidang
                 </a>
                 <a href="#contact" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#contact')}>
                   Kontak
