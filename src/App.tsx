@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
+import { isLeaderboardVisible, isRegistrationOpen } from './utils/tryoutDates'
 
 const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@fansedu.official'
 // Set to first video ID from channel to show its thumbnail; or use VITE_HERO_YOUTUBE_VIDEO_ID in .env
@@ -225,20 +226,24 @@ function App() {
               </a>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 shrink-0">
-              <a
-                href="https://forms.gle/y9RMAYeS6bxJ6axH6"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="btn-primary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap"
-              >
-                Daftar TryOut
-              </a>
+              {isRegistrationOpen() && (
+                <a
+                  href="https://forms.gle/y9RMAYeS6bxJ6axH6"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="btn-primary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap"
+                >
+                  Daftar TryOut
+                </a>
+              )}
               <a href="#/tryout-info" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
                 Detail TryOut
               </a>
-              <a href="#/leaderboard" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
-                Leaderboard
-              </a>
+              {isLeaderboardVisible() && (
+                <a href="#/leaderboard" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
+                  Leaderboard
+                </a>
+              )}
             </div>
           </div>
         </div>

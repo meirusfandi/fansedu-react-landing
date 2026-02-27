@@ -1,4 +1,5 @@
 import '../App.css'
+import { isLeaderboardVisible, isRegistrationOpen } from '../utils/tryoutDates'
 
 export default function TryoutInfoPage() {
   return (
@@ -54,14 +55,16 @@ export default function TryoutInfoPage() {
               <p className="text-[var(--fg-muted)] mb-4">
                 Daftar melalui link Google Form. Pastikan data nama, asal sekolah, kelas, dan email valid. Batas pendaftaran: <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>.
               </p>
-              <a
-                href="https://forms.gle/y9RMAYeS6bxJ6axH6"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
-              >
-                Daftar TryOut
-              </a>
+              {isRegistrationOpen() && (
+                <a
+                  href="https://forms.gle/y9RMAYeS6bxJ6axH6"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
+                >
+                  Daftar TryOut
+                </a>
+              )}
             </div>
           </div>
         </section>
@@ -178,27 +181,31 @@ export default function TryoutInfoPage() {
                 <li>Leaderboard dapat menyertakan filter: tampil semua, atau hanya peserta tanpa bantuan AI (untuk perbandingan kemampuan murni).</li>
               </ul>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-              <p className="text-[var(--fg-muted)] text-sm">
-                Leaderboard lengkap TryOut (setelah 5 Maret 2026) dapat dilihat di halaman khusus leaderboard berikut. Peringkat disusun berdasarkan total
-                skor, dengan penanda penggunaan AI sesuai deklarasi peserta.
-              </p>
-              <a href="#/leaderboard" className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
-                Lihat Leaderboard
-              </a>
-            </div>
+            {isLeaderboardVisible() && (
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <p className="text-[var(--fg-muted)] text-sm">
+                  Leaderboard lengkap TryOut (setelah 5 Maret 2026) dapat dilihat di halaman khusus leaderboard berikut. Peringkat disusun berdasarkan total
+                  skor, dengan penanda penggunaan AI sesuai deklarasi peserta.
+                </p>
+                <a href="#/leaderboard" className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
+                  Lihat Leaderboard
+                </a>
+              </div>
+            )}
           </div>
         </section>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-          <a
-            href="https://forms.gle/y9RMAYeS6bxJ6axH6"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="btn-primary px-8 py-4 rounded-full font-semibold text-center"
-          >
-            Daftar TryOut
-          </a>
+          {isRegistrationOpen() && (
+            <a
+              href="https://forms.gle/y9RMAYeS6bxJ6axH6"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="btn-primary px-8 py-4 rounded-full font-semibold text-center"
+            >
+              Daftar TryOut
+            </a>
+          )}
           <a href="#/" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
             ← Kembali ke Beranda
           </a>
