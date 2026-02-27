@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import '../App.css'
 import { isLeaderboardVisible } from '../utils/tryoutDates'
 
@@ -17,7 +18,14 @@ const MOCK_LEADERBOARD: LeaderboardEntry[] = [
 ]
 
 export default function TryoutLeaderboardPage() {
-  const visible = isLeaderboardVisible()
+  const [visible, setVisible] = useState(() => isLeaderboardVisible())
+
+  useEffect(() => {
+    const check = () => setVisible(isLeaderboardVisible())
+    check()
+    const intervalId = window.setInterval(check, 60 * 1000) // cek setiap 60 detik
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
