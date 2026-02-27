@@ -1,9 +1,56 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import type { Article } from './types/article'
+
+const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@fansedu.official'
+// Set to first video ID from channel to show its thumbnail; or use VITE_HERO_YOUTUBE_VIDEO_ID in .env
+const YOUTUBE_VIDEO_ID_PLACEHOLDER = (import.meta.env.VITE_HERO_YOUTUBE_VIDEO_ID as string) || ''
+
+// Placeholder artikel; nanti diganti dengan fetch dari backend (mis. GET /api/articles)
+const MOCK_ARTICLES: Article[] = [
+  {
+    id: '1',
+    title: 'Tips Persiapan OSN Informatika 2026',
+    excerpt: 'Langkah-langkah praktis mempersiapkan diri menghadapi OSN Informatika dari persiapan materi hingga manajemen waktu.',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=Tips+OSN',
+    slug: 'tips-persiapan-osn-informatika-2026',
+    publishedAt: '2026-02-20',
+    category: 'Tips',
+  },
+  {
+    id: '2',
+    title: 'Materi Dasar Pemrograman untuk Pemula',
+    excerpt: 'Pengenalan konsep pemrograman dan struktur data dasar yang sering muncul di soal OSN Informatika.',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=Materi+Dasar',
+    slug: 'materi-dasar-pemrograman-pemula',
+    publishedAt: '2026-02-15',
+    category: 'Materi',
+  },
+  {
+    id: '3',
+    title: 'Jadwal dan Tahapan OSN 2026',
+    excerpt: 'Informasi lengkap tahapan seleksi OSN dari tingkat sekolah hingga nasional serta timeline penting.',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=Jadwal+OSN',
+    slug: 'jadwal-tahapan-osn-2026',
+    publishedAt: '2026-02-10',
+    category: 'Info',
+  },
+]
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [navbarSolid, setNavbarSolid] = useState(false)
+  const [heroVideoId, setHeroVideoId] = useState<string>(YOUTUBE_VIDEO_ID_PLACEHOLDER)
+  // Artikel: diisi dari backend bila VITE_ARTICLES_API_URL diset
+  const [articles, setArticles] = useState<Article[]>(MOCK_ARTICLES)
+  useEffect(() => {
+    const api = import.meta.env.VITE_ARTICLES_API_URL as string | undefined
+    if (!api) return
+    fetch(api)
+      .then((r) => r.json())
+      .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const revealElements = document.querySelectorAll('.reveal')
@@ -46,6 +93,28 @@ function App() {
     }
   }, [])
 
+  // Fetch channel page to get first video ID for hero thumbnail (CORS proxy)
+  useEffect(() => {
+    if (YOUTUBE_VIDEO_ID_PLACEHOLDER) return
+    const controller = new AbortController()
+    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(`${YOUTUBE_CHANNEL_URL}/videos`)}`
+    fetch(url, { signal: controller.signal })
+      .then((res) => res.text())
+      .then((html) => {
+        // Try ytInitialData first (videoId in gridVideoRenderer or richItemRenderer)
+        const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)
+        if (videoIdMatch?.[1]) {
+          setHeroVideoId(videoIdMatch[1])
+          return
+        }
+        // Fallback: first /watch?v= link
+        const watchMatch = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/)
+        if (watchMatch?.[1]) setHeroVideoId(watchMatch[1])
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [])
+
   const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (!href.startsWith('#')) return
     event.preventDefault()
@@ -70,6 +139,9 @@ function App() {
 
             <div className="hidden md:flex items-center gap-8">
               <nav className="flex items-center gap-8">
+                <a href="#tryout" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+                  TryOut
+                </a>
                 <a href="#about" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#about')}>
                   Tentang
                 </a>
@@ -107,6 +179,9 @@ function App() {
       <div className={`mobile-menu fixed top-0 right-0 w-80 h-full bg-[var(--bg)] z-40 border-l border-[var(--border)] ${isMenuOpen ? 'active' : ''}`}>
         <div className="pt-24 px-6">
           <nav className="flex flex-col gap-4">
+            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+              TryOut
+            </a>
             <a href="#about" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#about')}>
               Tentang
             </a>
@@ -130,6 +205,44 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Try Out Info Banner - Free TryOut Nasional OSN Informatika 2026 */}
+      <section id="tryout" className="relative bg-[var(--card)] border-b border-[var(--border)] pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-2xl bg-gradient-to-r from-[var(--bg-secondary)] to-[var(--card)] border border-[var(--border)] p-6 md:p-8">
+            <div>
+              <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-[var(--bg)] text-xs font-semibold uppercase tracking-wide mb-3">
+                Gratis
+              </span>
+              <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--fg)] mb-1">
+                Free TryOut Nasional — OSN Informatika 2026
+              </h2>
+              <p className="text-[var(--fg-muted)] text-sm sm:text-base">
+                Mulai <strong className="text-[var(--fg)]">Kamis, 5 Maret 2026 pukul 13.00 WIB</strong>. Batas pendaftaran <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>. Link dan akses TryOut akan dikirim sekitar 1 jam sebelum pelaksanaan ke email peserta.
+              </p>
+              <a href="#/tryout-info" className="inline-block mt-3 text-sm text-[var(--accent)] hover:underline">
+                Info lengkap: detail soal, penilaian, leaderboard & penggunaan AI →
+              </a>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+              <a
+                href="https://forms.gle/y9RMAYeS6bxJ6axH6"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="btn-primary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap"
+              >
+                Daftar TryOut
+              </a>
+              <a href="#/tryout-info" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
+                Detail TryOut
+              </a>
+              <a href="#/leaderboard" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
+                Leaderboard
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section id="hero" className="relative min-h-screen flex items-center grid-bg overflow-hidden">
         <div className="orb orb-1"></div>
@@ -167,22 +280,55 @@ function App() {
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-transparent opacity-20 rounded-3xl blur-3xl"></div>
                 <div className="relative bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden">
-                  <img src="https://placehold.co/600x500/161616/c9fd02?text=OSN+Informatika" alt="Fansedu Informatic Olympiad Training" className="w-full h-auto" />
+                  <a
+                    href={heroVideoId ? `https://www.youtube.com/watch?v=${heroVideoId}` : YOUTUBE_CHANNEL_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="block w-full"
+                  >
+                    {heroVideoId ? (
+                      <img
+                        src={`https://img.youtube.com/vi/${heroVideoId}/maxresdefault.jpg`}
+                        alt="Video Pembelajaran Fansedu - OSN Informatika"
+                        className="w-full h-auto object-cover"
+                        onError={(e) => {
+                          const target = e.currentTarget
+                          if (!target.src.includes('hqdefault')) {
+                            target.src = `https://img.youtube.com/vi/${heroVideoId}/hqdefault.jpg`
+                          } else {
+                            target.src = 'https://placehold.co/600x500/161616/c9fd02?text=Video+Pembelajaran'
+                            target.onerror = null
+                          }
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src="https://placehold.co/600x500/161616/c9fd02?text=Video+Pembelajaran"
+                        alt="Fansedu Informatic Olympiad Training"
+                        className="w-full h-auto"
+                      />
+                    )}
+                  </a>
 
-                  <div className="absolute bottom-4 left-4 right-4 bg-[var(--bg)] bg-opacity-90 backdrop-blur-lg rounded-2xl p-4 border border-[var(--border)]">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0">
+                  <a
+                    href="https://www.youtube.com/@fansedu.official"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="absolute bottom-4 left-4 right-4 bg-[var(--bg)] bg-opacity-90 backdrop-blur-lg rounded-2xl p-4 border border-[var(--border)] hover:border-[var(--accent)] transition-colors"
+                  >
+                    <div className="flex items-center gap-4 group">
+                      <div className="w-12 h-12 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
                         <svg className="w-6 h-6 text-[var(--bg)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
                       </div>
                       <div>
-                        <div className="font-semibold text-sm">Video Pembelajaran</div>
-                        <div className="text-xs text-[var(--fg-muted)]">100+ rekaman materi lengkap</div>
+                        <div className="font-semibold text-sm text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors">Video Pembelajaran</div>
+                        <div className="text-xs text-[var(--fg-muted)]">Tonton di YouTube @fansedu.official</div>
                       </div>
                     </div>
-                  </div>
+                  </a>
                 </div>
               </div>
             </div>
@@ -312,6 +458,62 @@ function App() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section id="articles" className="hidden py-24 relative bg-[var(--bg-secondary)]">
+        <div className="absolute inset-0 grid-bg opacity-50"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Artikel</span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
+              Artikel & <span className="text-[var(--accent)]">Tips</span> OSN
+            </h2>
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
+              Baca tips, materi, dan informasi terbaru seputar persiapan OSN Informatika.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {articles.map((article, index) => (
+              <article
+                key={article.id}
+                className={`feature-card rounded-2xl overflow-hidden reveal reveal-delay-${(index % 3) + 1}`}
+              >
+                <a href={`#/artikel/${article.slug}`} className="block group">
+                  <div className="aspect-video bg-[var(--card)] overflow-hidden">
+                    <img
+                      src={article.image || 'https://placehold.co/600x320/161616/c9fd02?text=Artikel'}
+                      alt={article.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="p-6">
+                    {article.category && (
+                      <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-[var(--bg)] text-xs font-semibold mb-3">
+                        {article.category}
+                      </span>
+                    )}
+                    <h3 className="font-display font-semibold text-xl mb-2 group-hover:text-[var(--accent)] transition-colors line-clamp-2">
+                      {article.title}
+                    </h3>
+                    <p className="text-[var(--fg-muted)] text-sm line-clamp-2 mb-3">{article.excerpt}</p>
+                    <time className="text-xs text-[var(--fg-muted)]" dateTime={article.publishedAt}>
+                      {new Date(article.publishedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </time>
+                  </div>
+                </a>
+              </article>
+            ))}
+          </div>
+
+          {articles.length > 0 && (
+            <div className="text-center mt-12 reveal">
+              <a href="#articles" className="btn-secondary px-8 py-4 rounded-full font-semibold inline-block">
+                Lihat Semua Artikel
+              </a>
+            </div>
+          )}
         </div>
       </section>
 
