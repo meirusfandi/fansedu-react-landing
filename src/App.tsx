@@ -7,6 +7,38 @@ const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@fansedu.official'
 // Set to first video ID from channel to show its thumbnail; or use VITE_HERO_YOUTUBE_VIDEO_ID in .env
 const YOUTUBE_VIDEO_ID_PLACEHOLDER = (import.meta.env.VITE_HERO_YOUTUBE_VIDEO_ID as string) || ''
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8080'
+const TRYOUTS_OPEN_URL = `${API_BASE}/tryouts/open`
+
+export interface OpenTryoutItem {
+  id: string
+  judul: string
+  tanggalTest: string
+}
+
+function parseTryoutsOpen(data: unknown): OpenTryoutItem[] {
+  const raw = Array.isArray(data) ? data : (data && typeof data === 'object' && 'data' in data) ? (data as { data: unknown }).data : null
+  const arr = Array.isArray(raw) ? raw : null
+  if (!arr) return []
+  return arr.map((item: Record<string, unknown>) => {
+    const id = typeof item.id === 'string' ? item.id : String(item.id ?? '')
+    const judul = typeof item.judul === 'string' ? item.judul : typeof item.title === 'string' ? item.title : '—'
+    const tanggalTest = typeof item.tanggal_test === 'string' ? item.tanggal_test : typeof item.tanggalTest === 'string' ? item.tanggalTest : typeof item.testDate === 'string' ? item.testDate : ''
+    return { id, judul, tanggalTest }
+  })
+}
+
+function formatTanggal(iso: string): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+  } catch {
+    return iso
+  }
+}
+
 // Placeholder artikel; nanti diganti dengan fetch dari backend (mis. GET /api/articles)
 const MOCK_ARTICLES: Article[] = [
   {
@@ -42,14 +74,23 @@ function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [navbarSolid, setNavbarSolid] = useState(false)
   const [heroVideoId, setHeroVideoId] = useState<string>(YOUTUBE_VIDEO_ID_PLACEHOLDER)
+  const [isLightTheme, setIsLightTheme] = useState(false)
   // Artikel: diisi dari backend bila VITE_ARTICLES_API_URL diset
   const [articles, setArticles] = useState<Article[]>(MOCK_ARTICLES)
+  // Tryouts open: judul, id, tanggal test dari GET /tryouts/open
+  const [openTryouts, setOpenTryouts] = useState<OpenTryoutItem[]>([])
   useEffect(() => {
     const api = import.meta.env.VITE_ARTICLES_API_URL as string | undefined
     if (!api) return
     fetch(api)
       .then((r) => r.json())
       .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    fetch(TRYOUTS_OPEN_URL)
+      .then((r) => r.json())
+      .then((data: unknown) => setOpenTryouts(parseTryoutsOpen(data)))
       .catch(() => {})
   }, [])
 
@@ -126,8 +167,10 @@ function App() {
     }
   }
 
+  const themeClass = isLightTheme ? 'theme-light' : ''
+
   return (
-    <div className="wrapper">
+    <div className={`wrapper ${themeClass}`}>
       <header className={`navbar fixed top-0 left-0 right-0 z-50 ${navbarSolid ? 'navbar-solid' : ''}`}>
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
@@ -138,7 +181,7 @@ function App() {
               <span className="font-display font-semibold text-xl hidden sm:block">Fansedu</span>
             </a>
 
-            <div className="hidden md:flex items-center gap-8">
+            <div className="hidden md:flex items-center gap-6">
               <nav className="flex items-center gap-8">
                 <a href="#tryout" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#tryout')}>
                   TryOut
@@ -159,7 +202,40 @@ function App() {
                   Kontak
                 </a>
               </nav>
-              <a href="https://wa.me/6285121277161" target="_blank" rel="noreferrer" className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
+              <button
+                type="button"
+                className="w-9 h-9 rounded-full border border-[var(--border)] flex items-center justify-center text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                onClick={() => setIsLightTheme((prev) => !prev)}
+                aria-label={isLightTheme ? 'Switch to dark mode' : 'Switch to light mode'}
+              >
+                {isLightTheme ? (
+                  // Moon icon
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                      d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"
+                    />
+                  </svg>
+                ) : (
+                  // Lamp / light bulb icon
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                      d="M9 18h6m-5 3h4M9 14a3 3 0 016 0c0 .943-.421 1.777-1.091 2.333A2.996 2.996 0 0112 18a2.996 2.996 0 01-1.909-.667A2.997 2.997 0 019 14zm3-11a7 7 0 00-7 7c0 2.485 1.355 4.651 3.375 5.815.403.235.625.686.625 1.155V18h6v-1.03c0-.47.222-.92.625-1.155A6.996 6.996 0 0020 10a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                )}
+              </button>
+              <a
+                href="https://wa.me/6285121277161"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+              >
                 Hubungi Kami
               </a>
             </div>
@@ -207,7 +283,7 @@ function App() {
         </div>
       </div>
 
-      {/* Try Out Info Banner - Free TryOut Nasional OSN Informatika 2026 */}
+      {/* Try Out Info Banner - data dari tryouts/open (judul, id, tanggal); sisanya statis */}
       <section id="tryout" className="relative bg-[var(--card)] border-b border-[var(--border)] pt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-2xl bg-gradient-to-r from-[var(--bg-secondary)] to-[var(--card)] border border-[var(--border)] p-6 md:p-8">
@@ -216,12 +292,16 @@ function App() {
                 Gratis
               </span>
               <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--fg)] mb-1">
-                Free TryOut Nasional — OSN Informatika 2026
+                {openTryouts.length > 0 ? openTryouts[0].judul : 'Free TryOut Nasional — OSN Informatika 2026'}
               </h2>
               <p className="text-[var(--fg-muted)] text-sm sm:text-base">
-                Mulai <strong className="text-[var(--fg)]">Kamis, 5 Maret 2026 pukul 13.00 WIB</strong>. Batas pendaftaran <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>. Link dan akses TryOut akan dikirim sekitar 1 jam sebelum pelaksanaan ke email peserta.
+                {openTryouts.length > 0 && openTryouts[0].tanggalTest ? (
+                  <>Mulai <strong className="text-[var(--fg)]">{formatTanggal(openTryouts[0].tanggalTest)}</strong>. Batas pendaftaran <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>. Link dan akses TryOut akan dikirim sekitar 1 jam sebelum pelaksanaan ke email peserta.</>
+                ) : (
+                  <>Mulai <strong className="text-[var(--fg)]">Kamis, 5 Maret 2026 pukul 13.00 WIB</strong>. Batas pendaftaran <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>. Link dan akses TryOut akan dikirim sekitar 1 jam sebelum pelaksanaan ke email peserta.</>
+                )}
               </p>
-              <a href="#/tryout-info" className="inline-block mt-3 text-sm text-[var(--accent)] hover:underline">
+              <a href={openTryouts.length > 0 ? `#/tryout-info/${openTryouts[0].id}` : '#/tryout-info'} className="inline-block mt-3 text-sm text-[var(--accent)] hover:underline">
                 Info lengkap: detail soal, penilaian, leaderboard & penggunaan AI →
               </a>
             </div>
@@ -236,11 +316,11 @@ function App() {
                   Daftar TryOut
                 </a>
               )}
-              <a href="#/tryout-info" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
+              <a href={openTryouts.length > 0 ? `#/tryout-info/${openTryouts[0].id}` : '#/tryout-info'} className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
                 Detail TryOut
               </a>
               {isLeaderboardVisible() && (
-                <a href="#/leaderboard" className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
+                <a href={openTryouts.length > 0 ? `#/leaderboard/${openTryouts[0].id}` : '#/leaderboard'} className="btn-secondary px-6 py-4 rounded-full font-semibold text-center whitespace-nowrap">
                   Leaderboard
                 </a>
               )}

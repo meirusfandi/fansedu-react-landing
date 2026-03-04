@@ -1,7 +1,12 @@
 import '../App.css'
 import { isLeaderboardVisible, isRegistrationOpen } from '../utils/tryoutDates'
 
-export default function TryoutInfoPage() {
+interface TryoutInfoPageProps {
+  tryoutId?: string | null
+}
+
+export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps) {
+  const leaderboardHref = tryoutId ? `#/leaderboard/${tryoutId}` : '#/leaderboard'
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <header className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
@@ -187,7 +192,7 @@ export default function TryoutInfoPage() {
                   Leaderboard lengkap TryOut (setelah 5 Maret 2026) dapat dilihat di halaman khusus leaderboard berikut. Peringkat disusun berdasarkan total
                   skor, dengan penanda penggunaan AI sesuai deklarasi peserta.
                 </p>
-                <a href="#/leaderboard" className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
+                <a href={leaderboardHref} className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
                   Lihat Leaderboard
                 </a>
               </div>
