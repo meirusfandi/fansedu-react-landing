@@ -305,7 +305,7 @@ function App() {
   return (
     <div className="wrapper pb-20 md:pb-0">
       <header className={`navbar fixed top-0 left-0 right-0 z-50 ${navbarSolid ? 'navbar-solid' : ''}`}>
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <nav className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="flex items-center justify-between h-20">
             <a href="#hero" className="flex items-center gap-3" onClick={(event) => handleAnchorClick(event, '#hero')}>
               <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
@@ -404,7 +404,7 @@ function App() {
         <div className="orb orb-1"></div>
         <div className="orb orb-2"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 w-full">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-24 pb-16 w-full">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div className="order-2 lg:order-1">
               <div className="reveal">
@@ -517,7 +517,7 @@ function App() {
       </section>
 
       <section id="social-proof" className="py-16 relative bg-[var(--card)] border-b border-[var(--border)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
               { value: '20+', label: 'paket pembahasan soal' },
@@ -536,7 +536,7 @@ function App() {
 
       <section id="masalah" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Yang Sering Dihadapi</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -568,7 +568,7 @@ function App() {
       </section>
 
       <section id="solusi" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div className="reveal">
                 <div className="feature-card rounded-3xl p-8 lg:p-12 h-full flex flex-col items-center justify-center text-center">
@@ -683,7 +683,7 @@ function App() {
 
       <section id="features" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Fitur Program</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -718,7 +718,7 @@ function App() {
 
       <section id="packages" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Program</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -876,7 +876,7 @@ function App() {
       </section>
 
       <section id="testimoni" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Testimoni</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -906,7 +906,7 @@ function App() {
 
       <section id="tryout" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-sm font-semibold text-[var(--accent)] mb-6 reveal">Free Tryout</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -953,7 +953,7 @@ function App() {
       </section>
 
       <section id="cta" className="py-20 relative bg-[var(--card)] border-b border-[var(--border)]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 text-center">
           <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal">
             Siap Lolos <span className="text-[var(--accent)]">OSN-K 2026?</span>
           </h2>
@@ -988,7 +988,7 @@ function App() {
 
       <section id="articles" className="hidden py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Artikel</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -1044,7 +1044,7 @@ function App() {
 
       <section id="request" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="feature-card rounded-3xl p-8 lg:p-12 text-center reveal">
             <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6">
               Request Bidang Lainnya
@@ -1069,7 +1069,7 @@ function App() {
 
       <section id="contact" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="grid lg:grid-cols-2 gap-16">
             <div>
               <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Hubungi Kami</span>
@@ -1126,7 +1126,7 @@ function App() {
       </section>
 
       <footer className="py-12 border-t border-[var(--border)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
               <a href="#hero" className="flex items-center gap-3 mb-4" onClick={(event) => handleAnchorClick(event, '#hero')}>
