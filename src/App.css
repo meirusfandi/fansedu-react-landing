@@ -1,10 +1,25 @@
+/* Tema default: putih, selaras branding Fansedu */
 :root {
+  --bg: #ffffff;
+  --bg-secondary: #f8fafc;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --accent: #0066ff;
+  --accent-hover: #0052cc;
+  --accent-light: #e0edff;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --surface: #f1f5f9;
+}
+
+/* Tema gelap (toggle) */
+.theme-dark {
   --bg: #0a0a0a;
   --bg-secondary: #111111;
   --fg: #ffffff;
   --fg-muted: #888888;
-  --accent: #c9fd02;
-  --accent-hover: #a8d902;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
   --card: #161616;
   --border: #2a2a2a;
 }
@@ -37,118 +52,28 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Light mode: LMS-style theme (inspired by provided design) */
-.theme-light {
-  --bg: #fafafa;
-  --bg-secondary: #ffffff;
-  --fg: #0a0a0a;
-  --fg-muted: #6b7280;
-  --accent: #0066ff;
-  --accent-hover: #0052cc;
-  --accent-light: #e8f0ff;
-  --card: #ffffff;
-  --border: #e5e7eb;
-  --surface: #f4f4f5;
-  --success: #10b981;
-  --error: #ef4444;
-}
-
-.theme-light .navbar {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  background: rgba(250, 250, 250, 0.8);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 0 0 0 transparent;
-}
-
-.theme-light .navbar.navbar-solid {
-  background: rgba(250, 250, 250, 1);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.08);
-}
-
-.theme-light .nav-link {
-  color: var(--fg-muted) !important;
-}
-
-.theme-light .nav-link:hover {
-  color: var(--fg) !important;
-}
-
-.theme-light .btn-primary {
-  background-color: var(--fg) !important;
-  color: #ffffff !important;
-  border: none;
-}
-
-.theme-light .btn-primary:hover {
-  background-color: var(--accent) !important;
-  color: #ffffff !important;
-  box-shadow: 0 10px 40px rgba(0, 102, 255, 0.3);
-}
-
-.theme-light .btn-secondary {
-  background-color: transparent !important;
-  color: var(--fg) !important;
-  border: 2px solid var(--border) !important;
-}
-
-.theme-light .btn-secondary:hover {
-  border-color: var(--fg) !important;
-  color: var(--fg) !important;
-  background-color: var(--surface) !important;
-}
-
-.theme-light .feature-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-}
-
-.theme-light .feature-card:hover {
-  border-color: transparent;
-  transform: translateY(-8px);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-}
-
-
-.btn-primary {
-  background-color: var(--accent);
-  color: var(--bg) !important;
-  text-decoration: none !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-primary:hover {
-  background-color: var(--accent-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 40px rgba(201, 253, 2, 0.3);
-  color: var(--bg) !important;
-  text-decoration: none !important;
-}
-
-.btn-secondary {
-  background-color: transparent;
-  color: var(--fg) !important;
-  border: 1px solid var(--border);
-  text-decoration: none !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-secondary:hover {
-  border-color: var(--accent);
-  color: var(--accent) !important;
-  text-decoration: none !important;
-}
-
+/* Navbar: default putih (Fansedu) */
 .navbar {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  background: rgba(10, 10, 10, 0.8);
+  background: rgba(255, 255, 255, 0.85);
   border-bottom: 1px solid var(--border);
   transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .navbar.navbar-solid {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.06);
+}
+
+.theme-dark .navbar {
+  background: rgba(10, 10, 10, 0.8);
+  border-bottom-color: var(--border);
+}
+
+.theme-dark .navbar.navbar-solid {
   background: rgba(10, 10, 10, 0.95);
+  box-shadow: none;
 }
 
 .nav-link {
@@ -161,17 +86,51 @@ body {
   color: var(--accent);
 }
 
+.btn-primary {
+  background-color: var(--accent);
+  color: #ffffff !important;
+  text-decoration: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 102, 255, 0.25);
+  color: #ffffff !important;
+  text-decoration: none !important;
+}
+
+.theme-dark .btn-primary:hover {
+  box-shadow: 0 10px 40px rgba(59, 130, 246, 0.35);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--fg) !important;
+  border: 2px solid var(--border);
+  text-decoration: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent) !important;
+  background-color: var(--surface) !important;
+  text-decoration: none !important;
+}
+
 .grid-bg {
   background-image:
-    linear-gradient(rgba(42, 42, 42, 0.3) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(42, 42, 42, 0.3) 1px, transparent 1px);
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
   background-size: 60px 60px;
 }
 
-.theme-light .grid-bg {
+.theme-dark .grid-bg {
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
 }
 
 .orb {
@@ -185,7 +144,7 @@ body {
 .orb-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(201, 253, 2, 0.2) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0, 102, 255, 0.12) 0%, transparent 70%);
   top: -100px;
   right: -100px;
 }
@@ -193,16 +152,17 @@ body {
 .orb-2 {
   width: 300px;
   height: 300px;
-  background: radial-gradient(circle, rgba(201, 253, 2, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0, 102, 255, 0.08) 0%, transparent 70%);
   bottom: 20%;
   left: -50px;
 }
 
-.theme-light .orb-1,
-.theme-light .orb-2 {
-  background: radial-gradient(circle, rgba(0, 102, 255, 0.08) 0%, transparent 70%);
-  filter: blur(90px);
-  opacity: 0.7;
+.theme-dark .orb-1 {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+}
+
+.theme-dark .orb-2 {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
 }
 
 .reveal {
@@ -233,20 +193,29 @@ body {
 }
 
 .feature-card {
-  background: linear-gradient(135deg, var(--card) 0%, rgba(22, 22, 22, 0.5) 100%);
+  background: var(--card);
   border: 1px solid var(--border);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .feature-card:hover {
-  border-color: rgba(201, 253, 2, 0.3);
+  border-color: rgba(0, 102, 255, 0.2);
   transform: translateY(-8px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
 }
 
 .feature-card:hover .feature-icon {
   transform: scale(1.1);
-  box-shadow: 0 0 30px rgba(201, 253, 2, 0.4);
+  box-shadow: 0 0 30px rgba(0, 102, 255, 0.2);
+}
+
+.theme-dark .feature-card {
+  background: linear-gradient(135deg, var(--card) 0%, rgba(22, 22, 22, 0.5) 100%);
+}
+
+.theme-dark .feature-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 
 .feature-icon {
@@ -257,6 +226,12 @@ body {
   background: linear-gradient(135deg, var(--fg) 0%, var(--fg-muted) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.theme-dark .stat-number {
+  background: linear-gradient(135deg, var(--fg) 0%, var(--fg-muted) 100%);
+  -webkit-background-clip: text;
   background-clip: text;
 }
 
@@ -340,6 +315,10 @@ body {
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
   transform: scaleX(0);
   transition: transform 0.4s ease;
+}
+
+.theme-dark .service-card::before {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 
 .service-card:hover::before {

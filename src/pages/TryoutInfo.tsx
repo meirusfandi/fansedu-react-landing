@@ -13,7 +13,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <a href="#/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
-              <span className="font-display font-bold text-[var(--bg)] text-lg">F</span>
+              <span className="font-display font-bold text-white text-lg">F</span>
             </div>
             <span className="font-display font-semibold text-xl hidden sm:inline">Fansedu</span>
           </a>
@@ -25,7 +25,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-12">
-          <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-[var(--bg)] text-xs font-semibold uppercase tracking-wide mb-4">
+          <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-white text-xs font-semibold uppercase tracking-wide mb-4">
             Free TryOut
           </span>
           <h1 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl text-[var(--fg)] mb-2">
@@ -39,7 +39,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         {/* 1. Informasi TryOut */}
         <section className="mb-16">
           <h2 className="font-display font-bold text-2xl text-[var(--fg)] mb-6 flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-[var(--bg)] flex items-center justify-center text-sm font-bold">1</span>
+            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-white flex items-center justify-center text-sm font-bold">1</span>
             Informasi TryOut
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
@@ -77,7 +77,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         {/* 2. Detail Soal */}
         <section className="mb-16">
           <h2 className="font-display font-bold text-2xl text-[var(--fg)] mb-6 flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-[var(--bg)] flex items-center justify-center text-sm font-bold">2</span>
+            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-white flex items-center justify-center text-sm font-bold">2</span>
             Detail Soal TryOut
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
@@ -115,7 +115,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         {/* 3. Cara Penilaian */}
         <section className="mb-16">
           <h2 className="font-display font-bold text-2xl text-[var(--fg)] mb-6 flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-[var(--bg)] flex items-center justify-center text-sm font-bold">3</span>
+            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-white flex items-center justify-center text-sm font-bold">3</span>
             Cara Penilaian
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
@@ -170,7 +170,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         {/* 4. Leaderboard & Penggunaan AI */}
         <section className="mb-16">
           <h2 className="font-display font-bold text-2xl text-[var(--fg)] mb-6 flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-[var(--bg)] flex items-center justify-center text-sm font-bold">4</span>
+            <span className="w-8 h-8 rounded-lg bg-[var(--accent)] text-white flex items-center justify-center text-sm font-bold">4</span>
             Leaderboard & Penggunaan AI
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">

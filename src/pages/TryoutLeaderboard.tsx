@@ -104,7 +104,7 @@ export default function TryoutLeaderboardPage({ tryoutId = null }: TryoutLeaderb
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <a href="#/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
-              <span className="font-display font-bold text-[var(--bg)] text-lg">F</span>
+              <span className="font-display font-bold text-white text-lg">F</span>
             </div>
             <span className="font-display font-semibold text-xl hidden sm:inline">Fansedu</span>
           </a>
@@ -140,7 +140,7 @@ export default function TryoutLeaderboardPage({ tryoutId = null }: TryoutLeaderb
         ) : (
           <>
             <div className="mb-8">
-              <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-[var(--bg)] text-xs font-semibold uppercase tracking-wide mb-4">
+              <span className="inline-block px-3 py-1 rounded-full bg-[var(--accent)] text-white text-xs font-semibold uppercase tracking-wide mb-4">
                 Leaderboard
               </span>
               <h1 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl text-[var(--fg)] mb-2">
