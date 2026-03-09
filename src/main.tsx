@@ -5,10 +5,16 @@ import App from './App.tsx'
 import ArticleDetailPage from './pages/ArticleDetail.tsx'
 import TryoutInfoPage from './pages/TryoutInfo.tsx'
 import TryoutLeaderboardPage from './pages/TryoutLeaderboard.tsx'
+import LMSApp, { parseLmsRoute } from './pages/lms/LMSApp.tsx'
 
-function parseHash(): { route: 'home' | 'article' | 'tryout-info' | 'leaderboard'; slug: string | null; tryoutId: string | null } {
+const LMS_PATHS = /^\/(auth|catalog|program\/[^/]+|checkout(\/success)?|student(\/[^/]*)?|instructor(\/[^/]*)?)(\?|$)/
+
+function parseHash(): { route: 'home' | 'article' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
   const hash = window.location.hash.slice(1) || '/'
   const path = hash.startsWith('/') ? hash : `/${hash}`
+  if (LMS_PATHS.test(path.split('?')[0])) {
+    return { route: 'lms', slug: null, tryoutId: null, lmsPath: path }
+  }
   const leaderboardMatch = path.match(/^\/leaderboard\/([^/]+)/)
   if (leaderboardMatch) return { route: 'leaderboard', slug: null, tryoutId: leaderboardMatch[1] }
   if (path === '/leaderboard') return { route: 'leaderboard', slug: null, tryoutId: null }
@@ -39,6 +45,10 @@ function Root() {
   if (location.route === 'tryout-info') return <TryoutInfoPage tryoutId={location.tryoutId} />
   if (location.route === 'article' && location.slug) {
     return <ArticleDetailPage slug={location.slug} />
+  }
+  if (location.route === 'lms' && location.lmsPath) {
+    const lmsRoute = parseLmsRoute(location.lmsPath)
+    if (lmsRoute) return <LMSApp route={lmsRoute} />
   }
   return <App />
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
+import { PACKAGES_API_URL } from './lib/api-config'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
 export interface LandingPackage {
@@ -30,8 +31,6 @@ export interface LandingPackage {
   bonus?: string[]
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8080'
-const PACKAGES_API_URL = `${API_BASE}/api/v1/packages`
 const WA_NUMBER = '6285121277161'
 
 /** Build link WhatsApp dengan template pesan terisi */
@@ -49,8 +48,27 @@ const WA_TEMPLATES = {
   float: 'Halo Fansedu, saya ada pertanyaan.',
 } as const
 
-/** Link daftar akun di platform (LMS) */
-const REGISTER_URL = 'https://app.fansedu.web.id/register'
+/** Base path LMS: gunakan hash routing dalam project yang sama (#/auth, #/student, #/instructor) */
+const LMS_BASE = '#'
+
+/** Link daftar akun di platform (LMS) — tetap di URL yang sama (hash routing) */
+const REGISTER_URL = `${LMS_BASE}/auth?tab=register`
+
+/** Key localStorage auth dari LMS (Zustand persist 'fansedu-auth') */
+const AUTH_STORAGE_KEY = 'fansedu-auth'
+
+function getStoredAuthUser(): { name: string; role: string } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { state?: { user?: { name?: string; role?: string } } }
+    const user = parsed?.state?.user
+    return user && (user.name || user.role) ? { name: user.name ?? '', role: user.role ?? 'student' } : null
+  } catch {
+    return null
+  }
+}
 
 /** Urgency: batch, kuota, deadline — ubah sesuai jadwal nyata */
 const URGENCY = {
@@ -186,11 +204,17 @@ const MOCK_ARTICLES: Article[] = [
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [navbarSolid, setNavbarSolid] = useState(false)
+  const [authUser, setAuthUser] = useState<{ name: string; role: string } | null>(() => getStoredAuthUser())
   const [heroVideoId, setHeroVideoId] = useState<string>(YOUTUBE_VIDEO_ID_PLACEHOLDER)
   // Artikel: diisi dari backend bila VITE_ARTICLES_API_URL diset
   const [articles, setArticles] = useState<Article[]>(MOCK_ARTICLES)
   // Paket / program: diisi dari backend GET /api/v1/packages (hanya is_open = true)
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
+  useEffect(() => {
+    const onFocus = () => setAuthUser(getStoredAuthUser())
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
   useEffect(() => {
     const api = import.meta.env.VITE_ARTICLES_API_URL as string | undefined
     if (!api) return
@@ -319,9 +343,6 @@ function App() {
                 <a href="#solusi" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#solusi')}>
                   Tentang Kami
                 </a>
-                <a href="#masalah" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#masalah')}>
-                  Tantangan
-                </a>
                 <a href="#features" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Fitur
                 </a>
@@ -341,14 +362,21 @@ function App() {
                   Kontak
                 </a>
               </nav>
-              <a
-                href={waUrl(WA_TEMPLATES.navbar)}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
-              >
-                Hubungi Kami
-              </a>
+              {authUser ? (
+                <a
+                  href={authUser.role === 'instructor' ? `${LMS_BASE}/instructor` : `${LMS_BASE}/student`}
+                  className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+                >
+                  Dashboard
+                </a>
+              ) : (
+                <a
+                  href={`${LMS_BASE}/auth`}
+                  className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+                >
+                  Login
+                </a>
+              )}
             </div>
 
             <button
@@ -370,9 +398,6 @@ function App() {
             <a href="#solusi" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#solusi')}>
               Tentang Kami
             </a>
-            <a href="#masalah" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#masalah')}>
-              Tantangan
-            </a>
             <a href="#features" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#features')}>
               Fitur
             </a>
@@ -393,9 +418,15 @@ function App() {
             </a>
           </nav>
           <div className="mt-8">
-            <a href={waUrl(WA_TEMPLATES.navbar)} target="_blank" rel="noreferrer" className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
-              Hubungi Kami
-            </a>
+            {authUser ? (
+              <a href={authUser.role === 'instructor' ? `${LMS_BASE}/instructor` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+                Dashboard
+              </a>
+            ) : (
+              <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+                Login
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -437,7 +468,7 @@ function App() {
               </ul>
 
               <div className="flex flex-wrap items-center gap-3 mb-12 reveal reveal-delay-3">
-                <a href={REGISTER_URL} target="_blank" rel="noreferrer" className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm text-center">
+                <a href={REGISTER_URL} className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm text-center">
                   Daftar Sekarang
                 </a>
                 <a href={waUrl(WA_TEMPLATES.tanyaProgram)} target="_blank" rel="noreferrer" className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm text-center">
@@ -846,12 +877,10 @@ function App() {
                   {pkg.ctaUrl && (
                     <div className="flex flex-col gap-2">
                       <a
-                        href={REGISTER_URL}
-                        target="_blank"
-                        rel="noreferrer"
+                        href={`#/program/${pkg.slug}`}
                         className="btn-primary px-6 py-3 rounded-full font-semibold text-center inline-block text-sm w-full"
                       >
-                        Daftar Sekarang
+                        Lihat Detail / Daftar
                       </a>
                       <a
                         href={pkg.ctaUrl.startsWith('http') ? pkg.ctaUrl : pkg.ctaUrl}
@@ -976,7 +1005,7 @@ function App() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 reveal">
-            <a href={REGISTER_URL} target="_blank" rel="noreferrer" className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block">
+            <a href={REGISTER_URL} className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block">
               Daftar Sekarang
             </a>
             <a href={waUrl(WA_TEMPLATES.tanyaProgram)} target="_blank" rel="noreferrer" className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--border)] hover:border-[var(--accent)]">
@@ -1146,9 +1175,6 @@ function App() {
                 <a href="#solusi" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#solusi')}>
                   Tentang Kami
                 </a>
-                <a href="#masalah" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#masalah')}>
-                  Tantangan
-                </a>
                 <a href="#features" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Fitur
                 </a>
@@ -1202,8 +1228,6 @@ function App() {
       <div className="sticky-cta-mobile fixed bottom-0 left-0 right-0 z-[900] md:hidden safe-area-pb">
         <a
           href={REGISTER_URL}
-          target="_blank"
-          rel="noreferrer"
           className="block w-full py-4 px-6 text-center font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-colors shadow-[0_-4px_20px_rgba(0,0,0,0.15)]"
         >
           Daftar Sekarang

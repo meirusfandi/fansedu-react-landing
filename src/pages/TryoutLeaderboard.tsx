@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import '../App.css'
 import { isLeaderboardVisible } from '../utils/tryoutDates'
+import { BACKEND_BASE } from '../lib/api-config'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8080'
 /** ID tryout untuk leaderboard — pemanggilan API selalu memakai ID ini (static) */
 const STATIC_LEADERBOARD_TRYOUT_ID =
   (import.meta.env.VITE_TRYOUT_ID as string | undefined) || '6b5517c4-7708-409c-9dd7-eaa74878a007'
 
 function getLeaderboardUrl(): string {
-  return `${API_BASE}/api/v1/tryouts/${STATIC_LEADERBOARD_TRYOUT_ID}/leaderboard`
+  return `${BACKEND_BASE}/api/v1/tryouts/${STATIC_LEADERBOARD_TRYOUT_ID}/leaderboard`
 }
 
 export interface LeaderboardEntry {
