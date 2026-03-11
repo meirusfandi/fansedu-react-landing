@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
+import { useAuthStore } from '../../store/auth'
 import { useCheckoutStore } from '../../store/checkout'
 import {
-  getProgramBySlug,
+  getPackageBySlug,
+  packageToCourse,
   initiateCheckout,
   createPaymentSession,
   ApiError,
-  type ProgramDetailResponse,
 } from '../../lib/api'
 import type { Course } from '../../types/course'
 
@@ -16,34 +17,16 @@ const PAYMENT_METHODS = [
   { id: 'ewallet', label: 'E-Wallet' },
 ] as const
 
-function toCourse(p: ProgramDetailResponse | null): Course | null {
-  if (!p) return null
-  return {
-    id: p.id,
-    slug: p.slug,
-    title: p.title,
-    shortDescription: p.shortDescription,
-    thumbnail: p.thumbnail,
-    price: p.price,
-    priceDisplay: p.priceDisplay,
-    instructor: p.instructor,
-    category: p.category,
-    level: p.level as Course['level'],
-    duration: p.duration,
-    rating: p.rating,
-    reviewCount: p.reviewCount,
-    modules: p.modules,
-    reviews: p.reviews,
-  }
-}
-
 export default function CheckoutPage({ programSlug }: { programSlug: string | null }) {
   const slug = programSlug
+  const user = useAuthStore((s) => s.user)
   const {
     course,
     setCourse,
     checkoutId,
     setCheckoutId,
+    orderSummary,
+    setOrderSummary,
     userInfo,
     setUserInfo,
     promoCode,
@@ -56,23 +39,42 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [loadingContinue, setLoadingContinue] = useState(false)
   const [loadingPay, setLoadingPay] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const prefilledFromUser = useRef(false)
+
+  // Jika sudah login, isi Data Diri dari user (sekali per sesi login)
+  useEffect(() => {
+    if (!user) {
+      prefilledFromUser.current = false
+      return
+    }
+    if (user.name && user.email && !prefilledFromUser.current) {
+      setUserInfo({ name: user.name, email: user.email })
+      prefilledFromUser.current = true
+    }
+  }, [user, setUserInfo])
 
   useEffect(() => {
     if (!slug) {
       setCourse(null)
+      setCheckoutId(null)
+      setOrderSummary(null)
       setLoadingProgram(false)
+      setStep('info')
       return
     }
+    setCheckoutId(null)
+    setOrderSummary(null)
+    setStep('info')
     setLoadingProgram(true)
     setError(null)
-    getProgramBySlug(slug)
-      .then((res) => setCourse(toCourse(res)))
+    getPackageBySlug(slug)
+      .then((pkg) => setCourse(pkg ? packageToCourse(pkg) : null))
       .catch(() => {
         setCourse(null)
         setError('Gagal memuat program.')
       })
       .finally(() => setLoadingProgram(false))
-  }, [slug, setCourse])
+  }, [slug, setCourse, setCheckoutId, setOrderSummary])
 
   const onContinue = async () => {
     if (!userInfo.name || !userInfo.email || !course) return
@@ -85,6 +87,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         email: userInfo.email,
       })
       setCheckoutId(res.checkoutId)
+      setOrderSummary({
+        orderId: res.orderId,
+        total: res.total,
+        program: res.program,
+      })
       setStep('payment')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal memulai checkout.')
@@ -101,7 +108,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       const res = await createPaymentSession({
         checkoutId,
         paymentMethod,
-        promoCode: promoCode.trim() || undefined,
+        promoCode: promoCode.trim() || '',
       })
       if (res.paymentUrl) {
         window.location.href = res.paymentUrl
@@ -113,6 +120,24 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     } finally {
       setLoadingPay(false)
     }
+  }
+
+  // Tanpa slug program: arahkan pilih program dulu
+  if (!slug) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <LmsHeader />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <div className="text-center max-w-md">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Checkout</h2>
+            <p className="text-gray-500 mb-6">Pilih program dari katalog terlebih dahulu untuk melanjutkan checkout.</p>
+            <a href="#/catalog" className="inline-block py-3 px-6 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90">
+              Lihat Katalog Program
+            </a>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   if (loadingProgram || (!course && slug)) {
@@ -131,9 +156,10 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       <div className="min-h-screen flex flex-col">
         <LmsHeader />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500">
-            {error || 'Program tidak ditemukan.'} <a href="#/catalog" className="text-primary">Pilih program</a>
-          </p>
+          <div className="text-center max-w-md">
+            <p className="text-gray-500 mb-4">{error || 'Program tidak ditemukan. Periksa link atau koneksi Anda.'}</p>
+            <a href="#/catalog" className="text-primary font-medium hover:underline">← Pilih program dari katalog</a>
+          </div>
         </main>
       </div>
     )
@@ -197,10 +223,13 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
             <div className="lg:col-span-2">
               <div className="sticky top-24 border rounded-2xl p-6 bg-slate-50">
                 <h2 className="font-semibold text-gray-900 mb-4">Ringkasan Pesanan</h2>
+                {orderSummary?.orderId && (
+                  <p className="text-xs text-gray-500 mb-2">Order ID: {orderSummary.orderId}</p>
+                )}
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{course.priceDisplay}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{orderSummary?.program?.priceDisplay ?? course.priceDisplay}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">Biaya layanan</span><span>Rp0</span></div>
-                  <div className="border-t pt-3 flex justify-between font-bold"><span>Total</span><span>{course.priceDisplay}</span></div>
+                  <div className="border-t pt-3 flex justify-between font-bold"><span>Total</span><span>{orderSummary != null ? `Rp${orderSummary.total.toLocaleString('id-ID')}` : course.priceDisplay}</span></div>
                 </div>
                 {step === 'payment' && (
                   <button onClick={onPay} disabled={!paymentMethod || loadingPay} className="mt-6 w-full py-3.5 rounded-xl bg-primary text-white font-semibold disabled:opacity-50">

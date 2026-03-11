@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
-import { getProgramBySlug } from '../../lib/api'
+import { getPackageBySlug, packageToCourse } from '../../lib/api'
 import type { Course } from '../../types/course'
 
 export default function ProgramDetailPage({ slug }: { slug: string }) {
@@ -11,11 +11,8 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    getProgramBySlug(slug)
-      .then((res) => {
-        if (res) setProgram(res as unknown as Course)
-        else setProgram(null)
-      })
+    getPackageBySlug(slug)
+      .then((pkg) => (pkg ? setProgram(packageToCourse(pkg)) : setProgram(null)))
       .catch(() => {
         setError('Gagal memuat program.')
         setProgram(null)
@@ -39,9 +36,10 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
       <div className="min-h-screen flex flex-col">
         <LmsHeader />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500">
-            {error || 'Program tidak ditemukan.'} <a href="#/catalog" className="text-primary">Katalog</a>
-          </p>
+          <div className="text-center max-w-md">
+            <p className="text-gray-500 mb-4">{error || 'Program tidak ditemukan. Periksa link atau koneksi Anda.'}</p>
+            <a href="#/catalog" className="text-primary font-medium hover:underline">← Katalog Program</a>
+          </div>
         </main>
       </div>
     )
@@ -68,8 +66,12 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
               <p className="text-lg text-gray-600 mb-4">{program.shortDescription}</p>
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-6">
                 <span>Oleh <strong className="text-gray-700">{program.instructor.name}</strong></span>
-                <span>•</span>
-                <span>{program.duration}</span>
+                {program.duration && (
+                  <>
+                    <span>•</span>
+                    <span>{program.duration}</span>
+                  </>
+                )}
                 <span>•</span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-200 text-gray-700">{program.category}</span>
                 {program.rating != null && (

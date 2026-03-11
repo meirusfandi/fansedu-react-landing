@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
-import { PACKAGES_API_URL } from './lib/api-config'
+import { getPackages } from './lib/api'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
 export interface LandingPackage {
@@ -223,36 +223,17 @@ function App() {
       .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
       .catch(() => {})
   }, [])
+  // Fetch packages dari api/v1/packages sekali saja (sumber: landing, katalog, detail)
+  const packagesFetchedRef = useRef(false)
   useEffect(() => {
-    fetch(PACKAGES_API_URL)
-      .then((r) => r.json())
-      .then((data: unknown) => {
-        const arr = Array.isArray(data) ? data : (data && typeof data === 'object' && 'data' in data) ? (data as { data: unknown }).data : null
-        if (!Array.isArray(arr)) return
-        const list = (arr as Record<string, unknown>[]).filter((p) => p.is_open !== false).map((p) => ({
-          id: String(p.id ?? ''),
-          name: String(p.name ?? p.title ?? ''),
-          slug: String(p.slug ?? ''),
-          shortDescription: p.short_description != null ? String(p.short_description) : null,
-          priceDisplay: p.price_display != null ? String(p.price_display) : null,
-          priceEarlyBird: p.price_early_bird != null ? String(p.price_early_bird) : null,
-          priceNormal: p.price_normal != null ? String(p.price_normal) : null,
-          ctaUrl: p.wa_message_template ? waUrl(String(p.wa_message_template)) : (p.cta_url != null ? String(p.cta_url) : null),
-          ctaLabel: String(p.cta_label ?? 'Daftar'),
-          isOpen: p.is_open !== false,
-          waMessageTemplate: p.wa_message_template != null ? String(p.wa_message_template) : null,
-          durasi: p.durasi != null ? String(p.durasi) : null,
-          materi: Array.isArray(p.materi) ? (p.materi as string[]) : (typeof p.materi === 'string' ? (() => { try { const parsed = JSON.parse(p.materi as string); return Array.isArray(parsed) ? parsed : undefined; } catch { return undefined; } })() : undefined),
-          fasilitas: Array.isArray(p.fasilitas) ? (p.fasilitas as string[]) : (typeof p.fasilitas === 'string' ? (() => { try { const parsed = JSON.parse(p.fasilitas as string); return Array.isArray(parsed) ? parsed : undefined; } catch { return undefined; } })() : undefined),
-          isBundle: p.is_bundle === true,
-          bundleSubtitle: p.bundle_subtitle != null ? String(p.bundle_subtitle) : null,
-          bonus: Array.isArray(p.bonus) ? (p.bonus as string[]) : (typeof p.bonus === 'string' ? (() => { try { const parsed = JSON.parse(p.bonus as string); return Array.isArray(parsed) ? parsed : undefined; } catch { return undefined; } })() : undefined),
-        }))
-        setPackages(list)
-      })
-      .catch(() => {})
+    if (packagesFetchedRef.current) return
+    packagesFetchedRef.current = true
+    getPackages()
+      .then((list) => { if (list.length > 0) setPackages(list as LandingPackage[]) })
+      .catch(() => { packagesFetchedRef.current = false })
   }, [])
 
+  // Re-run observer ketika daftar paket berubah (setelah API load), agar card baru ikut di-observe dan dapat .active
   useEffect(() => {
     const revealElements = document.querySelectorAll('.reveal')
     const observer = new IntersectionObserver(
@@ -272,7 +253,7 @@ function App() {
       revealElements.forEach((element) => observer.unobserve(element))
       observer.disconnect()
     }
-  }, [])
+  }, [packages])
 
   useEffect(() => {
     const onResize = () => {
@@ -370,12 +351,14 @@ function App() {
                   Dashboard
                 </a>
               ) : (
-                <a
-                  href={`${LMS_BASE}/auth`}
-                  className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
-                >
-                  Login
-                </a>
+                <>
+                  <a href={`${LMS_BASE}/auth`} className="nav-link font-medium text-sm">
+                    Masuk
+                  </a>
+                  <a href={REGISTER_URL} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
+                    Daftar
+                  </a>
+                </>
               )}
             </div>
 
@@ -417,15 +400,20 @@ function App() {
               Kontak
             </a>
           </nav>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col gap-3">
             {authUser ? (
               <a href={authUser.role === 'instructor' ? `${LMS_BASE}/instructor` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
                 Dashboard
               </a>
             ) : (
-              <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
-                Login
-              </a>
+              <>
+                <a href={`${LMS_BASE}/auth`} className="px-6 py-4 rounded-full font-semibold text-center block border border-[var(--border)]">
+                  Masuk
+                </a>
+                <a href={REGISTER_URL} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+                  Daftar
+                </a>
+              </>
             )}
           </div>
         </div>
@@ -755,13 +743,16 @@ function App() {
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
               Program <span className="text-[var(--accent)]">yang Sedang Dibuka</span>
             </h2>
-            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-2">
               Pilih program yang sesuai dengan kebutuhan persiapan OSN Informatika Anda.
             </p>
+            <a href="#/catalog" className="text-[var(--accent)] font-medium text-sm hover:underline reveal reveal-delay-2">
+              Lihat semua di Katalog →
+            </a>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {packages.filter((p) => p.isOpen).map((pkg, index) => {
+            {(packages.length > 0 ? packages : MOCK_PACKAGES).filter((p) => p.isOpen).map((pkg, index) => {
               const isBundle = pkg.isBundle === true
               const normalNum = isBundle && pkg.priceNormal ? parseInt(pkg.priceNormal.replace(/\D/g, ''), 10) : 0
               const earlyNum = isBundle && pkg.priceEarlyBird ? parseInt(pkg.priceEarlyBird.replace(/\D/g, ''), 10) : 0
@@ -874,14 +865,14 @@ function App() {
                       )}
                     </div>
                   )}
-                  {pkg.ctaUrl && (
-                    <div className="flex flex-col gap-2">
-                      <a
-                        href={`#/program/${pkg.slug}`}
-                        className="btn-primary px-6 py-3 rounded-full font-semibold text-center inline-block text-sm w-full"
-                      >
-                        Lihat Detail / Daftar
-                      </a>
+                  <div className="flex flex-col gap-2">
+                    <a
+                      href={`#/program/${pkg.slug}`}
+                      className="btn-primary px-6 py-3 rounded-full font-semibold text-center inline-block text-sm w-full"
+                    >
+                      {pkg.ctaLabel || 'Lihat Detail / Daftar'}
+                    </a>
+                    {pkg.ctaUrl && (
                       <a
                         href={pkg.ctaUrl.startsWith('http') ? pkg.ctaUrl : pkg.ctaUrl}
                         target={pkg.ctaUrl.startsWith('http') ? '_blank' : undefined}
@@ -890,15 +881,15 @@ function App() {
                       >
                         Tanya Program
                       </a>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
               )
             })}
           </div>
 
-          {packages.filter((p) => p.isOpen).length === 0 && (
+          {(packages.length > 0 ? packages : MOCK_PACKAGES).filter((p) => p.isOpen).length === 0 && (
             <p className="text-center text-[var(--fg-muted)] py-8">Belum ada program yang dibuka saat ini. Hubungi kami untuk informasi terbaru.</p>
           )}
         </div>
@@ -942,16 +933,16 @@ function App() {
               Coba <span className="text-[var(--accent)]">TryOut OSN Gratis</span>
             </h2>
             <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
-              Ukur kemampuanmu dulu dengan TryOut nasional. Lihat ranking, dapat analisis hasil, lalu pilih program yang tepat untuk naik level.
+              Semua proses tryout—lihat jadwal, daftar tryout, ikut ujian, dan lihat ranking—dilakukan setelah Anda mendaftar dan membuat akun di platform. Daftar akun dulu, lalu akses menu Tryout dari dashboard siswa.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
-              { step: 1, title: 'Tryout gratis', desc: 'Ikuti TryOut OSN format resmi. Gratis, tanpa biaya.' },
-              { step: 2, title: 'Lihat ranking', desc: 'Cek peringkatmu di leaderboard nasional.' },
-              { step: 3, title: 'Analisis hasil', desc: 'Pahami kekuatan & area yang perlu ditingkatkan.' },
-              { step: 4, title: 'Offer kelas', desc: 'Dapat rekomendasi program yang sesuai dengan kebutuhanmu.' },
+              { step: 1, title: 'Daftar akun', desc: 'Buat akun di platform Fansedu terlebih dahulu.' },
+              { step: 2, title: 'Tryout gratis', desc: 'Dari dashboard siswa, daftar dan ikuti TryOut OSN format resmi.' },
+              { step: 3, title: 'Lihat ranking', desc: 'Cek peringkatmu di leaderboard nasional.' },
+              { step: 4, title: 'Analisis & kelas', desc: 'Pahami hasil lalu pilih program yang sesuai kebutuhanmu.' },
             ].map((item, index) => (
               <div key={item.step} className="relative">
                 <div className={`feature-card rounded-2xl p-6 h-full reveal reveal-delay-${(index % 4) + 1}`}>
@@ -973,10 +964,10 @@ function App() {
           </div>
 
           <div className="text-center reveal">
-            <a href="#/tryout-info" className="btn-primary px-8 py-4 rounded-full font-semibold inline-block">
-              Ikuti TryOut Gratis
+            <a href={REGISTER_URL} className="btn-primary px-8 py-4 rounded-full font-semibold inline-block">
+              Daftar akun untuk ikut TryOut
             </a>
-            <p className="text-[var(--fg-muted)] text-sm mt-3">Lihat jadwal, format soal, dan daftar di halaman TryOut.</p>
+            <p className="text-[var(--fg-muted)] text-sm mt-3">Sudah punya akun? <a href="#/auth" className="text-[var(--accent)] font-medium hover:underline">Masuk</a>, lalu buka menu Tryout di dashboard.</p>
           </div>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import '../App.css'
-import { isLeaderboardVisible, isRegistrationOpen } from '../utils/tryoutDates'
+import { isLeaderboardVisible } from '../utils/tryoutDates'
+import { getOpenTryouts, getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
 
 interface TryoutInfoPageProps {
   tryoutId?: string | null
@@ -7,6 +8,10 @@ interface TryoutInfoPageProps {
 
 export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps) {
   const leaderboardHref = tryoutId ? `#/leaderboard/${tryoutId}` : '#/leaderboard'
+  const tryouts = getOpenTryouts()
+  const tryout = (tryoutId ? tryouts.find((t) => t.id === tryoutId) : null) ?? tryouts[0] ?? null
+  const scheduleText = tryout ? getTryoutScheduleText(tryout) : null
+  const deadlineText = getTryoutRegistrationDeadlineText(tryout?.registrationDeadlineAt)
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <header className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
@@ -20,6 +25,9 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           <a href="#/" className="nav-link font-medium text-sm">
             ← Beranda
           </a>
+          <a href="#/tryout" className="nav-link font-medium text-sm ml-2">
+            Daftar tryout
+          </a>
         </div>
       </header>
 
@@ -32,7 +40,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             Informasi TryOut OSN Informatika 2026
           </h1>
           <p className="text-[var(--fg-muted)]">
-            Semua yang perlu Anda ketahui: jadwal, format soal, penilaian, dan leaderboard (termasuk kebijakan penggunaan AI).
+            Semua proses tryout dilakukan setelah Anda mendaftar dan punya akun di platform. Berikut info jadwal, format soal, penilaian, dan leaderboard.
           </p>
         </div>
 
@@ -45,31 +53,44 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Jadwal</h3>
+              <p className="text-[var(--fg-muted)] mb-2">
+                {scheduleText ? (
+                  <>
+                    TryOut diadakan <strong className="text-[var(--fg)]">2 minggu sekali</strong>, dimulai <strong className="text-[var(--fg)]">{scheduleText.replace(/^2 minggu sekali, mulai /, '')}</strong>.
+                  </>
+                ) : (
+                  <>Jadwal tryout akan diumumkan.</>
+                )}
+              </p>
               <p className="text-[var(--fg-muted)]">
-                <strong className="text-[var(--fg)]">Kamis, 5 Maret 2026</strong>, pukul <strong className="text-[var(--fg)]">13.00 WIB</strong>. TryOut dilaksanakan secara online; link dan akses ujian akan dikirim ke email peserta sekitar 1 jam sebelum pelaksanaan.
+                TryOut dilaksanakan secara online; link dan akses ujian akan dikirim ke email peserta sekitar 1 jam sebelum pelaksanaan.
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Peserta</h3>
               <p className="text-[var(--fg-muted)]">
-                Siswa SMA/SMK/sederajat yang berminat mengikuti OSN Informatika. Satu akun per peserta. Pendaftaran gratis melalui form resmi.
+                Tryout hanya untuk peserta yang sudah terdaftar di platform Fansedu. Siswa SMA/SMK/sederajat yang berminat mengikuti OSN Informatika wajib membuat akun terlebih dahulu; satu akun per peserta.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-[var(--fg)] mb-2">Pendaftaran</h3>
+              <h3 className="font-semibold text-[var(--fg)] mb-2">Cara ikut tryout</h3>
               <p className="text-[var(--fg-muted)] mb-4">
-                Daftar melalui link Google Form. Pastikan data nama, asal sekolah, kelas, dan email valid. Batas pendaftaran: <strong className="text-[var(--fg)]">Rabu, 4 Maret 2026 pukul 23.59 WIB</strong>.
+                Daftar akun di platform, lalu dari dashboard siswa buka menu <strong className="text-[var(--fg)]">Tryout</strong> untuk mendaftar tryout dan mengikuti ujian. Pastikan data nama, asal sekolah, kelas, dan email valid saat mendaftar akun.
+                {deadlineText ? (
+                  <>
+                    {' '}
+                    Batas pendaftaran per gelombang: <strong className="text-[var(--fg)]">{deadlineText}</strong>.
+                  </>
+                ) : null}
               </p>
-              {isRegistrationOpen() && (
-                <a
-                  href="https://forms.gle/y9RMAYeS6bxJ6axH6"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
-                >
-                  Daftar TryOut
+              <div className="flex flex-wrap gap-3">
+                <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
+                  Daftar akun
                 </a>
-              )}
+                <a href="#/auth?redirect=%23%2Fstudent%2Ftryout" className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]">
+                  Sudah punya akun? Masuk
+                </a>
+              </div>
             </div>
           </div>
         </section>
@@ -82,7 +103,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
             <p className="text-[var(--fg-muted)]">
-              Tes seleksi terdiri dari <strong className="text-[var(--fg)]">20 soal</strong> dengan waktu pengerjaan maksimal <strong className="text-[var(--fg)]">90 menit</strong>.
+              Tes seleksi terdiri dari <strong className="text-[var(--fg)]">20 soal</strong> dengan waktu pengerjaan <strong className="text-[var(--fg)]">60 menit</strong>.
             </p>
             <p className="text-[var(--fg-muted)]">
               Soal terbagi atas 3 bagian:
@@ -106,7 +127,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             <div className="flex items-start gap-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/50">
               <span className="text-[var(--accent)] shrink-0">ℹ</span>
               <p className="text-[var(--fg-muted)] text-sm">
-                Waktu pengerjaan maksimal 90 menit berlaku untuk seluruh bagian. Pastikan koneksi internet stabil dan perangkat siap sebelum memulai.
+                Waktu pengerjaan 60 menit berlaku untuk seluruh bagian. Pastikan koneksi internet stabil dan perangkat siap sebelum memulai.
               </p>
             </div>
           </div>
@@ -201,16 +222,12 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         </section>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-          {isRegistrationOpen() && (
-            <a
-              href="https://forms.gle/y9RMAYeS6bxJ6axH6"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="btn-primary px-8 py-4 rounded-full font-semibold text-center"
-            >
-              Daftar TryOut
-            </a>
-          )}
+          <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-8 py-4 rounded-full font-semibold text-center">
+            Daftar akun
+          </a>
+          <a href="#/auth?redirect=%23%2Fstudent%2Ftryout" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
+            Sudah punya akun? Masuk
+          </a>
           <a href="#/" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
             ← Kembali ke Beranda
           </a>

@@ -3,13 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import ArticleDetailPage from './pages/ArticleDetail.tsx'
+import TryoutListPage from './pages/TryoutListPage.tsx'
 import TryoutInfoPage from './pages/TryoutInfo.tsx'
 import TryoutLeaderboardPage from './pages/TryoutLeaderboard.tsx'
 import LMSApp, { parseLmsRoute } from './pages/lms/LMSApp.tsx'
 
-const LMS_PATHS = /^\/(auth|catalog|program\/[^/]+|checkout(\/success)?|student(\/[^/]*)?|instructor(\/[^/]*)?)(\?|$)/
+const LMS_PATHS = /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/success)?|student(\/[^?]*)?|instructor(\/[^/]*)?)(\?|$)/
 
-function parseHash(): { route: 'home' | 'article' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
+function parseHash(): { route: 'home' | 'article' | 'tryout' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
   const hash = window.location.hash.slice(1) || '/'
   const path = hash.startsWith('/') ? hash : `/${hash}`
   if (LMS_PATHS.test(path.split('?')[0])) {
@@ -18,6 +19,7 @@ function parseHash(): { route: 'home' | 'article' | 'tryout-info' | 'leaderboard
   const leaderboardMatch = path.match(/^\/leaderboard\/([^/]+)/)
   if (leaderboardMatch) return { route: 'leaderboard', slug: null, tryoutId: leaderboardMatch[1] }
   if (path === '/leaderboard') return { route: 'leaderboard', slug: null, tryoutId: null }
+  if (path === '/tryout') return { route: 'tryout', slug: null, tryoutId: null }
   const tryoutInfoMatch = path.match(/^\/tryout-info\/([^/]+)/)
   if (tryoutInfoMatch) return { route: 'tryout-info', slug: null, tryoutId: tryoutInfoMatch[1] }
   if (path === '/tryout-info') return { route: 'tryout-info', slug: null, tryoutId: null }
@@ -42,6 +44,7 @@ function Root() {
   }, [location.route, location.slug])
 
   if (location.route === 'leaderboard') return <TryoutLeaderboardPage tryoutId={location.tryoutId} />
+  if (location.route === 'tryout') return <TryoutListPage />
   if (location.route === 'tryout-info') return <TryoutInfoPage tryoutId={location.tryoutId} />
   if (location.route === 'article' && location.slug) {
     return <ArticleDetailPage slug={location.slug} />

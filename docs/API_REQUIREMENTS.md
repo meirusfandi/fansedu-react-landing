@@ -2,13 +2,19 @@
 
 Dokumen ini mendeskripsikan endpoint dan payload yang dibutuhkan frontend LMS. Backend dapat diimplementasikan terpisah; sesuaikan base URL via `VITE_API_URL` (project ini Vite, bukan Next.js).
 
+**Lihat juga:**
+- **docs/API_SPEC.md** — Spesifikasi terstruktur per flow (katalog, detail product, packages, checkout, auth, student, instructor).
+- **docs/openapi.yaml** — OpenAPI 3.0 untuk generate client/server (Swagger, codegen).
+- **docs/API_CURL_EXAMPLES.md** — Contoh curl siap pakai.
+
 ---
 
 ## Base URL
 
-- Development: `http://localhost:8080/api` (atau sesuai)
+- Development: `http://localhost:8080/api/v1` (sama dengan `VITE_API_URL` di frontend)
 - Header: `Content-Type: application/json`
 - Auth: gunakan **Bearer token** atau **session cookie** setelah login (sesuai kesepakatan backend)
+- Semua endpoint di bawah base: `/auth/*`, `/programs`, `/packages`, `/checkout/*`, `/student/*`, `/instructor/*`
 
 ---
 
@@ -180,6 +186,7 @@ Dokumen ini mendeskripsikan endpoint dan payload yang dibutuhkan frontend LMS. B
 
 | Method | Endpoint | Deskripsi |
 |--------|----------|-----------|
+| GET | `/student/dashboard` | Ringkasan dashboard (stats, recent courses) |
 | GET | `/student/courses` | Daftar program yang di-enroll (dengan progress) |
 | GET | `/student/transactions` | Riwayat transaksi/pembayaran |
 | GET | `/student/certificates` | Daftar sertifikat |
@@ -257,11 +264,11 @@ Section **Program yang Sedang Dibuka** di landing page mengambil data dari endpo
 
 | Method | Endpoint | Deskripsi |
 |--------|----------|-----------|
-| GET | `/api/v1/packages` | Daftar paket yang sedang dibuka (untuk kartu program di landing) |
+| GET | `/packages` | Daftar paket yang sedang dibuka (untuk kartu program di landing) |
 
-**Catatan:** URL penuh = `{BACKEND_BASE}/api/v1/packages`. Di frontend, `BACKEND_BASE` didapat dari `VITE_API_URL` (dengan menghapus sufiks `/api`). Contoh: `VITE_API_URL=http://localhost:8080/api` → request ke `http://localhost:8080/api/v1/packages`.
+**Catatan:** URL penuh = `{VITE_API_URL}/packages`. Contoh: `VITE_API_URL=http://localhost:8080/api/v1` → request ke `http://localhost:8080/api/v1/packages`. Lihat juga **docs/API_CURL_EXAMPLES.md**.
 
-### Response GET /api/v1/packages
+### Response GET /packages
 
 Array of object (atau object dengan property `data` berisi array). Field **snake_case** (frontend akan map ke camelCase):
 
@@ -320,6 +327,6 @@ Contoh: `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `422 Validation 
 | Pilih metode, isi promo, Bayar | POST /checkout/payment-session |
 | Redirect ke gateway | Backend terima callback, update order + enrollment |
 | Success page, "Mulai Belajar" | GET /student/courses (setelah login) |
-| Landing — section Program | GET /api/v1/packages (optional; fallback mock) |
+| Landing — section Program | GET /packages (optional; fallback mock) |
 
 Schema database untuk mendukung API ini ada di **`database/lms_schema.sql`** (LMS) dan **`database/landing_schema.sql`** (packages, site settings).

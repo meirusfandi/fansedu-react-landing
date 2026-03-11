@@ -18,7 +18,8 @@ export default function CheckoutSuccessPage() {
             <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Pembayaran Berhasil</h1>
-          <p className="text-gray-600 mb-8">Anda sekarang memiliki akses ke program{course ? ` "${course.title}"` : ''}.</p>
+          <p className="text-gray-600 mb-4">Anda sekarang memiliki akses ke program{course ? ` "${course.title}"` : ''}.</p>
+          <p className="text-sm text-gray-500 mb-8">Jika Anda punya akun, masuk untuk mengakses kursus di dashboard.</p>
           <button type="button" onClick={goCourses} className="inline-flex px-8 py-3.5 rounded-full bg-primary text-white font-semibold hover:bg-primary-hover">
             Mulai Belajar
           </button>

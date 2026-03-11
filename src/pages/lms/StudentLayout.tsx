@@ -4,6 +4,8 @@ import { AuthGuard } from '../../components/lms/AuthGuard'
 const MENU = [
   { href: '#/student', label: 'Dashboard' },
   { href: '#/student/courses', label: 'My Courses' },
+  { href: '#/student/tryout', label: 'Tryout' },
+  { href: '#/student/coding', label: 'Belajar Coding' },
   { href: '#/student/transactions', label: 'Transactions' },
   { href: '#/student/certificates', label: 'Certificates' },
   { href: '#/student/profile', label: 'Profile' },

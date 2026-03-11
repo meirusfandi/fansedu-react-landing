@@ -1,11 +1,12 @@
 /**
  * API client sesuai docs/API_REQUIREMENTS.md
- * Base URL: VITE_API_URL (default http://localhost:8080/api)
+ * Base URL: VITE_API_URL (default http://localhost:8080/api/v1)
  * Auth: Bearer token dari store (persist fansedu-auth)
  */
 
 import { clearAuthOnUnauthorized } from './auth-clear'
-import { API_BASE } from './api-config'
+import { API_BASE, PACKAGES_API_URL } from './api-config'
+import type { Course } from '../types/course'
 
 function getStoredToken(): string | null {
   try {
@@ -57,7 +58,8 @@ export interface RegisterRequest {
   name: string
   email: string
   password: string
-  role: 'student' | 'instructor'
+  /** Default student jika tidak dikirim */
+  role?: 'student' | 'instructor'
 }
 
 export interface AuthResponse {
@@ -104,7 +106,112 @@ export async function apiGetMe(): Promise<MeResponse> {
   return handleResponse<MeResponse>(res)
 }
 
-// --- Programs ---
+// --- Packages (GET /packages — katalog & detail program) ---
+
+export interface PackageItem {
+  id: string
+  name: string
+  slug: string
+  shortDescription: string | null
+  priceDisplay: string | null
+  priceEarlyBird?: string | null
+  priceNormal?: string | null
+  ctaUrl: string | null
+  ctaLabel: string
+  isOpen: boolean
+  durasi?: string | null
+  materi?: string[]
+  fasilitas?: string[]
+  bonus?: string[]
+  isBundle?: boolean
+  bundleSubtitle?: string | null
+  waMessageTemplate?: string | null
+}
+
+function parsePackagesResponse(data: unknown): PackageItem[] {
+  let arr: unknown[] | null = null
+  if (Array.isArray(data)) arr = data
+  else if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>
+    if (Array.isArray(o.data)) arr = o.data
+    else if (Array.isArray(o.packages)) arr = o.packages
+    else if (Array.isArray(o.result)) arr = o.result
+    else if (Array.isArray(o.items)) arr = o.items
+  }
+  if (!Array.isArray(arr) || arr.length === 0) return []
+  const get = (p: Record<string, unknown>, snake: string, camel?: string) => p[snake] ?? (camel ? p[camel] : undefined)
+  const waNum = '6285121277161'
+  const waUrl = (msg: string) => `https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`
+  const parseArr = (v: unknown): string[] | undefined => {
+    if (Array.isArray(v)) return v as string[]
+    if (typeof v === 'string') {
+      try {
+        const parsed = JSON.parse(v) as unknown
+        return Array.isArray(parsed) ? parsed : undefined
+      } catch { return undefined }
+    }
+    return undefined
+  }
+  return (arr as Record<string, unknown>[])
+    .filter((p) => get(p, 'is_open', 'isOpen') !== false)
+    .map((p) => {
+      const waTemplate = get(p, 'wa_message_template', 'waMessageTemplate')
+      const ctaUrlVal = get(p, 'cta_url', 'ctaUrl')
+      return {
+        id: String(p.id ?? ''),
+        name: String(get(p, 'name', 'title') ?? ''),
+        slug: String(get(p, 'slug') ?? ''),
+        shortDescription: get(p, 'short_description', 'shortDescription') != null ? String(get(p, 'short_description', 'shortDescription')) : null,
+        priceDisplay: get(p, 'price_display', 'priceDisplay') != null ? String(get(p, 'price_display', 'priceDisplay')) : null,
+        priceEarlyBird: get(p, 'price_early_bird', 'priceEarlyBird') != null ? String(get(p, 'price_early_bird', 'priceEarlyBird')) : null,
+        priceNormal: get(p, 'price_normal', 'priceNormal') != null ? String(get(p, 'price_normal', 'priceNormal')) : null,
+        ctaUrl: waTemplate ? waUrl(String(waTemplate)) : (ctaUrlVal != null ? String(ctaUrlVal) : null),
+        ctaLabel: String(get(p, 'cta_label', 'ctaLabel') ?? 'Daftar'),
+        isOpen: get(p, 'is_open', 'isOpen') !== false,
+        durasi: get(p, 'durasi', 'duration') != null ? String(get(p, 'durasi', 'duration')) : null,
+        materi: parseArr(get(p, 'materi')) ?? undefined,
+        fasilitas: parseArr(get(p, 'fasilitas')) ?? undefined,
+        bonus: parseArr(get(p, 'bonus')) ?? undefined,
+        isBundle: get(p, 'is_bundle', 'isBundle') === true,
+        bundleSubtitle: get(p, 'bundle_subtitle', 'bundleSubtitle') != null ? String(get(p, 'bundle_subtitle', 'bundleSubtitle')) : null,
+        waMessageTemplate: waTemplate != null ? String(waTemplate) : null,
+      }
+    })
+}
+
+export async function getPackages(): Promise<PackageItem[]> {
+  const res = await fetch(PACKAGES_API_URL)
+  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  const data = await res.json().catch(() => null)
+  return parsePackagesResponse(data)
+}
+
+export async function getPackageBySlug(slug: string): Promise<PackageItem | null> {
+  const list = await getPackages()
+  return list.find((p) => p.slug === slug) ?? null
+}
+
+/** Map PackageItem (dari GET /packages) ke Course untuk Katalog & Detail program */
+export function packageToCourse(pkg: PackageItem): Course {
+  return {
+    id: pkg.id,
+    slug: pkg.slug,
+    title: pkg.name,
+    shortDescription: pkg.shortDescription ?? '',
+    thumbnail: '',
+    price: 0,
+    priceDisplay: pkg.priceDisplay ?? '',
+    instructor: { id: '', name: 'Fansedu' },
+    category: pkg.isBundle ? 'Bundle' : 'Program',
+    level: 'beginner',
+    duration: pkg.durasi ?? '',
+    modules: pkg.materi?.length
+      ? [{ id: 'materi', title: 'Materi', lessons: pkg.materi.map((m, i) => ({ id: `m-${i}`, title: m, duration: '' })) }]
+      : undefined,
+  }
+}
+
+// --- Programs (legacy; prefer getPackages / getPackageBySlug) ---
 
 export interface ProgramListItem {
   id: string
@@ -165,6 +272,7 @@ export interface CheckoutInitiateRequest {
   email: string
 }
 
+/** Response 201 POST /checkout/initiate — simpan checkoutId untuk payment-session */
 export interface CheckoutInitiateResponse {
   checkoutId: string
   orderId: string
@@ -172,9 +280,11 @@ export interface CheckoutInitiateResponse {
   program?: { title: string; priceDisplay: string }
 }
 
+/** Body POST /checkout/payment-session — checkoutId dari response initiate */
 export interface PaymentSessionRequest {
   checkoutId: string
   paymentMethod: 'bank_transfer' | 'virtual_account' | 'ewallet'
+  /** Boleh string kosong "" */
   promoCode?: string
 }
 
@@ -196,15 +306,27 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
 }
 
 export async function createPaymentSession(payload: PaymentSessionRequest): Promise<PaymentSessionResponse> {
+  const body = {
+    checkoutId: payload.checkoutId,
+    paymentMethod: payload.paymentMethod,
+    promoCode: payload.promoCode ?? '',
+  }
   const res = await fetch(`${API_BASE}/checkout/payment-session`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
   return handleResponse<PaymentSessionResponse>(res)
 }
 
 // --- Student ---
+
+/** Response GET /student/dashboard — ringkasan untuk halaman dashboard siswa */
+export interface StudentDashboardResponse {
+  coursesCount?: number
+  recentCourses?: MyCourseItem[]
+  [key: string]: unknown
+}
 
 export interface MyCourseItem {
   id: string
@@ -240,6 +362,11 @@ export interface CertificateItem {
 
 export interface StudentCertificatesResponse {
   data: CertificateItem[]
+}
+
+export async function getStudentDashboard(): Promise<StudentDashboardResponse> {
+  const res = await fetch(`${API_BASE}/student/dashboard`, { headers: authHeaders() })
+  return handleResponse<StudentDashboardResponse>(res)
 }
 
 export async function getMyCourses(): Promise<StudentCoursesResponse> {

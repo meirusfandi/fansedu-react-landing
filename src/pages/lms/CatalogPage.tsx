@@ -1,44 +1,46 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { CourseCard } from '../../components/lms/CourseCard'
-import { getPrograms } from '../../lib/api'
+import { getPackages, packageToCourse } from '../../lib/api'
 import type { Course } from '../../types/course'
 
-const CATEGORIES = ['Semua', 'Programming', 'OSN', 'Bundle']
+const CATEGORIES = ['Semua', 'Program', 'Bundle']
+const PAGE_SIZE = 12
 
 export default function CatalogPage() {
   const [category, setCategory] = useState('Semua')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<{ data: Course[]; totalPages: number }>({ data: [], totalPages: 1 })
+  const [packages, setPackages] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  const cat = category === 'Semua' ? undefined : category
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    getPrograms({
-      category: cat,
-      search: search || undefined,
-      page,
-      limit: 12,
-    })
-      .then((res) => {
-        setData({
-          data: res.data as unknown as Course[],
-          totalPages: res.totalPages || 1,
-        })
-      })
+    getPackages()
+      .then((list) => setPackages(list.map(packageToCourse)))
       .catch((err) => {
         setError(err?.message || 'Gagal memuat katalog.')
-        setData({ data: [], totalPages: 1 })
+        setPackages([])
       })
       .finally(() => setLoading(false))
-  }, [cat, search, page])
+  }, [])
 
-  const { data: courses, totalPages } = data
+  const filtered = useMemo(() => {
+    let list = packages
+    const q = search.trim().toLowerCase()
+    if (q) list = list.filter((c) => c.title.toLowerCase().includes(q) || (c.shortDescription && c.shortDescription.toLowerCase().includes(q)))
+    if (category === 'Bundle') list = list.filter((c) => c.category === 'Bundle')
+    if (category === 'Program') list = list.filter((c) => c.category !== 'Bundle')
+    return list
+  }, [packages, search, category])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const courses = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, page])
 
   return (
     <div className="min-h-screen flex flex-col">

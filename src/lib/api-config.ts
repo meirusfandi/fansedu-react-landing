@@ -1,15 +1,15 @@
 /**
  * Konfigurasi base URL API untuk LMS & Landing.
- * Satu env: VITE_API_URL = http://localhost:8080/api (base path ke API).
+ * Satu env: VITE_API_URL = http://localhost:8080/api/v1 (semua endpoint di bawah /api/v1).
  */
 
-const RAW = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8080/api'
+const RAW = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8080/api/v1'
 
-/** Base path API (untuk auth, programs, checkout, student, instructor) */
+/** Base path API (auth, programs, checkout, student, instructor, packages) — sama dengan VITE_API_URL */
 export const API_BASE = RAW.replace(/\/$/, '')
 
-/** Base URL backend tanpa /api (untuk packages, tryouts, dll.) */
-export const BACKEND_BASE = RAW.replace(/\/api\/?$/, '').replace(/\/$/, '')
+/** URL daftar paket landing: GET /packages (relatif ke API_BASE) */
+export const PACKAGES_API_URL = `${API_BASE}/packages`
 
-/** URL daftar paket landing: GET /api/v1/packages */
-export const PACKAGES_API_URL = `${BACKEND_BASE}/api/v1/packages`
+/** Origin backend (tanpa /api/v1) — untuk tryouts: BACKEND_BASE + /api/v1/tryouts/... */
+export const BACKEND_BASE = RAW.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') || 'http://localhost:8080'
