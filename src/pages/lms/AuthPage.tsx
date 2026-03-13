@@ -130,11 +130,12 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   const [role, setRole] = useState<UserRole>('student')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const login = useAuthStore((s) => s.login)
+  const [successMessage, setSuccessMessage] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccessMessage('')
     if (!name.trim() || !email.trim() || !password.trim()) {
       setError('Nama, email, dan kata sandi wajib diisi.')
       return
@@ -145,17 +146,15 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
     }
     setLoading(true)
     try {
-      const res = await apiRegister({
+      await apiRegister({
         name: name.trim(),
         email: email.trim(),
         password,
         role: role as 'student' | 'instructor',
       })
-      login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role as UserRole },
-        res.token
+      setSuccessMessage(
+        'Pendaftaran berhasil. Kami telah mengirim link verifikasi ke email Anda. Untuk email yang sudah pernah terdaftar, akun akan otomatis terverifikasi. Setelah verifikasi, silakan masuk dengan email dan kata sandi yang Anda buat.'
       )
-      window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal daftar. Coba lagi.')
     } finally {
@@ -166,9 +165,12 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   return (
     <>
       <h2 className="text-xl font-bold text-gray-900 mb-1">Daftar</h2>
-      <p className="text-gray-600 text-sm mb-6">Buat akun untuk mengakses kursus dan dashboard.</p>
+      <p className="text-gray-600 text-sm mb-6">
+        Buat akun untuk mengakses kursus dan dashboard. Setelah daftar, Anda perlu verifikasi email terlebih dahulu sebelum bisa menggunakan semua fitur.
+      </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
+        {successMessage && <div className="p-3 rounded-lg bg-emerald-50 text-emerald-700 text-sm">{successMessage}</div>}
         <div>
           <label htmlFor="reg-name" className="block text-sm font-medium text-gray-700 mb-1">Nama lengkap</label>
           <input

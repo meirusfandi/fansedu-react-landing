@@ -58,10 +58,7 @@ export function LmsHeader() {
               )}
             </div>
           ) : (
-            <>
-              <a href="#/auth" className="text-gray-600 hover:text-primary text-sm font-medium">Masuk</a>
-              <a href="#/auth?tab=register" className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover">Daftar</a>
-            </>
+            <a href="#/auth" className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover">Masuk</a>
           )}
         </div>
       </nav>

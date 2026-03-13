@@ -448,3 +448,66 @@ export async function getInstructorEarnings(): Promise<InstructorEarningsRespons
   const res = await fetch(`${API_BASE}/instructor/earnings`, { headers: authHeaders() })
   return handleResponse<InstructorEarningsResponse>(res)
 }
+
+// --- Instructor / Trainer Tryout Analysis (Auth + role guru/instructor) ---
+
+export interface InstructorTryoutQuestionAnalysis {
+  question_number: number
+  question_id: string
+  question_type: string
+  answered_count: number
+  unanswered_count: number
+  correct_count: number
+  wrong_count: number
+  correct_percent: number
+  wrong_percent: number
+  option_distribution: Record<string, number>
+}
+
+export interface InstructorTryoutAnalysisResponse {
+  tryout_id: string
+  tryout_title: string
+  participants_count: number
+  questions: InstructorTryoutQuestionAnalysis[]
+}
+
+export interface InstructorTryoutStudentItem {
+  user_id: string
+  user_name: string
+  user_email: string
+  attempt_id: string
+  score: number
+  max_score: number
+  percentile: number
+  submitted_at: string
+}
+
+export interface InstructorAttemptAIAnalysisResponse {
+  attempt_id: string
+  summary: string
+  recap: string
+  strength_areas: string[]
+  improvement_areas: string[]
+  recommendation: string
+}
+
+export async function getInstructorTryoutAnalysis(tryoutId: string): Promise<InstructorTryoutAnalysisResponse> {
+  const res = await fetch(`${API_BASE}/instructor/tryouts/${encodeURIComponent(tryoutId)}/analysis`, { headers: authHeaders() })
+  return handleResponse<InstructorTryoutAnalysisResponse>(res)
+}
+
+export async function getInstructorTryoutStudents(tryoutId: string): Promise<InstructorTryoutStudentItem[]> {
+  const res = await fetch(`${API_BASE}/instructor/tryouts/${encodeURIComponent(tryoutId)}/students`, { headers: authHeaders() })
+  return handleResponse<InstructorTryoutStudentItem[]>(res)
+}
+
+export async function getInstructorAttemptAIAnalysis(
+  tryoutId: string,
+  attemptId: string
+): Promise<InstructorAttemptAIAnalysisResponse> {
+  const res = await fetch(
+    `${API_BASE}/instructor/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attemptId)}/ai-analysis`,
+    { headers: authHeaders() }
+  )
+  return handleResponse<InstructorAttemptAIAnalysisResponse>(res)
+}

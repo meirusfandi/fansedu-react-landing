@@ -210,6 +210,7 @@ function App() {
   const [articles, setArticles] = useState<Article[]>(MOCK_ARTICLES)
   // Paket / program: diisi dari backend GET /api/v1/packages (hanya is_open = true)
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
   useEffect(() => {
     const onFocus = () => setAuthUser(getStoredAuthUser())
     window.addEventListener('focus', onFocus)
@@ -351,14 +352,9 @@ function App() {
                   Dashboard
                 </a>
               ) : (
-                <>
-                  <a href={`${LMS_BASE}/auth`} className="nav-link font-medium text-sm">
-                    Masuk
-                  </a>
-                  <a href={REGISTER_URL} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
-                    Daftar
-                  </a>
-                </>
+                <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
+                  Masuk
+                </a>
               )}
             </div>
 
@@ -406,14 +402,9 @@ function App() {
                 Dashboard
               </a>
             ) : (
-              <>
-                <a href={`${LMS_BASE}/auth`} className="px-6 py-4 rounded-full font-semibold text-center block border border-[var(--border)]">
-                  Masuk
-                </a>
-                <a href={REGISTER_URL} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
-                  Daftar
-                </a>
-              </>
+              <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+                Masuk
+              </a>
             )}
           </div>
         </div>
@@ -610,7 +601,7 @@ function App() {
               </p>
 
               <p className="text-[var(--fg-muted)] mb-8 reveal reveal-delay-3">
-                Tim pengajar berasal dari <strong className="text-[var(--fg)]">Ex-OSN Informatika</strong>, <strong className="text-[var(--fg)]">Ex-Tokopedia</strong>, <strong className="text-[var(--fg)]">Govtech Indonesia</strong>, dan praktisi software engineer. Materi dan strategi disesuaikan khusus untuk persiapan OSN.
+                Tim pengajar terdiri dari medalis dan pelatih OSN yang paham strategi lolos seleksi. Mereka berasal dari <strong className="text-[var(--fg)]">Ex-OSN Informatika</strong>, <strong className="text-[var(--fg)]">Ex-Tokopedia</strong>, dan saat ini bekerja sebagai Software engineer di <strong className="text-[var(--fg)]">Govtech Indonesia</strong>. Materi dan strategi sudah disesuaikan khusus untuk persiapan OSN.
               </p>
 
               <div className="grid grid-cols-2 gap-6 reveal reveal-delay-4">
@@ -634,11 +625,11 @@ function App() {
             <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
               <div className="reveal">
                 <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <div className="aspect-video bg-[var(--bg-secondary)] relative">
+                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/leaderboard-to.png', alt: 'Screenshot leaderboard ranking nasional Fansedu' })}>
                     <img
                       src="/leaderboard-to.png"
                       alt="Screenshot leaderboard ranking nasional Fansedu"
-                      className="w-full h-full object-cover object-top"
+                      className="w-full h-full object-cover object-top pointer-events-none"
                       onError={(e) => {
                         const t = e.currentTarget
                         if (!t.src.includes('placehold.co')) {
@@ -646,7 +637,7 @@ function App() {
                         }
                       }}
                     />
-                  </div>
+                  </button>
                   <div className="p-4 text-center">
                     <p className="font-semibold text-[var(--fg)]">Leaderboard Nasional</p>
                     <p className="text-sm text-[var(--fg-muted)]">Peringkat tryout antar peserta</p>
@@ -655,11 +646,11 @@ function App() {
               </div>
               <div className="reveal reveal-delay-1">
                 <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <div className="aspect-video bg-[var(--bg-secondary)] relative">
+                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/dashboard-siswa.png', alt: 'Screenshot dashboard peserta Fansedu' })}>
                     <img
                       src="/dashboard-siswa.png"
                       alt="Screenshot dashboard peserta Fansedu"
-                      className="w-full h-full object-cover object-top"
+                      className="w-full h-full object-cover object-top pointer-events-none"
                       onError={(e) => {
                         const t = e.currentTarget
                         if (!t.src.includes('placehold.co')) {
@@ -667,7 +658,7 @@ function App() {
                         }
                       }}
                     />
-                  </div>
+                  </button>
                   <div className="p-4 text-center">
                     <p className="font-semibold text-[var(--fg)]">Dashboard Peserta</p>
                     <p className="text-sm text-[var(--fg-muted)]">Progress dan akses materi</p>
@@ -676,11 +667,11 @@ function App() {
               </div>
               <div className="reveal reveal-delay-2">
                 <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <div className="aspect-video bg-[var(--bg-secondary)] relative">
+                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/kelas-osn.png', alt: 'Screenshot kelas dan materi OSN Fansedu' })}>
                     <img
                       src="/kelas-osn.png"
                       alt="Screenshot kelas dan materi OSN Fansedu"
-                      className="w-full h-full object-cover object-top"
+                      className="w-full h-full object-cover object-top pointer-events-none"
                       onError={(e) => {
                         const t = e.currentTarget
                         if (!t.src.includes('placehold.co')) {
@@ -688,7 +679,7 @@ function App() {
                         }
                       }}
                     />
-                  </div>
+                  </button>
                   <div className="p-4 text-center">
                     <p className="font-semibold text-[var(--fg)]">Kelas</p>
                     <p className="text-sm text-[var(--fg-muted)]">Sesi belajar dan materi OSN</p>
@@ -697,6 +688,31 @@ function App() {
               </div>
             </div>
           </div>
+
+          {/* Lightbox: zoom image, back to landing */}
+          {lightboxImage && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Tampilan gambar diperbesar"
+              onClick={() => setLightboxImage(null)}
+            >
+              <button type="button" className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setLightboxImage(null)} aria-label="Tutup">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <img
+                src={lightboxImage.src}
+                alt={lightboxImage.alt}
+                className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+                onError={(e) => {
+                  const t = e.currentTarget
+                  if (!t.src.includes('placehold.co')) t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Gambar'
+                }}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -715,7 +731,7 @@ function App() {
               ['Pembahasan solusi optimal seperti di OSN', 'Pembahasan algoritma langkah demi langkah dan solusi optimal ala soal OSN, bukan sekadar jawaban singkat.'],
               ['Akses materi & rekaman kapan saja', 'Fleksibilitas penuh mengakses materi, rekaman kelas, dan pembahasan sesuai jadwal kamu.'],
               ['Kurikulum dari praktisi & alumni OSN', 'Materi disusun oleh praktisi dan alumni OSN berpengalaman, fokus ke yang sering keluar di lomba.'],
-              ['Mentor medalis & pelatih OSN', 'Tim pengajar terdiri dari medalis dan pelatih OSN yang paham strategi lolos seleksi.'],
+              ['Mentor medalis & pelatih OSN', 'Medalis dan pelatih OSN—dari Ex-OSN, Ex-Tokopedia, hingga Software engineer di Govtech Indonesia. Materi dan strategi disesuaikan khusus untuk persiapan OSN.'],
               ['Rekaman kelas & pembahasan tanpa batas', 'Akses semua rekaman live class dan video pembahasan soal tanpa batas waktu.'],
               ['Investasi tepat untuk persiapan OSN', 'Nilai terbaik untuk hasil maksimal: dari dasar sampai siap menghadapi OSN-K.'],
             ].map(([title, desc], index) => (
@@ -825,11 +841,11 @@ function App() {
                 <div className="flex flex-wrap gap-2 mb-4 py-3 px-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
                   <span className="text-xs font-medium text-[var(--fg-muted)]">{URGENCY.batch}</span>
                   <span className="text-[var(--fg-muted)]">·</span>
-                  <span className="text-xs font-semibold text-[var(--fg)]">Kuota {URGENCY.quotaMax} siswa</span>
+                  <span className="text-xs font-semibold text-[var(--fg)]">Kuota {URGENCY.quotaMax} siswa per kelas</span>
                   {getEarlyBirdDaysLeft() > 0 && (
                     <>
                       <span className="text-[var(--fg-muted)]">·</span>
-                      <span className="text-xs font-semibold text-[var(--accent)]">Early Bird {getEarlyBirdDaysLeft()} hari lagi</span>
+                      <span className="text-xs font-semibold text-[var(--accent)]">Early bird hingga 25 Maret 2026</span>
                     </>
                   )}
                 </div>
@@ -986,11 +1002,11 @@ function App() {
               📅 {URGENCY.batch}
             </span>
             <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
-              👥 Kuota hanya {URGENCY.quotaMax} siswa
+              👥 Kuota hanya {URGENCY.quotaMax} siswa per kelas
             </span>
             {getEarlyBirdDaysLeft() > 0 && (
               <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-sm font-semibold text-[var(--accent)]">
-                ⏰ Early Bird berakhir dalam {getEarlyBirdDaysLeft()} hari
+                ⏰ Early bird hingga 25 Maret 2026
               </span>
             )}
           </div>
