@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
 import { getPackages } from './lib/api'
+import { formatRupiah } from './lib/currency'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
 export interface LandingPackage {
@@ -9,9 +10,9 @@ export interface LandingPackage {
   name: string
   slug: string
   shortDescription: string | null
-  priceDisplay: string | null
-  priceEarlyBird?: string | null
-  priceNormal?: string | null
+  price: number
+  priceEarlyBird?: number | null
+  priceNormal?: number | null
   ctaUrl: string | null
   ctaLabel: string
   isOpen: boolean
@@ -91,9 +92,9 @@ const MOCK_PACKAGES: LandingPackage[] = [
     name: 'Algorithm & Programming Foundation',
     slug: 'algorithm-programming-foundation',
     shortDescription: 'Kelas dasar untuk membangun fondasi berpikir algoritmik dan pemrograman yang dibutuhkan dalam kompetisi informatika.',
-    priceDisplay: null,
-    priceEarlyBird: 'Rp249.000',
-    priceNormal: 'Rp399.000',
+    price: 249000,
+    priceEarlyBird: 249000,
+    priceNormal: 399000,
     ctaUrl: waUrl('Saya ingin bertanya detail terkait program Algorithm & Programming Foundation.'),
     ctaLabel: 'Daftar / Tanya',
     isOpen: true,
@@ -116,9 +117,9 @@ const MOCK_PACKAGES: LandingPackage[] = [
     name: 'Pelatihan Intensif OSN-K 2026 Informatika',
     slug: 'pelatihan-intensif-osn-k-2026',
     shortDescription: 'Program pelatihan khusus untuk membantu siswa mempersiapkan seleksi Olimpiade Sains Nasional bidang Informatika.',
-    priceDisplay: null,
-    priceEarlyBird: 'Rp349.000',
-    priceNormal: 'Rp500.000',
+    price: 349000,
+    priceEarlyBird: 349000,
+    priceNormal: 500000,
     ctaUrl: waUrl('Saya ingin bertanya detail terkait program Pelatihan Intensif OSN-K 2026 Informatika.'),
     ctaLabel: 'Daftar / Tanya',
     isOpen: true,
@@ -141,9 +142,9 @@ const MOCK_PACKAGES: LandingPackage[] = [
     name: 'Kelas Gabungan (Foundation + OSN-K 2026)',
     slug: 'kelas-gabungan-foundation-osnk',
     shortDescription: 'Dapatkan kedua program sekaligus: fondasi algoritma & pemrograman plus persiapan intensif OSN-K. Lebih hemat daripada daftar terpisah.',
-    priceDisplay: null,
-    priceEarlyBird: 'Rp549.000',
-    priceNormal: 'Rp899.000',
+    price: 549000,
+    priceEarlyBird: 549000,
+    priceNormal: 899000,
     ctaUrl: waUrl('Saya ingin bertanya detail terkait program Kelas Gabungan (Foundation + OSN-K 2026).'),
     ctaLabel: 'Daftar Kelas Gabungan',
     isOpen: true,
@@ -593,7 +594,7 @@ function App() {
               </span>
 
               <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-                Dari <span className="text-[var(--accent)]">Masalah</span> ke Lolos OSN-K
+                Dari <span className="text-[var(--accent)]">0</span> sampai Lolos OSN-K
               </h2>
 
               <p className="text-[var(--fg-muted)] text-lg mb-6 reveal reveal-delay-2">
@@ -770,10 +771,10 @@ function App() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(packages.length > 0 ? packages : MOCK_PACKAGES).filter((p) => p.isOpen).map((pkg, index) => {
               const isBundle = pkg.isBundle === true
-              const normalNum = isBundle && pkg.priceNormal ? parseInt(pkg.priceNormal.replace(/\D/g, ''), 10) : 0
-              const earlyNum = isBundle && pkg.priceEarlyBird ? parseInt(pkg.priceEarlyBird.replace(/\D/g, ''), 10) : 0
+              const normalNum = isBundle && pkg.priceNormal ? pkg.priceNormal : 0
+              const earlyNum = isBundle && pkg.priceEarlyBird ? pkg.priceEarlyBird : 0
               const hematRupiah = normalNum > 0 && earlyNum > 0 && normalNum > earlyNum
-                ? `Rp${((normalNum - earlyNum) / 1000).toFixed(0)}.000`
+                ? formatRupiah(normalNum - earlyNum)
                 : null
               return (
               <div key={pkg.id} className={`feature-card rounded-2xl p-8 flex flex-col reveal reveal-delay-${(index % 3) + 1} ${isBundle ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''}`}>
@@ -850,16 +851,16 @@ function App() {
                   )}
                 </div>
                 <div className="mt-auto pt-4 border-t border-[var(--border)]">
-                  {(pkg.priceEarlyBird != null || pkg.priceNormal != null || pkg.priceDisplay) && (
+                  {(pkg.priceEarlyBird != null || pkg.priceNormal != null || pkg.price > 0) && (
                     <div className="mb-4">
                       {isBundle ? (
                         <>
                           <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-1">Harga</p>
                           {pkg.priceNormal != null && (
-                            <p className="text-sm text-[var(--fg-muted)] line-through mb-0.5">Normal: {pkg.priceNormal}</p>
+                            <p className="text-sm text-[var(--fg-muted)] line-through mb-0.5">Normal: {formatRupiah(pkg.priceNormal)}</p>
                           )}
                           {pkg.priceEarlyBird != null && (
-                            <p className="text-lg font-bold text-[var(--accent)]">Early Bird: {pkg.priceEarlyBird}</p>
+                            <p className="text-lg font-bold text-[var(--accent)]">Early Bird: {formatRupiah(pkg.priceEarlyBird)}</p>
                           )}
                           {hematRupiah && (
                             <p className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">Hemat {hematRupiah}</p>
@@ -869,13 +870,13 @@ function App() {
                         <>
                           <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-1">Harga</p>
                           {pkg.priceEarlyBird != null && (
-                            <p className="text-sm text-[var(--fg-muted)]">Early Bird: <span className="font-semibold text-[var(--accent)]">{pkg.priceEarlyBird}</span></p>
+                            <p className="text-sm text-[var(--fg-muted)]">Early Bird: <span className="font-semibold text-[var(--accent)]">{formatRupiah(pkg.priceEarlyBird)}</span></p>
                           )}
                           {pkg.priceNormal != null && (
-                            <p className="text-sm text-[var(--fg-muted)]">Harga Normal: <span className="font-semibold text-[var(--accent)]">{pkg.priceNormal}</span></p>
+                            <p className="text-sm text-[var(--fg-muted)]">Harga Normal: <span className="line-through">{formatRupiah(pkg.priceNormal)}</span></p>
                           )}
-                          {pkg.priceDisplay != null && !pkg.priceEarlyBird && !pkg.priceNormal && (
-                            <p className="font-semibold text-[var(--accent)]">{pkg.priceDisplay}</p>
+                          {!pkg.priceEarlyBird && !pkg.priceNormal && pkg.price > 0 && (
+                            <p className="font-semibold text-[var(--accent)]">{formatRupiah(pkg.price)}</p>
                           )}
                         </>
                       )}
@@ -1012,7 +1013,10 @@ function App() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 reveal">
-            <a href={REGISTER_URL} className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block">
+            <a
+              href={authUser ? `${LMS_BASE}/catalog` : REGISTER_URL}
+              className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block"
+            >
               Daftar Sekarang
             </a>
             <a href={waUrl(WA_TEMPLATES.tanyaProgram)} target="_blank" rel="noreferrer" className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--border)] hover:border-[var(--accent)]">

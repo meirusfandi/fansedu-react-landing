@@ -4,8 +4,11 @@ export interface Course {
   title: string
   shortDescription: string
   thumbnail: string
+  /** Harga efektif (rupiah integer) */
   price: number
-  priceDisplay: string
+  /** Opsional: harga early bird & normal (rupiah integer) */
+  priceEarlyBird?: number
+  priceNormal?: number
   instructor: { id: string; name: string; avatar?: string }
   category: string
   level: 'beginner' | 'intermediate' | 'advanced'

@@ -68,19 +68,94 @@ curl -s -X POST "$BASE/auth/logout" -H "Authorization: Bearer $TOKEN"
 
 ---
 
-## Checkout (tanpa login / guest)
+## Checkout
+
+### 1. Login (ambil token)
 
 ```bash
-# 1. Initiate — pakai programSlug (slug dari packages atau courses)
+BASE="http://localhost:8080/api/v1"
+RES=$(curl -s -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"budi@example.com","password":"rahasia123"}')
+echo "$RES" | jq .
+TOKEN=$(echo "$RES" | jq -r '.token')
+```
+
+### 2. Checkout initiate (pakai email sama dengan akun login)
+
+Jika request dikirim **dengan Bearer token** (user sudah login), backend harus cek: apakah sudah ada order **pending** untuk **user ini** + **program ini**. Jika ada, kembalikan order itu (tanpa buat order baru).
+
+```bash
+# Tanpa Bearer: guest checkout (selalu buat order baru)
 curl -s -X POST "$BASE/checkout/initiate" \
   -H "Content-Type: application/json" \
-  -d '{"programSlug":"pelatihan-intensif-osn-k-2026","name":"Budi Siswa","email":"budi@example.com"}'
+  -d '{"programSlug":"algorithm-programming-foundation","name":"Budi Siswa","email":"budi@example.com"}' | jq .
 
-# 2. Payment session — pakai checkoutId dari response initiate
+# Dengan Bearer: backend kembalikan order pending yang sama (jika ada) untuk user + program ini
+curl -s -X POST "$BASE/checkout/initiate" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"programSlug":"algorithm-programming-foundation","name":"Budi Siswa","email":"budi@example.com"}' | jq .
+```
+
+Opsional: kirim `userId` di body (frontend kirim saat user login). Backend bisa pakai `userId` atau identitas dari token untuk cari order pending.
+
+### 3. Payment session (lanjut ke halaman transfer)
+
+Pakai `checkoutId` dari response initiate. Kirim `amount` (nominal + kode unik) dan `uniqueCode` agar backend simpan ke transaksi (nominal tidak 0).
+
+```bash
+CHECKOUT_ID="<CHECKOUT_ID_DARI_INITIATE>"
+# Minimal
 curl -s -X POST "$BASE/checkout/payment-session" \
   -H "Content-Type: application/json" \
-  -d '{"checkoutId":"<ORDER_ID>","paymentMethod":"bank_transfer","promoCode":""}'
+  -d "{\"checkoutId\":\"$CHECKOUT_ID\",\"paymentMethod\":\"bank_transfer\",\"promoCode\":\"\"}" | jq .
+
+# Dengan amount & uniqueCode (disarankan agar nominal tersimpan)
+curl -s -X POST "$BASE/checkout/payment-session" \
+  -H "Content-Type: application/json" \
+  -d "{\"checkoutId\":\"$CHECKOUT_ID\",\"paymentMethod\":\"bank_transfer\",\"promoCode\":\"\",\"uniqueCode\":456,\"amount\":349456}" | jq .
 ```
+
+### 4. Lihat transaksi / order (pakai token)
+
+```bash
+curl -s "$BASE/student/transactions" -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+---
+
+## Satu blok: Login → Checkout → Payment session → Transaksi
+
+```bash
+BASE="http://localhost:8080/api/v1"
+
+# 1) Login
+RES=$(curl -s -X POST "$BASE/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"budi@example.com","password":"rahasia123"}')
+TOKEN=$(echo "$RES" | jq -r '.token')
+echo "Token: $TOKEN"
+
+# 2) Checkout initiate (pakai Bearer agar backend kembalikan order pending yang sama jika ada)
+RES=$(curl -s -X POST "$BASE/checkout/initiate" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"programSlug":"algorithm-programming-foundation","name":"Budi Siswa","email":"budi@example.com"}')
+echo "$RES" | jq .
+CHECKOUT_ID=$(echo "$RES" | jq -r '.checkoutId')
+ORDER_ID=$(echo "$RES" | jq -r '.orderId')
+
+# 3) Payment session (amount & uniqueCode agar nominal tersimpan)
+curl -s -X POST "$BASE/checkout/payment-session" \
+  -H "Content-Type: application/json" \
+  -d "{\"checkoutId\":\"$CHECKOUT_ID\",\"paymentMethod\":\"bank_transfer\",\"promoCode\":\"\",\"uniqueCode\":456,\"amount\":349456}" | jq .
+
+# 4) Daftar transaksi user
+curl -s "$BASE/student/transactions" -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Ganti `budi@example.com` / `rahasia123` dengan email dan password akun yang sudah terdaftar.
 
 ---
 
@@ -150,7 +225,7 @@ Tanpa `jq`: hapus `| jq .` dan `| jq -r '.token'`.
 | `/auth/login` | POST | - |
 | `/auth/me` | GET | Bearer |
 | `/auth/logout` | POST | Bearer |
-| `/checkout/initiate` | POST | - |
+| `/checkout/initiate` | POST | Opsional (Bearer agar kembalikan order pending yang sama) |
 | `/checkout/payment-session` | POST | - |
 | `/student/dashboard` | GET | Bearer |
 | `/student/profile` | GET / PUT | Bearer |

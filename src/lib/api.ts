@@ -28,13 +28,18 @@ function authHeaders(): HeadersInit {
 }
 
 export class ApiError extends Error {
+  status: number
+  data?: { error?: string; message?: string }
+
   constructor(
-    public status: number,
+    status: number,
     message: string,
-    public data?: { error?: string; message?: string }
+    data?: { error?: string; message?: string }
   ) {
     super(message || data?.message || data?.error || `Error ${status}`)
     this.name = 'ApiError'
+    this.status = status
+    this.data = data
   }
 }
 
@@ -98,7 +103,7 @@ export async function apiLogout(): Promise<void> {
     headers: authHeaders(),
   })
   if (res.status === 401) return
-  if (!res.ok) await res.json().catch(() => {})
+  if (!res.ok) await res.json().catch(() => { })
 }
 
 export async function apiGetMe(): Promise<MeResponse> {
@@ -113,9 +118,11 @@ export interface PackageItem {
   name: string
   slug: string
   shortDescription: string | null
-  priceDisplay: string | null
-  priceEarlyBird?: string | null
-  priceNormal?: string | null
+  /** Harga efektif (rupiah integer) */
+  price: number
+  /** Harga early bird & normal (rupiah integer) */
+  priceEarlyBird?: number | null
+  priceNormal?: number | null
   ctaUrl: string | null
   ctaLabel: string
   isOpen: boolean
@@ -152,19 +159,43 @@ function parsePackagesResponse(data: unknown): PackageItem[] {
     }
     return undefined
   }
-  return (arr as Record<string, unknown>[])
-    .filter((p) => get(p, 'is_open', 'isOpen') !== false)
+  const num = (v: unknown): number | null => {
+    if (typeof v === 'number' && !Number.isNaN(v)) return v
+    const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
+    return typeof n === 'number' && !Number.isNaN(n) ? n : null
+  }
+  const asRupiahInt = (v: unknown): number | null => {
+    const n = num(v)
+    return n != null && n > 0 ? Math.trunc(n) : null
+  }
+  const pickPositive = (...vals: Array<number | null | undefined>): number => {
+    for (const v of vals) {
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.trunc(v)
+    }
+    return 0
+  }
+  const arrFiltered = (arr as Record<string, unknown>[]).filter((p) => get(p, 'is_open', 'isOpen') !== false)
+  return arrFiltered
     .map((p) => {
       const waTemplate = get(p, 'wa_message_template', 'waMessageTemplate')
       const ctaUrlVal = get(p, 'cta_url', 'ctaUrl')
+      const priceNum = asRupiahInt(get(p, 'price', 'amount'))
+      const totalPriceNum = asRupiahInt(get(p, 'total_price', 'totalPrice'))
+      const finalPriceNum = asRupiahInt(get(p, 'final_price', 'finalPrice'))
+      const priceAmountNum = asRupiahInt(get(p, 'price_amount', 'priceAmount'))
+      const priceEarlyNum = asRupiahInt(get(p, 'price_early_bird', 'priceEarlyBird'))
+      const priceNormalNum = asRupiahInt(get(p, 'price_normal', 'priceNormal'))
+      // Penting: jangan pakai ?? untuk harga karena nilai 0 bisa "mengunci" fallback.
+      // Ambil harga positif pertama yang tersedia.
+      const amountRupiah = pickPositive(priceNum, totalPriceNum, finalPriceNum, priceAmountNum, priceEarlyNum, priceNormalNum)
       return {
         id: String(p.id ?? ''),
         name: String(get(p, 'name', 'title') ?? ''),
         slug: String(get(p, 'slug') ?? ''),
         shortDescription: get(p, 'short_description', 'shortDescription') != null ? String(get(p, 'short_description', 'shortDescription')) : null,
-        priceDisplay: get(p, 'price_display', 'priceDisplay') != null ? String(get(p, 'price_display', 'priceDisplay')) : null,
-        priceEarlyBird: get(p, 'price_early_bird', 'priceEarlyBird') != null ? String(get(p, 'price_early_bird', 'priceEarlyBird')) : null,
-        priceNormal: get(p, 'price_normal', 'priceNormal') != null ? String(get(p, 'price_normal', 'priceNormal')) : null,
+        price: amountRupiah,
+        priceEarlyBird: priceEarlyNum,
+        priceNormal: priceNormalNum,
         ctaUrl: waTemplate ? waUrl(String(waTemplate)) : (ctaUrlVal != null ? String(ctaUrlVal) : null),
         ctaLabel: String(get(p, 'cta_label', 'ctaLabel') ?? 'Daftar'),
         isOpen: get(p, 'is_open', 'isOpen') !== false,
@@ -180,7 +211,9 @@ function parsePackagesResponse(data: unknown): PackageItem[] {
 }
 
 export async function getPackages(): Promise<PackageItem[]> {
-  const res = await fetch(PACKAGES_API_URL)
+  const res = await fetch(PACKAGES_API_URL, {
+    cache: 'no-store',
+  })
   if (!res.ok) throw new ApiError(res.status, res.statusText)
   const data = await res.json().catch(() => null)
   return parsePackagesResponse(data)
@@ -199,8 +232,9 @@ export function packageToCourse(pkg: PackageItem): Course {
     title: pkg.name,
     shortDescription: pkg.shortDescription ?? '',
     thumbnail: '',
-    price: 0,
-    priceDisplay: pkg.priceDisplay ?? '',
+    price: pkg.price,
+    priceEarlyBird: pkg.priceEarlyBird ?? undefined,
+    priceNormal: pkg.priceNormal ?? undefined,
     instructor: { id: '', name: 'Fansedu' },
     category: pkg.isBundle ? 'Bundle' : 'Program',
     level: 'beginner',
@@ -270,22 +304,43 @@ export interface CheckoutInitiateRequest {
   programId?: string
   name: string
   email: string
+  /** Id user yang login; jika ada, backend gunakan untuk cek order pending yang sama */
+  userId?: string
+  /** Kode promo (opsional) — BE juga terima di initiate */
+  promoCode?: string
+  /** Harga yang diharapkan (dari packages), rupiah integer */
+  expectedTotal?: number
+  /** Harga normal program, rupiah integer */
+  normalPrice?: number
 }
 
-/** Response 201 POST /checkout/initiate — simpan checkoutId untuk payment-session */
+/** Response 201 POST /checkout/initiate */
 export interface CheckoutInitiateResponse {
   checkoutId: string
   orderId: string
   total: number
   program?: { title: string; priceDisplay: string }
+  /** Kode unik 3 digit untuk verifikasi */
+  confirmationCode?: number
+  normalPrice?: number
+  finalPrice?: number
+  discountCents?: number
+  discountPercent?: number
+  priceDisplay?: string
 }
 
-/** Body POST /checkout/payment-session — checkoutId dari response initiate */
+/** Body POST /checkout/payment-session */
 export interface PaymentSessionRequest {
-  checkoutId: string
+  /** orderId dari response initiate — key utama di BE */
+  orderId: string
+  /** checkoutId (alias, beberapa BE pakai ini) */
+  checkoutId?: string
   paymentMethod: 'bank_transfer' | 'virtual_account' | 'ewallet'
-  /** Boleh string kosong "" */
   promoCode?: string
+  /** Kode unik 3 digit (100–999) */
+  uniqueCode?: number
+  /** Jumlah yang harus dibayar (termasuk kode unik) */
+  amount?: number
 }
 
 export interface PaymentSessionResponse {
@@ -297,19 +352,119 @@ export interface PaymentSessionResponse {
 }
 
 export async function initiateCheckout(payload: CheckoutInitiateRequest): Promise<CheckoutInitiateResponse> {
+  const body: Record<string, unknown> = {
+    programSlug: payload.programSlug,
+    program_slug: payload.programSlug,
+    programId: payload.programId,
+    program_id: payload.programId,
+    name: payload.name,
+    email: payload.email,
+    promoCode: payload.promoCode ?? '',
+    promo_code: payload.promoCode ?? '',
+  }
+
+  if (payload.userId) {
+    body.userId = payload.userId
+    body.user_id = payload.userId
+  }
+
+  const rupiahToCents = (v: number): number => Math.trunc(v * 100)
+
+  // Kirim harga rupiah (+ alias cents untuk kompatibilitas backend)
+  const totalRupiah = payload.expectedTotal != null && payload.expectedTotal > 0 ? payload.expectedTotal : 0
+  if (totalRupiah > 0) {
+    const totalCents = rupiahToCents(totalRupiah)
+    body.expectedTotal = totalRupiah
+    body.expected_total = totalRupiah
+    body.expectedTotalCents = totalCents
+    body.expected_total_cents = totalCents
+    body.total = totalRupiah
+    body.total_amount = totalRupiah
+    body.amount = totalRupiah
+    body.price = totalRupiah
+    body.final_price = totalRupiah
+    body.finalPrice = totalRupiah
+    body.final_price_cents = totalCents
+  }
+
+  if (payload.normalPrice != null && payload.normalPrice > 0) {
+    const normalCents = rupiahToCents(payload.normalPrice)
+    body.normalPrice = payload.normalPrice
+    body.normal_price = payload.normalPrice
+    body.normalPriceCents = normalCents
+    body.normal_price_cents = normalCents
+    body.price_early_bird_cents = totalRupiah > 0 ? rupiahToCents(totalRupiah) : normalCents
+    body.price_normal_cents = normalCents
+  }
+
   const res = await fetch(`${API_BASE}/checkout/initiate`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
-  return handleResponse<CheckoutInitiateResponse>(res)
+  const data = await handleResponse<CheckoutInitiateResponse & { confirmation_code?: string | number }>(res)
+
+  // Parse confirmation code (bisa string atau number dari backend) -> paksa integer
+  const rawConfCode = data.confirmationCode ?? (data as { confirmation_code?: string | number }).confirmation_code
+  const confAsNumber = rawConfCode != null ? Number(rawConfCode) : NaN
+  const confirmationCode = Number.isFinite(confAsNumber) ? Math.trunc(confAsNumber) : undefined
+
+  // Parse total — backend bisa mengembalikan 0, override dengan expectedTotal
+  let totalNum = typeof data.total === 'number' && !Number.isNaN(data.total) ? data.total : 0
+  const finalPriceRaw = (data as { finalPrice?: number }).finalPrice
+  let finalPriceNum = typeof finalPriceRaw === 'number' && finalPriceRaw > 0 ? finalPriceRaw : totalNum
+  const normalPriceRaw = (data as { normalPrice?: number }).normalPrice
+  let normalPriceOut = typeof normalPriceRaw === 'number' && normalPriceRaw > 0 ? normalPriceRaw : undefined
+  let priceDisplayOut = data.priceDisplay ?? data.program?.priceDisplay
+
+  // Override: jika backend mengembalikan total 0, gunakan expectedTotal
+  const backendReturnedZero = totalNum === 0 || Number.isNaN(totalNum)
+  if (backendReturnedZero && payload.expectedTotal != null && payload.expectedTotal > 0) {
+    totalNum = payload.expectedTotal
+    finalPriceNum = payload.expectedTotal
+    priceDisplayOut = `Rp${payload.expectedTotal.toLocaleString('id-ID')}`
+  }
+
+  if ((normalPriceOut == null || normalPriceOut === 0) && payload.normalPrice != null && payload.normalPrice > 0) {
+    normalPriceOut = payload.normalPrice
+  }
+
+  return {
+    ...data,
+    total: Number.isNaN(totalNum) ? 0 : totalNum,
+    finalPrice: Number.isNaN(finalPriceNum) ? 0 : finalPriceNum,
+    normalPrice: normalPriceOut,
+    priceDisplay: priceDisplayOut,
+    program: data.program
+      ? { ...data.program, priceDisplay: priceDisplayOut || data.program.priceDisplay }
+      : data.program,
+    confirmationCode: (confirmationCode != null && !Number.isNaN(confirmationCode)) ? confirmationCode : undefined,
+  }
 }
 
 export async function createPaymentSession(payload: PaymentSessionRequest): Promise<PaymentSessionResponse> {
-  const body = {
-    checkoutId: payload.checkoutId,
+  const body: Record<string, unknown> = {
+    orderId: payload.orderId,
+    order_id: payload.orderId,
     paymentMethod: payload.paymentMethod,
+    payment_method: payload.paymentMethod,
     promoCode: payload.promoCode ?? '',
+    promo_code: payload.promoCode ?? '',
+  }
+  // Juga kirim checkoutId jika tersedia (backward compat)
+  if (payload.checkoutId) {
+    body.checkoutId = payload.checkoutId
+    body.checkout_id = payload.checkoutId
+  }
+  if (payload.uniqueCode != null && payload.uniqueCode >= 100 && payload.uniqueCode <= 999) {
+    body.uniqueCode = payload.uniqueCode
+    body.unique_code = payload.uniqueCode
+  }
+  const amountNum = payload.amount != null && !Number.isNaN(Number(payload.amount)) ? Number(payload.amount) : 0
+  if (amountNum > 0) {
+    body.amount = amountNum
+    body.total = amountNum
+    body.total_amount = amountNum
   }
   const res = await fetch(`${API_BASE}/checkout/payment-session`, {
     method: 'POST',
@@ -317,6 +472,40 @@ export async function createPaymentSession(payload: PaymentSessionRequest): Prom
     body: JSON.stringify(body),
   })
   return handleResponse<PaymentSessionResponse>(res)
+}
+
+
+/** Upload bukti pembayaran + data pengirim. Backend menyimpan ke transaksi (status tetap pending / menunggu verifikasi). */
+export async function submitPaymentProof(orderId: string, form: FormData): Promise<void> {
+  const h = authHeaders() as Record<string, string>
+  const { 'Content-Type': _ct, ...rest } = h
+  const res = await fetch(`${API_BASE}/checkout/orders/${encodeURIComponent(orderId)}/payment-proof`, {
+    method: 'POST',
+    headers: { ...rest, Accept: 'application/json' },
+    body: form,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new ApiError(res.status, (data as { message?: string }).message || res.statusText, data as { error?: string; message?: string })
+  }
+}
+
+// --- Auth: Register with Invite Token (checkout guest → create account) ---
+
+export interface RegisterWithInviteRequest {
+  token: string
+  email: string
+  name: string
+  password: string
+}
+
+export async function registerWithInvite(body: RegisterWithInviteRequest): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/auth/register-with-invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return handleResponse<AuthResponse>(res)
 }
 
 // --- Student ---

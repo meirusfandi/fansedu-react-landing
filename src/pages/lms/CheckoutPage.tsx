@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { useCheckoutStore } from '../../store/checkout'
@@ -7,15 +7,66 @@ import {
   packageToCourse,
   initiateCheckout,
   createPaymentSession,
+  submitPaymentProof,
   ApiError,
 } from '../../lib/api'
-import type { Course } from '../../types/course'
+import { formatRupiah } from '../../lib/currency'
 
 const PAYMENT_METHODS = [
-  { id: 'bank_transfer', label: 'Bank Transfer' },
-  { id: 'virtual_account', label: 'Virtual Account' },
-  { id: 'ewallet', label: 'E-Wallet' },
+  { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
 ] as const
+
+/** Rekening untuk transfer */
+const BANK_ACCOUNTS = [
+  { bank: 'Bank BCA', accountNo: '8330183471', accountName: 'Mei Rusfandi' },
+  { bank: 'Bank Mandiri', accountNo: '1270010341814', accountName: 'Mei Rusfandi' },
+] as const
+
+/** Generate kode unik 3 digit (100–999) untuk verifikasi transfer */
+function generateUniqueCode(): number {
+  return Math.floor(100 + Math.random() * 900)
+}
+
+/** Validasi format email sederhana */
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+/** Ambil harga rupiah dari Course, utamakan field numerik */
+function resolveNumericPrice(c: { price?: number; priceEarlyBird?: number; priceNormal?: number } | null): number {
+  if (!c) return 0
+  // 1) field numerik langsung (sudah di-set oleh packageToCourse)
+  if (typeof c.price === 'number' && c.price > 0) return c.price
+  if (typeof c.priceEarlyBird === 'number' && c.priceEarlyBird > 0) return c.priceEarlyBird
+  if (typeof c.priceNormal === 'number' && c.priceNormal > 0) return c.priceNormal
+  return 0
+}
+
+/** Ambil harga normal (rupiah) dari Course, utamakan field numerik */
+function resolveNormalPrice(c: { priceNormal?: number; price?: number } | null): number {
+  if (!c) return 0
+  if (typeof c.priceNormal === 'number' && c.priceNormal > 0) return c.priceNormal
+  return 0
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <button type="button" onClick={copy} className="ml-2 inline-flex items-center gap-1 text-gray-500 hover:text-primary" title={`Salin ${label}`} aria-label={`Salin ${label}`}>
+      {copied ? (
+        <span className="text-xs text-green-600">Tersalin</span>
+      ) : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+      )}
+    </button>
+  )
+}
 
 export default function CheckoutPage({ programSlug }: { programSlug: string | null }) {
   const slug = programSlug
@@ -33,13 +84,41 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     setPromoCode,
     paymentMethod,
     setPaymentMethod,
+    step,
+    setStep,
+    uniqueCode,
+    setUniqueCode,
   } = useCheckoutStore()
-  const [step, setStep] = useState<'info' | 'payment'>('info')
+
   const [loadingProgram, setLoadingProgram] = useState(!!slug)
   const [loadingContinue, setLoadingContinue] = useState(false)
   const [loadingPay, setLoadingPay] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [proofFile, setProofFile] = useState<File | null>(null)
+  const [senderAccountNo, setSenderAccountNo] = useState('')
+  const [senderName, setSenderName] = useState('')
+  const [senderBank, setSenderBank] = useState('')
+  const [proofNote, setProofNote] = useState('')
+  const [loadingProof, setLoadingProof] = useState(false)
+  const [proofError, setProofError] = useState<string | null>(null)
   const prefilledFromUser = useRef(false)
+
+  // --- Harga dari field numerik (utama), bukan dari string ---
+  const normalNum = useMemo(() => resolveNormalPrice(course), [course])
+  const earlyNum = useMemo(() => (course?.priceEarlyBird != null && course.priceEarlyBird > 0 ? course.priceEarlyBird : 0), [course])
+
+  const hasEarlyBirdDiscount = normalNum > 0 && earlyNum > 0 && normalNum > earlyNum
+  const earlyBirdDiscountAmount = hasEarlyBirdDiscount ? normalNum - earlyNum : 0
+
+  // Harga efektif: utamakan field numerik course.price (sudah dihitung oleh packageToCourse)
+  const basePrice = useMemo(() => resolveNumericPrice(course), [course])
+
+  // Total bayar: dari backend jika > 0, else basePrice
+  const totalToPay = orderSummary != null && orderSummary.total > 0 ? orderSummary.total : basePrice
+
+  // Potongan dari kode promo HANYA tampil jika user mengisi kode promo DAN backend mengembalikan total lebih kecil dari basePrice.
+  const hasPromoDiscount = Boolean(promoCode.trim() && orderSummary && basePrice > 0 && orderSummary.total < basePrice)
+  const promoDiscountAmount = hasPromoDiscount ? basePrice - orderSummary!.total : 0
 
   // Jika sudah login, isi Data Diri dari user (sekali per sesi login)
   useEffect(() => {
@@ -53,6 +132,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     }
   }, [user, setUserInfo])
 
+  // Load program data berdasarkan slug
   useEffect(() => {
     if (!slug) {
       setCourse(null)
@@ -60,65 +140,175 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setOrderSummary(null)
       setLoadingProgram(false)
       setStep('info')
+      setUniqueCode(null)
       return
     }
+
+    // Jika course di store sudah sesuai slug, pakai data itu
+    if (course?.slug === slug) {
+      // Pastikan step di-reset ke 'info' jika belum ada checkoutId (belum initiate)
+      if (!useCheckoutStore.getState().checkoutId) {
+        setStep('info')
+      }
+      setLoadingProgram(false)
+      return
+    }
+
+    // Slug berubah → reset state checkout dan load ulang
     setCheckoutId(null)
     setOrderSummary(null)
     setStep('info')
-    setLoadingProgram(true)
+    setUniqueCode(null)
     setError(null)
+    setLoadingProgram(true)
+
     getPackageBySlug(slug)
-      .then((pkg) => setCourse(pkg ? packageToCourse(pkg) : null))
+      .then((pkg) => {
+        setCourse(pkg ? packageToCourse(pkg) : null)
+      })
       .catch(() => {
         setCourse(null)
         setError('Gagal memuat program.')
       })
       .finally(() => setLoadingProgram(false))
-  }, [slug, setCourse, setCheckoutId, setOrderSummary])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug])
 
-  const onContinue = async () => {
-    if (!userInfo.name || !userInfo.email || !course) return
+  const onContinue = useCallback(async () => {
+    const currentCourse = useCheckoutStore.getState().course
+    const currentUserInfo = useCheckoutStore.getState().userInfo
+    const currentUser = useAuthStore.getState().user
+
+    if (!currentCourse) return
+    if (!currentUserInfo.name.trim()) {
+      setError('Nama harus diisi.')
+      return
+    }
+    if (!currentUserInfo.email.trim() || !isValidEmail(currentUserInfo.email.trim())) {
+      setError('Masukkan alamat email yang valid.')
+      return
+    }
+
     setError(null)
     setLoadingContinue(true)
+
+    // ── Harga untuk initiate: ambil langsung dari data integer course ──
+    // Prioritas total: early bird -> price -> normal -> basePrice
+    const expectedTotalRupiah = (
+      (typeof currentCourse.priceEarlyBird === 'number' && currentCourse.priceEarlyBird > 0 ? currentCourse.priceEarlyBird : 0)
+      || (typeof currentCourse.price === 'number' && currentCourse.price > 0 ? currentCourse.price : 0)
+      || (typeof currentCourse.priceNormal === 'number' && currentCourse.priceNormal > 0 ? currentCourse.priceNormal : 0)
+      || basePrice
+    )
+    // Prioritas harga normal: normal -> price
+    const normalPriceRupiah = (
+      (typeof currentCourse.priceNormal === 'number' && currentCourse.priceNormal > 0 ? currentCourse.priceNormal : 0)
+      || (typeof currentCourse.price === 'number' && currentCourse.price > 0 ? currentCourse.price : 0)
+    )
+
     try {
       const res = await initiateCheckout({
-        programSlug: course.slug,
-        name: userInfo.name,
-        email: userInfo.email,
+        programSlug: currentCourse.slug,
+        programId: currentCourse.id,
+        name: currentUserInfo.name.trim(),
+        email: currentUserInfo.email.trim(),
+        ...(currentUser?.id && { userId: currentUser.id }),
+        promoCode: useCheckoutStore.getState().promoCode.trim() || '',
+        expectedTotal: expectedTotalRupiah,
+        normalPrice: normalPriceRupiah,
       })
+
       setCheckoutId(res.checkoutId)
+
+      // Utamakan total dari backend; fallback ke expectedTotal jika backend return 0
+      const effectiveTotal = (res.total > 0 ? res.total : 0) || expectedTotalRupiah || basePrice
       setOrderSummary({
         orderId: res.orderId,
-        total: res.total,
-        program: res.program,
+        total: effectiveTotal,
+        program: res.program
+          ? {
+            ...res.program,
+            priceDisplay: res.priceDisplay || res.program.priceDisplay || (effectiveTotal > 0 ? `Rp${effectiveTotal.toLocaleString('id-ID')}` : res.program.priceDisplay),
+          }
+          : res.program,
       })
+
+      // Jika backend mengirim confirmationCode, paksa integer lalu simpan sebagai uniqueCode
+      const confirmationCodeInt = res.confirmationCode != null ? Math.trunc(Number(res.confirmationCode)) : NaN
+      if (Number.isFinite(confirmationCodeInt) && confirmationCodeInt >= 100 && confirmationCodeInt <= 999) {
+        setUniqueCode(confirmationCodeInt)
+      }
+
       setStep('payment')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal memulai checkout.')
     } finally {
       setLoadingContinue(false)
     }
-  }
+  }, [basePrice, setCheckoutId, setOrderSummary, setStep, setUniqueCode])
 
-  const onPay = async () => {
-    if (!checkoutId || !paymentMethod) return
+  const onPay = useCallback(async () => {
+    const paymentOrderId = orderSummary?.orderId ?? checkoutId
+    if (!paymentOrderId) return
+    if (!paymentMethod) {
+      setError('Pilih metode pembayaran terlebih dahulu.')
+      return
+    }
+
     setError(null)
     setLoadingPay(true)
+
+    // Gunakan uniqueCode dari backend (confirmationCode) jika tersedia, else generate baru
+    const code = uniqueCode ?? generateUniqueCode()
+    const transferAmount = totalToPay + code
+
     try {
-      const res = await createPaymentSession({
-        checkoutId,
+      await createPaymentSession({
+        orderId: paymentOrderId,
+        checkoutId: checkoutId ?? undefined,
         paymentMethod,
         promoCode: promoCode.trim() || '',
+        uniqueCode: code,
+        amount: transferAmount,
       })
-      if (res.paymentUrl) {
-        window.location.href = res.paymentUrl
-        return
-      }
-      window.location.hash = '#/checkout/success'
+      setUniqueCode(code)
+      setStep('instructions')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal membuat sesi pembayaran.')
     } finally {
       setLoadingPay(false)
+    }
+  }, [checkoutId, orderSummary?.orderId, totalToPay, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
+
+  const onLeaveTransfer = () => {
+    window.location.hash = user?.role === 'instructor' ? '#/instructor' : '#/student'
+  }
+
+  const onSubmitPaymentProof = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const orderId = orderSummary?.orderId
+    if (!orderId) return
+    if (!proofFile) {
+      setProofError('Pilih file bukti transfer (gambar atau PDF).')
+      return
+    }
+    setProofError(null)
+    setLoadingProof(true)
+    try {
+      const transferAmount = totalToPay + (uniqueCode ?? 0)
+      const form = new FormData()
+      form.append('proof', proofFile)
+      form.append('amount', String(transferAmount))
+      form.append('senderAccountNo', senderAccountNo.trim())
+      form.append('senderName', senderName.trim())
+      if (senderBank.trim()) form.append('senderBank', senderBank.trim())
+      if (proofNote.trim()) form.append('note', proofNote.trim())
+      await submitPaymentProof(orderId, form)
+      window.location.hash = '#/checkout/success'
+    } catch (err) {
+      setProofError(err instanceof ApiError ? err.message : 'Gagal mengirim bukti pembayaran.')
+    } finally {
+      setLoadingProof(false)
     }
   }
 
@@ -165,6 +355,117 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     )
   }
 
+  // Halaman instruksi transfer + slip setelah user klik Bayar & Daftar Program
+  if (step === 'instructions') {
+    const transferAmount = totalToPay + (uniqueCode ?? 0)
+    const transferAmountFormatted = `Rp${transferAmount.toLocaleString('id-ID')}`
+    // Copy hanya nominal angka (tanpa "Rp") agar saat paste di bank/transfer yang terisi angka saja
+    const transferAmountToCopy = String(transferAmount)
+
+    return (
+      <div className="min-h-screen flex flex-col">
+        <LmsHeader />
+        <main className="flex-1 py-10">
+          <div className="max-w-2xl mx-auto px-4">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Transfer ke Rekening</h1>
+            <p className="text-gray-600 mb-6">Lakukan pembayaran ke salah satu rekening di bawah ini dengan nominal yang tercantum (termasuk kode unik). Lalu simpan bukti transfer dan konfirmasi.</p>
+
+            {uniqueCode != null && (
+              <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-sm font-medium text-amber-900">Kode unik untuk verifikasi</p>
+                <p className="text-sm text-amber-800 mt-1">
+                  Tambahkan <strong>3 digit kode unik ({uniqueCode})</strong> ke nominal pembayaran. Contoh: bila total Rp349.000, transfer menjadi <strong>Rp349.{String(uniqueCode).padStart(3, '0')}</strong>. Kode ini memudahkan tim kami memverifikasi pembayaran Anda.
+                </p>
+              </div>
+            )}
+
+            <section className="border rounded-2xl p-6 mb-6 bg-white">
+              <h2 className="font-semibold text-gray-900 mb-4">Rekening Tujuan</h2>
+              <div className="space-y-4">
+                {BANK_ACCOUNTS.map((acc) => (
+                  <div key={acc.bank} className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <p className="font-medium text-gray-900">{acc.bank}</p>
+                    <p className="text-sm text-gray-600 mt-1 flex items-center flex-wrap gap-1">
+                      Nomor Rekening: <span className="font-mono font-semibold">{acc.accountNo}</span>
+                      <CopyButton text={acc.accountNo} label="nomor rekening" />
+                    </p>
+                    <p className="text-sm text-gray-600">Atas Nama: <span className="font-medium">{acc.accountName}</span></p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="border rounded-2xl p-6 mb-6 bg-slate-50">
+              <h2 className="font-semibold text-gray-900 mb-4">Slip / Ringkasan Pembayaran</h2>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-600">Order ID</dt>
+                  <dd className="font-mono font-medium">{orderSummary?.orderId ?? '—'}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-600">Program</dt>
+                  <dd className="font-medium">{course.title}</dd>
+                </div>
+                <div className="flex justify-between items-center">
+                  <dt className="text-gray-600">Nominal transfer (termasuk kode unik)</dt>
+                  <dd className="font-bold text-lg text-primary inline-flex items-center">
+                    {transferAmountFormatted}
+                    <CopyButton text={transferAmountToCopy} label="nominal transfer" />
+                  </dd>
+                </div>
+              </dl>
+              <p className="text-xs text-gray-500 mt-4">Transfer tepat sesuai nominal di atas. Setelah transfer, isi form di bawah dan upload bukti pembayaran.</p>
+            </section>
+
+            <section className="border rounded-2xl p-6 mb-6 bg-white">
+              <h2 className="font-semibold text-gray-900 mb-1">Upload Bukti Pembayaran</h2>
+              <p className="text-sm text-gray-600 mb-4">Transaksi ini berstatus <strong>Menunggu pembayaran</strong>. Isi data pengirim dan upload bukti transfer untuk konfirmasi.</p>
+
+              <form onSubmit={onSubmitPaymentProof} className="space-y-4">
+                {proofError && (
+                  <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{proofError}</div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bukti transfer <span className="text-red-500">*</span></label>
+                  <input type="file" accept="image/*,.pdf" onChange={(e) => { setProofFile(e.target.files?.[0] ?? null); setProofError(null) }} className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:bg-gray-50 file:font-medium" />
+                  <p className="text-xs text-gray-500 mt-1">Format: gambar (JPG, PNG) atau PDF. Maks. 5MB.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">No. Rekening Pengirim <span className="text-red-500">*</span></label>
+                  <input type="text" value={senderAccountNo} onChange={(e) => setSenderAccountNo(e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm" placeholder="Contoh: 1234567890" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Pengirim <span className="text-red-500">*</span></label>
+                  <input type="text" value={senderName} onChange={(e) => setSenderName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm" placeholder="Nama sesuai rekening pengirim" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Pengirim (opsional)</label>
+                  <input type="text" value={senderBank} onChange={(e) => setSenderBank(e.target.value)} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm" placeholder="Contoh: BCA, Mandiri" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Catatan (opsional)</label>
+                  <textarea value={proofNote} onChange={(e) => setProofNote(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm" placeholder="Info tambahan untuk verifikasi" />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button type="button" onClick={onLeaveTransfer} className="flex-1 py-3.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50">
+                    Keluar
+                  </button>
+                  <button type="submit" disabled={loadingProof || !proofFile} className="flex-1 py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50">
+                    {loadingProof ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <p className="text-center text-sm text-gray-500">
+              Belum transfer? Anda bisa upload bukti nanti dari halaman <a href="#/student/transactions" className="text-primary font-medium hover:underline">Riwayat Transaksi</a>.
+            </p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <LmsHeader />
@@ -180,7 +481,19 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 <h2 className="font-semibold text-gray-900 mb-4">Ringkasan Program</h2>
                 <p className="font-medium text-gray-800">{course.title}</p>
                 <p className="text-sm text-gray-500">{course.instructor.name}</p>
-                <p className="text-primary font-bold mt-2">{course.priceDisplay}</p>
+                <div className="mt-2 space-y-0.5">
+                  {course.priceNormal != null && course.priceNormal > 0 && (
+                    <p className="text-sm text-gray-400 line-through">Harga normal: {formatRupiah(course.priceNormal)}</p>
+                  )}
+                  {(course.priceEarlyBird || course.price > 0) && (
+                    <p className="text-primary font-bold">
+                      {course.priceEarlyBird ? `Harga promo (Early bird): ${formatRupiah(course.priceEarlyBird)}` : formatRupiah(course.price)}
+                    </p>
+                  )}
+                  {hasEarlyBirdDiscount && (
+                    <p className="text-xs text-green-600 font-medium">Hemat Rp{earlyBirdDiscountAmount.toLocaleString('id-ID')}</p>
+                  )}
+                </div>
               </section>
               <section className="border rounded-2xl p-6">
                 <h2 className="font-semibold text-gray-900 mb-4">Data Diri</h2>
@@ -227,12 +540,43 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   <p className="text-xs text-gray-500 mb-2">Order ID: {orderSummary.orderId}</p>
                 )}
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{orderSummary?.program?.priceDisplay ?? course.priceDisplay}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Biaya layanan</span><span>Rp0</span></div>
-                  <div className="border-t pt-3 flex justify-between font-bold"><span>Total</span><span>{orderSummary != null ? `Rp${orderSummary.total.toLocaleString('id-ID')}` : course.priceDisplay}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Harga normal</span>
+                    <span>{course.priceNormal ? formatRupiah(course.priceNormal) : (course.price > 0 ? formatRupiah(course.price) : (orderSummary?.program?.priceDisplay || '—'))}</span>
+                  </div>
+                  {hasEarlyBirdDiscount && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Potongan harga (Early bird)</span>
+                        <span className="text-green-600">- Rp{earlyBirdDiscountAmount.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Harga promo (Early bird)</span>
+                        <span>{course.priceEarlyBird ? formatRupiah(course.priceEarlyBird) : '—'}</span>
+                      </div>
+                    </>
+                  )}
+                  {hasPromoDiscount && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Potongan dari kode promo ({promoCode.trim()})</span>
+                      <span className="text-green-600">- Rp{promoDiscountAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Biaya layanan</span>
+                    <span>Rp0</span>
+                  </div>
+                  <div className="border-t pt-3 flex justify-between font-bold">
+                    <span>Total</span>
+                    <span>Rp{totalToPay.toLocaleString('id-ID')}</span>
+                  </div>
                 </div>
                 {step === 'payment' && (
-                  <button onClick={onPay} disabled={!paymentMethod || loadingPay} className="mt-6 w-full py-3.5 rounded-xl bg-primary text-white font-semibold disabled:opacity-50">
+                  <button
+                    onClick={onPay}
+                    disabled={loadingPay || !paymentMethod}
+                    className="mt-6 w-full py-3.5 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
+                  >
                     {loadingPay ? 'Memproses...' : 'Bayar & Daftar Program'}
                   </button>
                 )}

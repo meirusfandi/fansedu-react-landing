@@ -2,6 +2,7 @@ import AuthPage from './AuthPage'
 import CatalogPage from './CatalogPage'
 import ProgramDetailPage from './ProgramDetailPage'
 import CheckoutPage from './CheckoutPage'
+import CheckoutConfirmPage from './CheckoutConfirmPage'
 import CheckoutSuccessPage from './CheckoutSuccessPage'
 import { StudentLayout } from './StudentLayout'
 import StudentDashboardPage from './StudentDashboardPage'
@@ -22,11 +23,12 @@ import InstructorTryoutAnalysisPage from './InstructorTryoutAnalysisPage'
 import InstructorAttemptAIAnalysisPage from './InstructorAttemptAIAnalysisPage'
 
 export interface LmsRoute {
-  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-success' | 'student' | 'student-courses' | 'student-tryout' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-tryouts' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
+  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-tryout' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-tryouts' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
   programSlug?: string
   authRedirect?: string
   authTab?: string
   checkoutProgramSlug?: string
+  checkoutConfirmOrderId?: string
   codingProblemSlug?: string
   studentPath?: string
   instructorPath?: string
@@ -49,6 +51,7 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   const programMatch = pathOnly.match(/^\/program\/([^/]+)$/)
   if (programMatch) return { type: 'program', programSlug: programMatch[1] }
   if (pathOnly === '/checkout/success') return { type: 'checkout-success' }
+  if (pathOnly === '/checkout/confirm') return { type: 'checkout-confirm', checkoutConfirmOrderId: query.get('order') || undefined }
   if (pathOnly === '/checkout') {
     const slug = query.get('program') || query.get('course')
     return { type: 'checkout', checkoutProgramSlug: slug || undefined }
@@ -84,6 +87,8 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
       return route.programSlug ? <ProgramDetailPage slug={route.programSlug} /> : null
     case 'checkout':
       return <CheckoutPage programSlug={route.checkoutProgramSlug ?? null} />
+    case 'checkout-confirm':
+      return <CheckoutConfirmPage orderId={route.checkoutConfirmOrderId ?? null} />
     case 'checkout-success':
       return <CheckoutSuccessPage />
     case 'student':

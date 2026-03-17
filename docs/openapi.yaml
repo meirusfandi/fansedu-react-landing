@@ -81,7 +81,7 @@ paths:
   # --- Checkout ---
   /checkout/initiate:
     post:
-      summary: Inisiasi checkout (buat order, dapat checkoutId)
+      summary: Inisiasi checkout; jika ada order pending untuk user+program yang sama, kembalikan order itu (jangan buat baru)
       operationId: initiateCheckout
       requestBody:
         required: true
@@ -95,6 +95,16 @@ paths:
                 programId: { type: string, format: uuid }
                 name: { type: string }
                 email: { type: string, format: email }
+                userId: { type: string, description: 'Id user yang login; cek order pending untuk user+program ini, jika ada kembalikan order tersebut' }
+                expectedTotal: { type: number, description: 'Harga yang diharapkan (rupiah integer); WAJIB dipakai backend untuk set total/finalPrice/priceDisplay di response' }
+                normalPrice: { type: number, description: 'Harga normal program (rupiah integer)' }
+                expected_total: { type: number, description: 'Alias snake_case untuk expectedTotal' }
+                normal_price: { type: number, description: 'Alias snake_case untuk normalPrice' }
+                expectedTotalCents: { type: number, description: 'Harga yang diharapkan dalam cents (dari packages price_early_bird_cents)' }
+                expected_total_cents: { type: number, description: 'Alias snake_case' }
+                normalPriceCents: { type: number, description: 'Harga normal dalam cents' }
+                normal_price_cents: { type: number, description: 'Alias snake_case' }
+                total: { type: number, description: 'Sama dengan expectedTotal; backend bisa pakai untuk set order.total' }
       responses:
         '201':
           description: Created
@@ -122,7 +132,7 @@ paths:
 
   /checkout/payment-session:
     post:
-      summary: Buat sesi pembayaran (gateway), dapat paymentUrl / VA
+      summary: Buat sesi pembayaran; simpan amount & uniqueCode ke order/transaksi agar nominal tidak 0
       operationId: createPaymentSession
       requestBody:
         required: true
@@ -137,6 +147,8 @@ paths:
                   type: string
                   enum: [bank_transfer, virtual_account, ewallet]
                 promoCode: { type: string }
+                uniqueCode: { type: integer, minimum: 100, maximum: 999, description: 'Kode unik 3 digit dari frontend untuk verifikasi transfer' }
+                amount: { type: number, minimum: 0, description: 'Jumlah yang harus dibayar (termasuk kode unik). WAJIB disimpan ke order/transaksi agar riwayat transaksi menampilkan nominal benar.' }
       responses:
         '200':
           description: OK

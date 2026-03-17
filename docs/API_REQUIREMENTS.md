@@ -152,31 +152,35 @@ Dokumen ini mendeskripsikan endpoint dan payload yang dibutuhkan frontend LMS. B
 
 **POST /checkout/initiate**
 ```json
-// Request (auth optional; jika tidak login bisa guest checkout dengan email)
-{ "programId": "uuid", "name": "string", "email": "string" }
-// atau
-{ "programSlug": "string", "name": "string", "email": "string" }
+// Request — frontend kirim expectedTotal (harga dari packages) agar order total tidak 0
+{ "programSlug": "string", "name": "string", "email": "string", "userId": "uuid-opsional", "expectedTotal": 349000, "normalPrice": 500000 }
 
-// Response 201
+// Response 201 (atau 200 bila mengembalikan order yang sudah ada)
 { "checkoutId": "uuid", "orderId": "uuid", "total": 249000, "program": { "title": "string", "priceDisplay": "string" } }
 ```
+- **Wajib backend:** (1) Sebelum buat order baru, cek apakah sudah ada order pending untuk user+program yang sama; jika ada kembalikan order itu. (2) Saat buat order baru (atau mengembalikan order), set **total** dari **expectedTotal** request jika ada (frontend kirim harga dari packages), agar response total tidak 0.
 
 **POST /checkout/payment-session**
 ```json
-// Request
+// Request — frontend mengirim amount & uniqueCode saat user masuk halaman transfer
 {
   "checkoutId": "uuid",
-  "paymentMethod": "bank_transfer" | "virtual_account" | "ewallet",
-  "promoCode": "string (optional)"
+  "paymentMethod": "bank_transfer",
+  "promoCode": "string (optional)",
+  "uniqueCode": 456,
+  "amount": 349456
 }
+```
+- **Backend wajib:** Simpan `amount` dan `uniqueCode` ke record order/transaksi yang terkait `checkoutId`. Update kolom total/amount agar tidak 0; GET /student/transactions harus mengembalikan nominal ini.
 
+```json
 // Response 200
 {
   "paymentUrl": "https://...",
   "orderId": "uuid",
   "expiry": "2026-02-27T12:00:00Z",
   "virtualAccountNumber": "optional",
-  "amount": 249000
+  "amount": 349456
 }
 ```
 
@@ -225,6 +229,27 @@ Dokumen ini mendeskripsikan endpoint dan payload yang dibutuhkan frontend LMS. B
   ]
 }
 ```
+
+**Kenapa GET /student/transactions masih mengembalikan total 0 (meskipun initiate & payment-session sudah benar)?**
+
+Pastikan hal berikut di backend:
+
+1. **Sumber nilai `total` di response**  
+   Endpoint ini harus mengembalikan **total dari kolom yang sama** yang diisi oleh:
+   - **POST /checkout/initiate** (dari `expectedTotal` → simpan ke kolom order, mis. `lms_orders.total`), atau
+   - **POST /checkout/payment-session** (dari `amount` → update order/transaksi yang terkait `checkoutId`).  
+   Jika GET /student/transactions baca dari tabel/kolom lain (mis. hanya dari `lms_payments.amount` yang belum diisi, atau dari view lama), nilai akan tetap 0.
+
+2. **Update order saat payment-session**  
+   Saat memproses payment-session, backend harus **update record order** yang punya `id = checkoutId` (atau order_id yang sama) dengan **`total = amount`** (dan simpan `unique_code` jika ada). GET /student/transactions harus memakai **order.total** (atau payment.amount yang sudah di-set dari request) sebagai sumber untuk field `total` di setiap item.
+
+3. **Query / join yang salah**  
+   Jika response di-build dari join (order + payment + program), pastikan **SELECT** memakai kolom yang sudah di-update (mis. `orders.total` atau `COALESCE(payments.amount, orders.total)`), bukan kolom yang tidak pernah di-set (mis. `orders.subtotal` saja) atau default 0.
+
+4. **Urutan penyimpanan**  
+   Initiate menulis **expectedTotal** ke order; payment-session menulis **amount** ke order/payment. Pastikan GET /student/transactions membaca dari tabel/kolom yang memang di-update oleh kedua flow tersebut (biasanya **order.total** atau **payment.amount**), bukan dari kolom lain yang tetap 0.
+
+**Rekomendasi:** Satu sumber kebenaran untuk “jumlah transaksi” (mis. `lms_orders.total`). Saat initiate → set `lms_orders.total = expectedTotal`. Saat payment-session → set `lms_orders.total = amount` (bisa overwrite). GET /student/transactions → kembalikan `total` dari `lms_orders.total` (atau dari payment yang sudah di-set amount-nya).
 
 ---
 

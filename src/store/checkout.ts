@@ -15,13 +15,19 @@ interface CheckoutStore {
   orderSummary: CheckoutOrderSummary | null
   userInfo: { name: string; email: string }
   promoCode: string
-  paymentMethod: 'bank_transfer' | 'virtual_account' | 'ewallet' | null
+  paymentMethod: 'bank_transfer' | null
+  /** Step checkout saat ini */
+  step: 'info' | 'payment' | 'instructions'
+  /** Kode unik 3 digit untuk verifikasi transfer */
+  uniqueCode: number | null
   setCourse: (c: Course | null) => void
   setCheckoutId: (id: string | null) => void
   setOrderSummary: (s: CheckoutOrderSummary | null) => void
   setUserInfo: (i: { name: string; email: string }) => void
   setPromoCode: (s: string) => void
-  setPaymentMethod: (m: 'bank_transfer' | 'virtual_account' | 'ewallet' | null) => void
+  setPaymentMethod: (m: 'bank_transfer' | null) => void
+  setStep: (s: 'info' | 'payment' | 'instructions') => void
+  setUniqueCode: (c: number | null) => void
   reset: () => void
 }
 
@@ -32,6 +38,8 @@ const init = {
   userInfo: { name: '', email: '' },
   promoCode: '',
   paymentMethod: null,
+  step: 'info' as const,
+  uniqueCode: null,
 }
 
 export const useCheckoutStore = create<CheckoutStore>((set) => ({
@@ -42,5 +50,7 @@ export const useCheckoutStore = create<CheckoutStore>((set) => ({
   setUserInfo: (userInfo) => set({ userInfo }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
+  setStep: (step) => set({ step }),
+  setUniqueCode: (uniqueCode) => set({ uniqueCode }),
   reset: () => set(init),
 }))

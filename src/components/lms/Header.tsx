@@ -51,7 +51,16 @@ export function LmsHeader() {
                   <a href={dashboardHref} className="block px-4 py-2 text-sm text-gray-700 hover:bg-slate-50" onClick={() => setOpenDropdown(false)}>
                     {dashboardLabel}
                   </a>
-                  <button type="button" onClick={async () => { await apiLogout(); logout(); setOpenDropdown(false); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try { await apiLogout(); } catch { /* ignore network/API errors */ }
+                      logout()
+                      setOpenDropdown(false)
+                      window.location.hash = '/auth'
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50"
+                  >
                     Keluar
                   </button>
                 </div>

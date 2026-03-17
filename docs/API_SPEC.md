@@ -187,7 +187,7 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
 
 ### 4.1 Inisiasi Checkout
 
-**POST /checkout/initiate** — Buat order, dapat `checkoutId` untuk langkah payment.
+**POST /checkout/initiate** — Dapat `checkoutId` untuk langkah payment. **Jika sudah ada order pending untuk program yang sama dan akun yang sama, jangan buat order baru; kembalikan data order yang belum dibayar.**
 
 | Method | Endpoint             | Auth   |
 |--------|----------------------|--------|
@@ -199,22 +199,44 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
 {
   "programSlug": "pelatihan-intensif-osn-k-2026",
   "name": "Nama Lengkap",
-  "email": "email@example.com"
+  "email": "email@example.com",
+  "userId": "uuid-user-opsional",
+  "expectedTotal": 349000,
+  "normalPrice": 500000
 }
 ```
 
-Alternatif: `programId` (uuid) instead of `programSlug`.
+- Alternatif: `programId` (uuid) instead of `programSlug`.
+- `userId`: dikirim jika user login; **backend wajib**: cari order dengan status pending/unpaid untuk **user ini** + **program ini**. Jika ada, kembalikan order tersebut (jangan simpan order baru ke DB).
+- **`expectedTotal`** (atau **`expected_total`** snake_case): frontend mengirim harga dari packages (integer). **Backend wajib pakai nilai ini** untuk set `total`, `finalPrice`, `priceDisplay` di response agar tidak 0.
+- **`normalPrice`** (atau **`normal_price`**): harga normal program dari packages (opsional). Backend isi response `normalPrice` dari sini.
+- Backend mengembalikan **confirmationCode** sebagai **number** (integer), bukan string, agar nominal verifikasi = total + confirmationCode bisa dihitung di frontend.
 
-**Response 201**
+**Logika backend (wajib):**
+1. Identifikasi user dari `userId` (jika ada) atau dari token Auth atau dari `email`.
+2. Cari order yang sudah ada: program sama (programSlug/programId) + user sama + status pending/unpaid.
+3. **Jika ketemu:** kembalikan `checkoutId`, `orderId`, `total`, `program` order tersebut (response 200/201). **Jangan buat order baru.**
+4. Jika tidak ketemu, buat order baru seperti biasa.
+
+**Response 201 (atau 200 bila mengembalikan order yang sudah ada)**
 
 ```json
 {
   "checkoutId": "uuid-order-id",
   "orderId": "uuid",
   "total": 349000,
-  "program": { "title": "Pelatihan Intensif OSN-K 2026", "priceDisplay": "Rp349.000" }
+  "program": { "title": "Pelatihan Intensif OSN-K 2026", "priceDisplay": "Rp349.000" },
+  "normalPrice": 500000,
+  "finalPrice": 349000,
+  "discountCents": 0,
+  "discountPercent": 0,
+  "confirmationCode": 601,
+  "priceDisplay": "Rp349.000"
 }
 ```
+
+- **total / finalPrice / normalPrice:** Harus diisi dari **expectedTotal** dan **normalPrice** request (bukan 0). Nominal transfer = finalPrice (atau total) + confirmationCode.
+- **confirmationCode:** Kode unik 3 digit (100–999); **wajib tipe number (integer)** agar frontend bisa hitung nominal transfer = total + confirmationCode. Jangan kembalikan sebagai string.
 
 **Error:** 400 (validasi), 404 (program tidak ada).
 
@@ -222,7 +244,7 @@ Alternatif: `programId` (uuid) instead of `programSlug`.
 
 ### 4.2 Sesi Pembayaran
 
-**POST /checkout/payment-session** — Buat sesi pembayaran di gateway (Midtrans/Xendit/dll.), dapat URL redirect atau VA.
+**POST /checkout/payment-session** — Buat sesi pembayaran; saat user masuk halaman transfer, frontend mengirim nominal lengkap (termasuk kode unik). **Backend wajib menyimpan `amount` dan `uniqueCode` ke tabel order/transaksi** agar nominal tidak 0 di riwayat transaksi.
 
 | Method | Endpoint                  | Auth   |
 |--------|---------------------------|--------|
@@ -234,12 +256,16 @@ Alternatif: `programId` (uuid) instead of `programSlug`.
 {
   "checkoutId": "uuid-dari-initiate",
   "paymentMethod": "bank_transfer",
-  "promoCode": "DISKON10"
+  "promoCode": "",
+  "uniqueCode": 456,
+  "amount": 349456
 }
 ```
 
 - `paymentMethod`: `bank_transfer` | `virtual_account` | `ewallet`
 - `promoCode`: opsional
+- `uniqueCode`: kode unik 3 digit (100–999) dari frontend; **simpan ke DB** untuk verifikasi transfer
+- `amount`: jumlah yang harus dibayar (total + kode unik); **wajib disimpan ke order/transaksi** (update `total`/`amount` pada record yang berkaitan dengan `checkoutId`) agar GET /student/transactions mengembalikan nominal benar, bukan 0
 
 **Response 200**
 

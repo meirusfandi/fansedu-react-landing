@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
+import { useCheckoutStore } from '../../store/checkout'
 import { getPackageBySlug, packageToCourse } from '../../lib/api'
+import { formatRupiah } from '../../lib/currency'
 import type { Course } from '../../types/course'
 
 export default function ProgramDetailPage({ slug }: { slug: string }) {
@@ -44,6 +46,11 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
       </div>
     )
   }
+
+  const normalNum = program.priceNormal ?? 0
+  const promoNum = program.priceEarlyBird ?? 0
+  const hasDiscount = normalNum > 0 && promoNum > 0 && normalNum > promoNum
+  const discount = hasDiscount ? normalNum - promoNum : 0
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -123,11 +130,38 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
 
             <div>
               <div className="sticky top-24 border rounded-2xl p-6 bg-slate-50 shadow-sm">
-                <p className="text-2xl font-bold text-primary mb-2">{program.priceDisplay}</p>
+                <div className="mb-4 space-y-1">
+                  {program.priceNormal != null && program.priceNormal > 0 && (
+                    <p className="text-sm text-gray-400 line-through">
+                      Harga normal: {formatRupiah(program.priceNormal)}
+                    </p>
+                  )}
+                  {program.priceEarlyBird != null && program.priceEarlyBird > 0 && (
+                    <p className="text-xl font-bold text-primary">
+                      Harga promo (Early bird): {formatRupiah(program.priceEarlyBird)}
+                    </p>
+                  )}
+                  {!program.priceEarlyBird && !program.priceNormal && (
+                    <p className="text-2xl font-bold text-primary">
+                      {formatRupiah(program.price)}
+                    </p>
+                  )}
+                  {hasDiscount && (
+                    <p className="text-xs font-medium text-green-600">
+                      Hemat Rp{discount.toLocaleString('id-ID')}
+                    </p>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500 mb-6">Akses penuh materi, latihan, dan sertifikat</p>
                 <a
                   href={`#/checkout?program=${program.slug}`}
                   className="block w-full text-center py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    // Set course dulu ke store agar CheckoutPage dapat data program + harga (tidak refetch yang bisa beda/0)
+                    useCheckoutStore.getState().setCourse(program)
+                    window.location.hash = `/checkout?program=${encodeURIComponent(program.slug)}`
+                  }}
                 >
                   Daftar Program
                 </a>
