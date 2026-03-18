@@ -8,6 +8,31 @@ const BANK_ACCOUNTS = [
   { bank: 'Bank Mandiri', accountNo: '1270010341814', accountName: 'Mei Rusfandi' },
 ] as const
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const onCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <button type="button" onClick={onCopy} className="ml-2 inline-flex items-center text-gray-500 hover:text-primary" title={`Salin ${label}`} aria-label={`Salin ${label}`}>
+      {copied ? (
+        <svg className="h-4 w-4 text-green-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.415 0l-3-3a1 1 0 111.415-1.41l2.293 2.292 6.493-6.493a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      ) : (
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 export default function CheckoutConfirmPage({ orderId }: { orderId: string | null }) {
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [senderAccountNo, setSenderAccountNo] = useState('')
@@ -84,14 +109,16 @@ export default function CheckoutConfirmPage({ orderId }: { orderId: string | nul
                   {BANK_ACCOUNTS.map((acc) => (
                     <li key={acc.bank} className="font-mono">
                       {acc.bank}: {acc.accountNo} — a.n. {acc.accountName}
+                      <CopyButton text={acc.accountNo} label={`nomor rekening ${acc.bank}`} />
                     </li>
                   ))}
                 </ul>
               </div>
               <div>
                 <p className="text-slate-500 font-medium mb-0.5">Nominal transfer (termasuk kode unik)</p>
-                <p className="text-primary font-semibold text-base">
+                <p className="text-primary font-semibold text-base inline-flex items-center">
                   {transferAmount != null ? `Rp${transferAmount.toLocaleString('id-ID')}` : 'Sesuai slip pembayaran Anda'}
+                  {transferAmount != null && <CopyButton text={String(transferAmount)} label="nominal transfer" />}
                 </p>
               </div>
             </div>

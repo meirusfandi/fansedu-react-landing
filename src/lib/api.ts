@@ -324,7 +324,6 @@ export interface CheckoutInitiateResponse {
   confirmationCode?: number
   normalPrice?: number
   finalPrice?: number
-  discountCents?: number
   discountPercent?: number
   priceDisplay?: string
 }
@@ -362,74 +361,130 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
     promoCode: payload.promoCode ?? '',
     promo_code: payload.promoCode ?? '',
   }
+  console.log('[initiateCheckout][1] base payload received', payload)
+  console.log('[initiateCheckout][2] set body.programSlug', body.programSlug)
+  console.log('[initiateCheckout][3] set body.program_slug', body.program_slug)
+  console.log('[initiateCheckout][4] set body.programId', body.programId)
+  console.log('[initiateCheckout][5] set body.program_id', body.program_id)
+  console.log('[initiateCheckout][6] set body.name', body.name)
+  console.log('[initiateCheckout][7] set body.email', body.email)
+  console.log('[initiateCheckout][8] set body.promoCode', body.promoCode)
+  console.log('[initiateCheckout][9] set body.promo_code', body.promo_code)
 
   if (payload.userId) {
     body.userId = payload.userId
+    console.log('[initiateCheckout][10] set body.userId', body.userId)
     body.user_id = payload.userId
+    console.log('[initiateCheckout][11] set body.user_id', body.user_id)
+  } else {
+    console.log('[initiateCheckout][10-11] skip userId mapping because payload.userId is empty')
   }
 
-  const rupiahToCents = (v: number): number => Math.trunc(v * 100)
-
-  // Kirim harga rupiah (+ alias cents untuk kompatibilitas backend)
+  // Kirim harga rupiah
   const totalRupiah = payload.expectedTotal != null && payload.expectedTotal > 0 ? payload.expectedTotal : 0
+  console.log('[initiateCheckout][12] resolved totalRupiah', totalRupiah)
   if (totalRupiah > 0) {
-    const totalCents = rupiahToCents(totalRupiah)
     body.expectedTotal = totalRupiah
+    console.log('[initiateCheckout][13] set body.expectedTotal', body.expectedTotal)
     body.expected_total = totalRupiah
-    body.expectedTotalCents = totalCents
-    body.expected_total_cents = totalCents
+    console.log('[initiateCheckout][14] set body.expected_total', body.expected_total)
     body.total = totalRupiah
+    console.log('[initiateCheckout][15] set body.total', body.total)
     body.total_amount = totalRupiah
+    console.log('[initiateCheckout][16] set body.total_amount', body.total_amount)
     body.amount = totalRupiah
+    console.log('[initiateCheckout][17] set body.amount', body.amount)
     body.price = totalRupiah
+    console.log('[initiateCheckout][18] set body.price', body.price)
     body.final_price = totalRupiah
+    console.log('[initiateCheckout][19] set body.final_price', body.final_price)
     body.finalPrice = totalRupiah
-    body.final_price_cents = totalCents
+    console.log('[initiateCheckout][20] set body.finalPrice', body.finalPrice)
+  } else {
+    console.log('[initiateCheckout][13-20] skip expectedTotal mappings because totalRupiah <= 0')
   }
 
   if (payload.normalPrice != null && payload.normalPrice > 0) {
-    const normalCents = rupiahToCents(payload.normalPrice)
     body.normalPrice = payload.normalPrice
+    console.log('[initiateCheckout][21] set body.normalPrice', body.normalPrice)
     body.normal_price = payload.normalPrice
-    body.normalPriceCents = normalCents
-    body.normal_price_cents = normalCents
-    body.price_early_bird_cents = totalRupiah > 0 ? rupiahToCents(totalRupiah) : normalCents
-    body.price_normal_cents = normalCents
+    console.log('[initiateCheckout][22] set body.normal_price', body.normal_price)
+  } else {
+    console.log('[initiateCheckout][21-22] skip normalPrice mappings because payload.normalPrice <= 0')
   }
+
+  console.log('[initiateCheckout][23] final request body before API call', body)
+  console.log('[initiateCheckout][24] API_BASE', API_BASE)
+  console.log('[initiateCheckout][25] API_BASE/checkout/initiate', `${API_BASE}/checkout/initiate`)
+  console.log('[initiateCheckout][26] authHeaders()', authHeaders())
+  console.log('[initiateCheckout][27] JSON.stringify(body)', JSON.stringify(body))
+  // const shouldSkipApiCall = true
+  // if (shouldSkipApiCall) {
+  //   console.log('[initiateCheckout][24] API call intentionally skipped for debugging')
+  //   throw new ApiError(400, 'Debug mode: payload logged; pemanggilan API di-skip sementara.')
+  // }
 
   const res = await fetch(`${API_BASE}/checkout/initiate`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
+  console.log('[initiateCheckout][28] fetch completed', {
+    ok: res.ok,
+    status: res.status,
+    statusText: res.statusText,
+  })
   const data = await handleResponse<CheckoutInitiateResponse & { confirmation_code?: string | number }>(res)
+  console.log('[initiateCheckout][29] handleResponse data', data)
 
   // Parse confirmation code (bisa string atau number dari backend) -> paksa integer
   const rawConfCode = data.confirmationCode ?? (data as { confirmation_code?: string | number }).confirmation_code
+  console.log('[initiateCheckout][30] rawConfCode', rawConfCode)
   const confAsNumber = rawConfCode != null ? Number(rawConfCode) : NaN
+  console.log('[initiateCheckout][31] confAsNumber', confAsNumber)
   const confirmationCode = Number.isFinite(confAsNumber) ? Math.trunc(confAsNumber) : undefined
+  console.log('[initiateCheckout][32] confirmationCode', confirmationCode)
 
   // Parse total — backend bisa mengembalikan 0, override dengan expectedTotal
   let totalNum = typeof data.total === 'number' && !Number.isNaN(data.total) ? data.total : 0
+  console.log('[initiateCheckout][33] totalNum parsed', totalNum)
   const finalPriceRaw = (data as { finalPrice?: number }).finalPrice
+  console.log('[initiateCheckout][34] finalPriceRaw', finalPriceRaw)
   let finalPriceNum = typeof finalPriceRaw === 'number' && finalPriceRaw > 0 ? finalPriceRaw : totalNum
+  console.log('[initiateCheckout][35] finalPriceNum resolved', finalPriceNum)
   const normalPriceRaw = (data as { normalPrice?: number }).normalPrice
+  console.log('[initiateCheckout][36] normalPriceRaw', normalPriceRaw)
   let normalPriceOut = typeof normalPriceRaw === 'number' && normalPriceRaw > 0 ? normalPriceRaw : undefined
+  console.log('[initiateCheckout][37] normalPriceOut initial', normalPriceOut)
   let priceDisplayOut = data.priceDisplay ?? data.program?.priceDisplay
+  console.log('[initiateCheckout][38] priceDisplayOut initial', priceDisplayOut)
 
   // Override: jika backend mengembalikan total 0, gunakan expectedTotal
   const backendReturnedZero = totalNum === 0 || Number.isNaN(totalNum)
+  console.log('[initiateCheckout][39] backendReturnedZero', backendReturnedZero)
   if (backendReturnedZero && payload.expectedTotal != null && payload.expectedTotal > 0) {
+    console.log('[initiateCheckout][40] apply expectedTotal override', payload.expectedTotal)
     totalNum = payload.expectedTotal
     finalPriceNum = payload.expectedTotal
     priceDisplayOut = `Rp${payload.expectedTotal.toLocaleString('id-ID')}`
+    console.log('[initiateCheckout][41] after expectedTotal override', {
+      totalNum,
+      finalPriceNum,
+      priceDisplayOut,
+    })
+  } else {
+    console.log('[initiateCheckout][40-41] skip expectedTotal override')
   }
 
   if ((normalPriceOut == null || normalPriceOut === 0) && payload.normalPrice != null && payload.normalPrice > 0) {
+    console.log('[initiateCheckout][42] apply normalPrice fallback', payload.normalPrice)
     normalPriceOut = payload.normalPrice
+    console.log('[initiateCheckout][43] normalPriceOut after fallback', normalPriceOut)
+  } else {
+    console.log('[initiateCheckout][42-43] skip normalPrice fallback')
   }
 
-  return {
+  const responseOut = {
     ...data,
     total: Number.isNaN(totalNum) ? 0 : totalNum,
     finalPrice: Number.isNaN(finalPriceNum) ? 0 : finalPriceNum,
@@ -440,6 +495,8 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
       : data.program,
     confirmationCode: (confirmationCode != null && !Number.isNaN(confirmationCode)) ? confirmationCode : undefined,
   }
+  console.log('[initiateCheckout][44] final responseOut', responseOut)
+  return responseOut
 }
 
 export async function createPaymentSession(payload: PaymentSessionRequest): Promise<PaymentSessionResponse> {
@@ -534,12 +591,65 @@ export interface TransactionItem {
   orderId: string
   status: string
   total: number
+  finalPrice?: number
+  confirmationCode?: number
   programs: { title: string }[]
   paidAt: string
 }
 
 export interface StudentTransactionsResponse {
   data: TransactionItem[]
+}
+
+function toInt(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.trunc(n) : null
+  }
+  return null
+}
+
+function parseTransactionsResponse(raw: unknown): StudentTransactionsResponse {
+  const payload = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(raw) ? raw : [])
+
+  const list = (listRaw as Record<string, unknown>[]).map((item) => {
+    const finalPrice =
+      toInt(item.finalPrice) ??
+      toInt(item.final_price)
+
+    const confirmationCode =
+      toInt(item.confirmationCode) ??
+      toInt(item.confirmation_code)
+
+    const totalRaw =
+      toInt(item.total) ??
+      toInt(item.total_amount) ??
+      0
+
+    // Total transaksi ditampilkan sebagai harga final + kode konfirmasi (jika ada).
+    const totalComputed =
+      (finalPrice != null && finalPrice > 0 ? finalPrice : totalRaw) +
+      (confirmationCode != null && confirmationCode > 0 ? confirmationCode : 0)
+
+    return {
+      id: String(item.id ?? ''),
+      orderId: String(item.orderId ?? item.order_id ?? ''),
+      status: String(item.status ?? ''),
+      total: totalComputed > 0 ? totalComputed : 0,
+      finalPrice: finalPrice != null && finalPrice > 0 ? finalPrice : undefined,
+      confirmationCode: confirmationCode != null && confirmationCode > 0 ? confirmationCode : undefined,
+      programs: Array.isArray(item.programs)
+        ? (item.programs as Array<{ title?: unknown }>).map((p) => ({ title: String(p?.title ?? '') }))
+        : [],
+      paidAt: String(item.paidAt ?? item.paid_at ?? ''),
+    } satisfies TransactionItem
+  })
+
+  return { data: list }
 }
 
 export interface CertificateItem {
@@ -565,7 +675,8 @@ export async function getMyCourses(): Promise<StudentCoursesResponse> {
 
 export async function getTransactions(): Promise<StudentTransactionsResponse> {
   const res = await fetch(`${API_BASE}/student/transactions`, { headers: authHeaders() })
-  return handleResponse<StudentTransactionsResponse>(res)
+  const data = await handleResponse<unknown>(res)
+  return parseTransactionsResponse(data)
 }
 
 export async function getCertificates(): Promise<StudentCertificatesResponse> {

@@ -100,10 +100,6 @@ paths:
                 normalPrice: { type: number, description: 'Harga normal program (rupiah integer)' }
                 expected_total: { type: number, description: 'Alias snake_case untuk expectedTotal' }
                 normal_price: { type: number, description: 'Alias snake_case untuk normalPrice' }
-                expectedTotalCents: { type: number, description: 'Harga yang diharapkan dalam cents (dari packages price_early_bird_cents)' }
-                expected_total_cents: { type: number, description: 'Alias snake_case' }
-                normalPriceCents: { type: number, description: 'Harga normal dalam cents' }
-                normal_price_cents: { type: number, description: 'Alias snake_case' }
                 total: { type: number, description: 'Sama dengan expectedTotal; backend bisa pakai untuk set order.total' }
       responses:
         '201':

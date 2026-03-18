@@ -228,7 +228,6 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
   "program": { "title": "Pelatihan Intensif OSN-K 2026", "priceDisplay": "Rp349.000" },
   "normalPrice": 500000,
   "finalPrice": 349000,
-  "discountCents": 0,
   "discountPercent": 0,
   "confirmationCode": 601,
   "priceDisplay": "Rp349.000"

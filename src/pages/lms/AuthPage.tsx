@@ -73,7 +73,11 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
       )
       window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal masuk. Cek email dan kata sandi.')
+      if (err instanceof ApiError && err.status === 401) {
+        setError('email/password salah, silahkan coba lagi')
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Gagal masuk. Cek email dan kata sandi.')
+      }
     } finally {
       setLoading(false)
     }
@@ -131,6 +135,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const login = useAuthStore((s) => s.login)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -146,15 +151,19 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
     }
     setLoading(true)
     try {
-      await apiRegister({
+      const res = await apiRegister({
         name: name.trim(),
         email: email.trim(),
         password,
         role: role as 'student' | 'instructor',
       })
-      setSuccessMessage(
-        'Pendaftaran berhasil. Kami telah mengirim link verifikasi ke email Anda. Untuk email yang sudah pernah terdaftar, akun akan otomatis terverifikasi. Setelah verifikasi, silakan masuk dengan email dan kata sandi yang Anda buat.'
+      // Flow tanpa verifikasi email: langsung login setelah register berhasil.
+      login(
+        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role as UserRole },
+        res.token
       )
+      setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
+      window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal daftar. Coba lagi.')
     } finally {
@@ -166,7 +175,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
     <>
       <h2 className="text-xl font-bold text-gray-900 mb-1">Daftar</h2>
       <p className="text-gray-600 text-sm mb-6">
-        Buat akun untuk mengakses kursus dan dashboard. Setelah daftar, Anda perlu verifikasi email terlebih dahulu sebelum bisa menggunakan semua fitur.
+        Buat akun untuk mengakses kursus dan dashboard. Setelah daftar, akun Anda langsung aktif dan bisa digunakan.
       </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
