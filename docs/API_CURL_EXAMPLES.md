@@ -123,6 +123,50 @@ curl -s -X POST "$BASE/checkout/payment-session" \
 curl -s "$BASE/student/transactions" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
+### 5. Guest checkout -> register inline -> upload bukti (flow utama)
+
+```bash
+# 1) Checkout initiate sebagai guest (tanpa Bearer)
+RES=$(curl -s -X POST "$BASE/checkout/initiate" \
+  -H "Content-Type: application/json" \
+  -d '{"programSlug":"pelatihan-intensif-osn-k-2026","name":"Budi Siswa","email":"budi@example.com","expectedTotal":349000,"normalPrice":500000}')
+echo "$RES" | jq .
+CHECKOUT_ID=$(echo "$RES" | jq -r '.checkoutId')
+
+# 2) Payment session
+curl -s -X POST "$BASE/checkout/payment-session" \
+  -H "Content-Type: application/json" \
+  -d "{\"checkoutId\":\"$CHECKOUT_ID\",\"paymentMethod\":\"bank_transfer\",\"uniqueCode\":456,\"amount\":349456}" | jq .
+
+# 3) Register (upsert: buat akun baru atau update existing jika email sudah ada)
+#    Tidak ada lagi 409 — selalu return 201 + token
+REG=$(curl -s -X POST "$BASE/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Budi Siswa","email":"budi@example.com","password":"rahasiaBaru123","role":"student"}')
+echo "$REG" | jq .
+TOKEN=$(echo "$REG" | jq -r '.token')
+
+# 4) Sekarang sudah login, bisa akses dashboard / upload bukti
+curl -s "$BASE/student/transactions" -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+### 5b. Fallback: complete-purchase-auth (opsional, untuk callback gateway)
+
+```bash
+ORDER_ID="<ORDER_ID>"
+BOOTSTRAP=$(curl -s -X POST "$BASE/checkout/orders/$ORDER_ID/complete-purchase-auth" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"payment_success"}')
+echo "$BOOTSTRAP" | jq .
+BOOTSTRAP_TOKEN=$(echo "$BOOTSTRAP" | jq -r '.auth.token')
+
+# Jika mustSetPassword=true, wajib set password dulu
+curl -s -X POST "$BASE/auth/set-password" \
+  -H "Authorization: Bearer $BOOTSTRAP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"newPassword":"rahasiaBaru123"}' | jq .
+```
+
 ---
 
 ## Satu blok: Login → Checkout → Payment session → Transaksi
@@ -223,10 +267,12 @@ Tanpa `jq`: hapus `| jq .` dan `| jq -r '.token'`.
 | `/programs/:slug` | GET | - |
 | `/auth/register` | POST | - |
 | `/auth/login` | POST | - |
+| `/auth/set-password` | POST | Bearer |
 | `/auth/me` | GET | Bearer |
 | `/auth/logout` | POST | Bearer |
 | `/checkout/initiate` | POST | Opsional (Bearer agar kembalikan order pending yang sama) |
 | `/checkout/payment-session` | POST | - |
+| `/checkout/orders/:orderId/complete-purchase-auth` | POST | Opsional |
 | `/student/dashboard` | GET | Bearer |
 | `/student/profile` | GET / PUT | Bearer |
 | `/student/courses` | GET | Bearer |

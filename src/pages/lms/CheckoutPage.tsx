@@ -8,6 +8,7 @@ import {
   initiateCheckout,
   createPaymentSession,
   submitPaymentProof,
+  apiRegister,
   ApiError,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
@@ -71,6 +72,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 export default function CheckoutPage({ programSlug }: { programSlug: string | null }) {
   const slug = programSlug
   const user = useAuthStore((s) => s.user)
+  const login = useAuthStore((s) => s.login)
   const {
     course,
     setCourse,
@@ -101,6 +103,10 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [proofNote, setProofNote] = useState('')
   const [loadingProof, setLoadingProof] = useState(false)
   const [proofError, setProofError] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loadingSetPassword, setLoadingSetPassword] = useState(false)
+  const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
   const prefilledFromUser = useRef(false)
 
   // --- Harga dari field numerik (utama), bukan dari string ---
@@ -272,13 +278,55 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         amount: transferAmount,
       })
       setUniqueCode(code)
-      setStep('instructions')
+      if (!useAuthStore.getState().user) {
+        setStep('set-password')
+      } else {
+        setStep('instructions')
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal membuat sesi pembayaran.')
     } finally {
       setLoadingPay(false)
     }
   }, [checkoutId, orderSummary?.orderId, totalToPay, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
+
+  const onSetPassword = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    const currentInfo = useCheckoutStore.getState().userInfo
+
+    if (!currentInfo.name.trim() || !currentInfo.email.trim()) {
+      setSetPasswordError('Nama dan email harus diisi sebelum mengatur password.')
+      return
+    }
+    if (newPassword.length < 6) {
+      setSetPasswordError('Password minimal 6 karakter.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setSetPasswordError('Konfirmasi password tidak sama.')
+      return
+    }
+
+    setSetPasswordError(null)
+    setLoadingSetPassword(true)
+    try {
+      const res = await apiRegister({
+        name: currentInfo.name.trim(),
+        email: currentInfo.email.trim(),
+        password: newPassword,
+        role: 'student',
+      })
+      login(
+        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
+        res.token
+      )
+      setStep('instructions')
+    } catch (err) {
+      setSetPasswordError(err instanceof ApiError ? err.message : 'Gagal menyimpan password.')
+    } finally {
+      setLoadingSetPassword(false)
+    }
+  }, [newPassword, confirmPassword, login, setStep])
 
   const onLeaveTransfer = () => {
     window.location.hash = user?.role === 'instructor' ? '#/instructor' : '#/student'
@@ -349,6 +397,68 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
           <div className="text-center max-w-md">
             <p className="text-gray-500 mb-4">{error || 'Program tidak ditemukan. Periksa link atau koneksi Anda.'}</p>
             <a href="#/catalog" className="text-primary font-medium hover:underline">← Pilih program dari katalog</a>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  // Halaman instruksi transfer + slip setelah user klik Bayar & Daftar Program
+  if (step === 'set-password') {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <LmsHeader />
+        <main className="flex-1 py-10">
+          <div className="max-w-lg mx-auto px-4">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Atur Password Akun</h1>
+            <p className="text-gray-600 mb-6">
+              Sebelum lanjut upload bukti transfer, silakan atur password untuk akun Anda terlebih dahulu.
+            </p>
+
+            <section className="border rounded-2xl p-6 bg-white">
+              <form onSubmit={onSetPassword} className="space-y-4">
+                {setPasswordError && (
+                  <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{setPasswordError}</div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama</label>
+                  <input type="text" value={userInfo.name} readOnly className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm bg-gray-50 text-gray-600" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" value={userInfo.email} readOnly className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm bg-gray-50 text-gray-600" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password baru</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
+                    placeholder="Minimal 6 karakter"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Konfirmasi password</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
+                    placeholder="Ulangi password"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loadingSetPassword}
+                  className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {loadingSetPassword ? 'Menyimpan...' : 'Simpan Password & Lanjut Upload Bukti'}
+                </button>
+              </form>
+            </section>
           </div>
         </main>
       </div>

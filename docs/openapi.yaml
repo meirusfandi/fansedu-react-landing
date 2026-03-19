@@ -163,10 +163,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /checkout/orders/{orderId}/complete-purchase-auth:
+    post:
+      summary: Guest purchase sukses -> auto-create account (jika perlu) + return token bootstrap
+      operationId: completePurchaseAuth
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string, example: payment_success }
+                roleHint: { type: string, enum: [student, instructor], description: 'Opsional: hint role akun saat auto-create user guest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseAuthBootstrapResponse' }
+        '404':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   # --- Auth ---
   /auth/register:
     post:
-      summary: Daftar akun (siswa/guru)
+      summary: |
+        Daftar akun (siswa/guru) — upsert behavior.
+        Jika email belum ada: buat akun baru.
+        Jika email sudah ada: update PasswordHash, Name, set EmailVerified=true, MustSetPassword=false. Return 201 + token.
+        Dipakai juga saat guest checkout inline register. Jangan kirim email verifikasi — akun langsung aktif.
       operationId: register
       requestBody:
         required: true
@@ -182,11 +219,12 @@ paths:
                 role: { type: string, enum: [student, instructor] }
       responses:
         '201':
-          description: Created
+          description: Created atau upsert berhasil — akun langsung aktif, token dikembalikan (baik akun baru maupun existing)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResponse' }
         '400':
+          description: Validasi gagal (field kosong, password terlalu pendek, dll.)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -232,6 +270,39 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /auth/set-password:
+    post:
+      summary: Set password pertama kali setelah auto-login checkout guest
+      operationId: setPassword
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword: { type: string, minLength: 6 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  mustSetPassword: { type: boolean }
+        '400':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /auth/logout:
     post:
       summary: Logout
@@ -257,6 +328,11 @@ paths:
                 properties:
                   coursesCount: { type: number }
                   recentCourses: { type: array, items: { $ref: '#/components/schemas/MyCourseItem' } }
+        '403':
+          description: Password setup required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /student/courses:
     get:
@@ -274,6 +350,11 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/MyCourseItem' }
+        '403':
+          description: Password setup required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /student/transactions:
     get:
@@ -289,6 +370,11 @@ paths:
                 type: object
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/TransactionItem' } }
+        '403':
+          description: Password setup required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /student/profile:
     get:
@@ -305,6 +391,11 @@ paths:
                 properties:
                   name: { type: string }
                   email: { type: string }
+        '403':
+          description: Password setup required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     put:
       summary: Update profil siswa
       operationId: updateStudentProfile
@@ -462,6 +553,7 @@ components:
             name: { type: string }
             email: { type: string }
             role: { type: string, enum: [student, instructor] }
+            mustSetPassword: { type: boolean, description: 'Jika true, user wajib set password sebelum akses dashboard' }
         token: { type: string }
     MeResponse:
       type: object
@@ -470,6 +562,25 @@ components:
         name: { type: string }
         email: { type: string }
         role: { type: string, enum: [student, instructor] }
+        mustSetPassword: { type: boolean }
+    PurchaseAuthBootstrapResponse:
+      type: object
+      properties:
+        orderId: { type: string }
+        auth:
+          type: object
+          properties:
+            token: { type: string }
+            user:
+              type: object
+              properties:
+                id: { type: string }
+                name: { type: string }
+                email: { type: string }
+                role: { type: string, enum: [student, instructor] }
+                mustSetPassword: { type: boolean }
+            mustSetPassword: { type: boolean }
+            nextAction: { type: string, example: SET_PASSWORD }
     MyCourseItem:
       type: object
       properties:

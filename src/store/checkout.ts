@@ -17,7 +17,7 @@ interface CheckoutStore {
   promoCode: string
   paymentMethod: 'bank_transfer' | null
   /** Step checkout saat ini */
-  step: 'info' | 'payment' | 'instructions'
+  step: 'info' | 'payment' | 'set-password' | 'instructions'
   /** Kode unik 3 digit untuk verifikasi transfer */
   uniqueCode: number | null
   setCourse: (c: Course | null) => void
@@ -26,7 +26,7 @@ interface CheckoutStore {
   setUserInfo: (i: { name: string; email: string }) => void
   setPromoCode: (s: string) => void
   setPaymentMethod: (m: 'bank_transfer' | null) => void
-  setStep: (s: 'info' | 'payment' | 'instructions') => void
+  setStep: (s: 'info' | 'payment' | 'set-password' | 'instructions') => void
   setUniqueCode: (c: number | null) => void
   reset: () => void
 }

@@ -180,10 +180,14 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
 [Landing / Katalog] → Klik program → [Detail Program] → "Daftar Program"
   → [Checkout] Isi nama & email → POST /checkout/initiate
   → Dapat checkoutId → Pilih metode bayar (+ promo) → POST /checkout/payment-session
-  → Dapat paymentUrl → Redirect ke gateway → User bayar
-  → Gateway callback backend → Backend update order + enrollment
+  → (Guest, belum login) Form "Atur Password" → POST /auth/register
+  → Frontend auto-login (simpan token)
+  → Halaman instruksi transfer + upload bukti pembayaran
+  → POST /checkout/orders/:orderId/payment-proof
   → Redirect user ke #/checkout/success
 ```
+
+**Catatan:** Jika user sudah login saat klik "Bayar & Daftar Program", step register/set-password di-skip dan langsung masuk halaman instruksi transfer.
 
 ### 4.1 Inisiasi Checkout
 
@@ -284,19 +288,105 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
 
 ---
 
+### 4.3 Register Inline Saat Checkout (Guest)
+
+Setelah `POST /checkout/payment-session` sukses, jika user **belum login**, frontend menampilkan form "Atur Password" dan memanggil `POST /auth/register` dengan data dari checkout.
+
+| Langkah | Aksi frontend | Endpoint |
+|---------|---------------|----------|
+| 1 | Tampilkan form password (nama & email readonly) | — |
+| 2 | Submit register | `POST /auth/register` |
+| 3 | Simpan token, auto-login | — |
+| 4 | Tampilkan halaman transfer + upload bukti | — |
+
+**Request `POST /auth/register` (dari checkout):**
+
+```json
+{
+  "name": "Nama dari form checkout",
+  "email": "email@dari-form-checkout.com",
+  "password": "passwordBaru123",
+  "role": "student"
+}
+```
+
+**Response 201:**
+
+```json
+{
+  "user": { "id": "uuid", "name": "Nama", "email": "email@...", "role": "student", "mustSetPassword": false },
+  "token": "jwt-token"
+}
+```
+
+**Aturan backend (upsert):**
+- Jika email belum ada → buat akun baru, return 201.
+- Jika email sudah ada → update `PasswordHash`, `Name`, set `EmailVerified=true`, `MustSetPassword=false`. Return 201 + token seperti biasa.
+- Tidak ada response 409. Frontend selalu pakai satu endpoint tanpa fallback.
+- Jangan kirim email verifikasi; akun langsung aktif.
+- Berlaku untuk role `student` dan `instructor`.
+
+---
+
+### 4.4 Bootstrap Auth Setelah Purchase — Fallback (Opsional)
+
+> Endpoint ini opsional. Flow utama menggunakan `POST /auth/register` inline (section 4.3). Endpoint ini berguna jika backend perlu auto-create akun dari callback payment gateway.
+
+**POST /checkout/orders/:orderId/complete-purchase-auth**
+
+| Method | Endpoint | Auth |
+|--------|----------|------|
+| POST | `/checkout/orders/:orderId/complete-purchase-auth` | Opsional |
+
+**Request Body**
+
+```json
+{
+  "source": "payment_success",
+  "roleHint": "student | instructor (optional)"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "orderId": "uuid",
+  "auth": {
+    "token": "jwt-token",
+    "user": { "id": "uuid", "name": "Nama", "email": "email@...", "role": "student" },
+    "mustSetPassword": true,
+    "nextAction": "SET_PASSWORD"
+  }
+}
+```
+
+- Idempotent. Jika user sudah ada, return token + status `mustSetPassword`.
+- Jika order belum valid, return 409.
+
+---
+
 ## 5. Auth
 
 | Method | Endpoint             | Deskripsi        |
 |--------|----------------------|------------------|
 | POST   | `/auth/register`     | Daftar akun      |
 | POST   | `/auth/login`        | Login, dapat token |
+| POST   | `/auth/set-password` | Set password pertama kali (setelah auto-login dari checkout guest) |
 | POST   | `/auth/logout`       | Logout (opsional di backend) |
 | GET    | `/auth/me`           | Data user saat ini (Bearer wajib) |
 
 ### POST /auth/register
 
 **Request:** `{ "name": "string", "email": "string", "password": "string", "role": "student" | "instructor" }`  
-**Response 201:** `{ "user": { "id", "name", "email", "role" }, "token": "string" }`
+**Response 201:** `{ "user": { "id", "name", "email", "role", "mustSetPassword": false }, "token": "string" }`
+
+**Aturan (upsert behavior):**
+- Jika email belum ada → buat akun baru.
+- Jika email sudah ada → update `PasswordHash`, `Name` (jika ada di body), set `EmailVerified=true`, `MustSetPassword=false`. Simpan user tanpa membuat baru. Return 201 + token.
+- **Tidak ada response 409.** Frontend selalu pakai `POST /auth/register` tanpa fallback ke login.
+- Jangan kirim email verifikasi. Akun langsung aktif setelah register.
+- Endpoint ini dipanggil saat **guest checkout** (inline register sebelum upload bukti) maupun saat registrasi biasa.
 
 ### POST /auth/login
 
@@ -306,8 +396,30 @@ Checkout bisa **guest** (tanpa login) dengan nama + email, atau dengan user logi
 ### GET /auth/me
 
 **Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "id": "uuid", "name": "string", "email": "string", "role": "student" | "instructor" }`  
+**Response 200:** `{ "id": "uuid", "name": "string", "email": "string", "role": "student" | "instructor", "mustSetPassword": true|false }`  
 **Response 401:** Unauthorized.
+
+### POST /auth/set-password
+
+**Headers:** `Authorization: Bearer <token>`  
+**Request:** `{ "newPassword": "string (min 6)" }`  
+**Response 200:** `{ "message": "Password berhasil di-set", "mustSetPassword": false }`
+
+### Guard akses dashboard saat wajib set password
+
+Jika token user memiliki `mustSetPassword = true`, endpoint dashboard student **dan** instructor harus menolak dengan 403:
+
+```json
+{
+  "error": "password_setup_required",
+  "message": "Silakan set password terlebih dahulu sebelum mengakses dashboard."
+}
+```
+
+Endpoint yang tetap boleh saat kondisi ini:
+- `GET /auth/me`
+- `POST /auth/set-password`
+- `POST /auth/logout`
 
 ---
 
@@ -358,17 +470,20 @@ Format konsisten:
 
 ## Ringkasan Endpoint per Flow
 
-| Flow / Fitur      | Endpoint                    | Method |
-|-------------------|-----------------------------|--------|
-| Katalog           | `/programs`                 | GET    |
-| Detail product    | `/programs/:slug`          | GET    |
-| Packages (landing)| `/packages`                 | GET    |
-| Checkout (mulai)  | `/checkout/initiate`       | POST   |
-| Checkout (bayar)  | `/checkout/payment-session`| POST   |
-| Login/Register    | `/auth/login`, `/auth/register` | POST |
-| Profil user       | `/auth/me`                  | GET    |
-| Kursus saya       | `/student/courses`         | GET    |
-| Transaksi         | `/student/transactions`     | GET    |
+| Flow / Fitur      | Endpoint                    | Method | Keterangan |
+|-------------------|-----------------------------|--------|------------|
+| Katalog           | `/programs`                 | GET    | |
+| Detail product    | `/programs/:slug`          | GET    | |
+| Packages (landing)| `/packages`                 | GET    | |
+| Checkout (mulai)  | `/checkout/initiate`       | POST   | Guest atau logged-in |
+| Checkout (bayar)  | `/checkout/payment-session`| POST   | |
+| **Register inline (guest checkout)** | **`/auth/register`** | **POST** | **Flow utama: upsert akun + auto-login sebelum upload bukti** |
+| Upload bukti transfer | `/checkout/orders/:orderId/payment-proof` | POST | Setelah login |
+| Bootstrap auth (fallback) | `/checkout/orders/:orderId/complete-purchase-auth` | POST | Opsional, untuk callback gateway |
+| Set password (via bootstrap) | `/auth/set-password` | POST | Hanya jika via complete-purchase-auth |
+| Profil user       | `/auth/me`                  | GET    | |
+| Kursus saya       | `/student/courses`         | GET    | |
+| Transaksi         | `/student/transactions`     | GET    | |
 
 Contoh curl: **docs/API_CURL_EXAMPLES.md**.  
 Schema database: **database/lms_schema.sql**, **database/landing_schema.sql**.
