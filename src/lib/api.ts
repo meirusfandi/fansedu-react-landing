@@ -1452,6 +1452,22 @@ export interface AnalyticsVisitorsResponse {
   totalPages: number
 }
 
+// --- User Notifications ---
+
+export interface UserNotificationItem {
+  id: string
+  title: string
+  body: string
+  type?: string
+  read?: boolean
+  createdAt?: string
+  href?: string
+}
+
+export interface UserNotificationsResponse {
+  data: UserNotificationItem[]
+}
+
 export async function getAnalyticsSummary(params?: {
   startDate?: string
   endDate?: string
@@ -1480,4 +1496,25 @@ export async function getAnalyticsVisitors(params?: {
   const q = qs.toString()
   const res = await fetch(`${API_BASE}/admin/analytics/visitors${q ? `?${q}` : ''}`, { headers: authHeaders() })
   return handleResponse<AnalyticsVisitorsResponse>(res)
+}
+
+export async function getMyNotifications(): Promise<UserNotificationsResponse> {
+  const res = await fetch(`${API_BASE}/notifications`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(res)
+  const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(raw) ? raw : [])
+
+  const data = (listRaw as Record<string, unknown>[]).map((item, index) => ({
+    id: String(item.id ?? `notif-${index}`),
+    title: String(item.title ?? item.subject ?? 'Notifikasi'),
+    body: String(item.body ?? item.message ?? ''),
+    type: item.type ? String(item.type) : undefined,
+    read: Boolean(item.read ?? item.is_read ?? false),
+    createdAt: item.createdAt ? String(item.createdAt) : (item.created_at ? String(item.created_at) : undefined),
+    href: item.href ? String(item.href) : undefined,
+  } satisfies UserNotificationItem))
+
+  return { data }
 }

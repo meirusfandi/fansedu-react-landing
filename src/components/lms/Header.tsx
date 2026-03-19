@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { useNotificationsStore } from '../../store/notifications'
-import { apiLogout, apiGetMe } from '../../lib/api'
+import { apiLogout, apiGetMe, getMyNotifications } from '../../lib/api'
 import type { AuthUser } from '../../types/auth'
 
 export function LmsHeader() {
@@ -14,6 +14,7 @@ export function LmsHeader() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const notificationRef = useRef<HTMLDivElement>(null)
   const notifications = useNotificationsStore((s) => s.items)
+  const setNotifications = useNotificationsStore((s) => s.setItems)
   const unreadCount = useNotificationsStore((s) => s.unreadCount())
   const markAsRead = useNotificationsStore((s) => s.markAsRead)
   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead)
@@ -25,6 +26,40 @@ export function LmsHeader() {
       .then((me) => setUser({ id: me.id, name: me.name, email: me.email, role: me.role as AuthUser['role'] }))
       .catch(() => {})
   }, [token, setUser])
+
+  useEffect(() => {
+    if (!token) {
+      setNotifications([])
+      return
+    }
+
+    let cancelled = false
+    const loadNotifications = () => {
+      getMyNotifications()
+        .then((res) => {
+          if (cancelled) return
+          setNotifications(
+            (res.data || []).map((item) => ({
+              id: item.id,
+              title: item.title,
+              message: item.body,
+              href: item.href || (user?.role === 'instructor' ? '#/instructor' : '#/student'),
+              read: Boolean(item.read),
+              level: item.type === 'progress_update' ? 'success' : 'info',
+              createdAt: item.createdAt || new Date().toISOString(),
+            }))
+          )
+        })
+        .catch(() => {})
+    }
+
+    loadNotifications()
+    const id = window.setInterval(loadNotifications, 30000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [token, setNotifications, user?.role])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
