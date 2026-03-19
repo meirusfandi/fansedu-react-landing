@@ -1,12 +1,29 @@
 import '../App.css'
-import { getOpenTryouts, getTryoutScheduleText } from '../data/tryoutList'
+import { useEffect, useState } from 'react'
+import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
+import { getTryoutScheduleText } from '../data/tryoutList'
 
 /**
  * Halaman daftar tryout (public). Dari sini masing-masing item mengarah ke halaman detail tryout (#/tryout-info).
  * Dihubungkan dari section TryOut Gratis di landing page.
  */
 export default function TryoutListPage() {
-  const tryouts = getOpenTryouts()
+  const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getOpenTryouts()
+      .then((list) => {
+        setTryouts(list)
+        setError(null)
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
+        setTryouts([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
@@ -43,7 +60,22 @@ export default function TryoutListPage() {
           </p>
         </div>
 
-        {tryouts.length === 0 ? (
+        {loading ? (
+          <div className="border border-[var(--border)] rounded-2xl p-12 bg-[var(--card)] text-center text-[var(--fg-muted)]">
+            Memuat daftar tryout...
+          </div>
+        ) : error ? (
+          <div className="border border-[var(--border)] rounded-2xl p-12 bg-[var(--card)] text-center">
+            <p className="text-[var(--fg-muted)] mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="btn-secondary px-6 py-3 rounded-full font-medium"
+            >
+              Coba lagi
+            </button>
+          </div>
+        ) : tryouts.length === 0 ? (
           <div className="border border-[var(--border)] rounded-2xl p-12 bg-[var(--card)] text-center text-[var(--fg-muted)]">
             Belum ada tryout yang terbuka. Cek kembali nanti atau kunjungi beranda untuk info terbaru.
           </div>
@@ -58,13 +90,16 @@ export default function TryoutListPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h2 className="font-display font-semibold text-lg text-[var(--fg)]">{t.title}</h2>
+                      <h2 className="font-display font-semibold text-lg text-[var(--fg)]">{t.shortTitle || t.title}</h2>
                       {t.badge && (
                         <span className="px-2.5 py-0.5 rounded-full bg-[var(--accent)]/15 text-[var(--accent)] text-xs font-semibold">
                           {t.badge}
                         </span>
                       )}
                     </div>
+                    {t.description && (
+                      <p className="text-sm text-[var(--fg-muted)] mb-1 line-clamp-2">{t.description}</p>
+                    )}
                     <p className="text-sm text-[var(--fg-muted)]">{getTryoutScheduleText(t)}</p>
                   </div>
                   <span className="shrink-0 text-[var(--accent)] font-medium text-sm">Lihat detail →</span>

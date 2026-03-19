@@ -1,17 +1,67 @@
 import '../App.css'
 import { isLeaderboardVisible } from '../utils/tryoutDates'
-import { getOpenTryouts, getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
+import { useEffect, useMemo, useState } from 'react'
+import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
+import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
 
 interface TryoutInfoPageProps {
   tryoutId?: string | null
 }
 
 export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps) {
-  const leaderboardHref = tryoutId ? `#/leaderboard/${tryoutId}` : '#/leaderboard'
-  const tryouts = getOpenTryouts()
-  const tryout = (tryoutId ? tryouts.find((t) => t.id === tryoutId) : null) ?? tryouts[0] ?? null
+  const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getOpenTryouts()
+      .then((list) => {
+        setTryouts(list)
+        setError(null)
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
+        setTryouts([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const tryout = useMemo(
+    () => (tryoutId ? tryouts.find((t) => t.id === tryoutId) : null) ?? tryouts[0] ?? null,
+    [tryouts, tryoutId]
+  )
+  const leaderboardHref = tryout?.id ? `#/leaderboard/${tryout.id}` : '#/leaderboard'
   const scheduleText = tryout ? getTryoutScheduleText(tryout) : null
   const deadlineText = getTryoutRegistrationDeadlineText(tryout?.registrationDeadlineAt)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-[var(--fg-muted)]">
+          Memuat detail tryout...
+        </main>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center">
+            <p className="text-[var(--fg-muted)] mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="btn-secondary px-6 py-3 rounded-full font-medium"
+            >
+              Coba lagi
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <header className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
@@ -56,7 +106,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
               <p className="text-[var(--fg-muted)] mb-2">
                 {scheduleText ? (
                   <>
-                    TryOut diadakan <strong className="text-[var(--fg)]">2 minggu sekali</strong>, dimulai <strong className="text-[var(--fg)]">{scheduleText.replace(/^2 minggu sekali, mulai /, '')}</strong>.
+                    Waktu tryout dibuka: <strong className="text-[var(--fg)]">{scheduleText.replace(/^Dibuka /, '')}</strong>.
                   </>
                 ) : (
                   <>Jadwal tryout akan diumumkan.</>

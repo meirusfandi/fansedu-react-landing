@@ -27,9 +27,7 @@ function formatDateTimeWib(iso: string): { dayName: string; dateText: string; ti
 
 export function getTryoutScheduleText(t: Pick<TryoutOpenItem, 'startAt' | 'intervalDays'>): string {
   const { dayName, dateText, timeText } = formatDateTimeWib(t.startAt)
-  const weeks = Math.round(t.intervalDays / 7)
-  const intervalText = weeks === 2 ? '2 minggu sekali' : `${t.intervalDays} hari sekali`
-  return `${intervalText}, mulai ${dayName} ${dateText}, ${timeText} WIB`
+  return `Dibuka ${dayName}, ${dateText}, ${timeText} WIB`
 }
 
 export function getTryoutRegistrationDeadlineText(iso?: string): string | null {

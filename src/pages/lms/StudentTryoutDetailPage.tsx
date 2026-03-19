@@ -1,8 +1,37 @@
+import { useEffect, useState } from 'react'
+import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
 import { isLeaderboardVisible } from '../../utils/tryoutDates'
-import { getOpenTryouts, getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../../data/tryoutList'
+import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../../data/tryoutList'
 
 export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string }) {
-  const tryouts = getOpenTryouts()
+  const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getOpenTryouts()
+      .then((list) => {
+        setTryouts(list)
+        setError(null)
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
+        setTryouts([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div className="py-8 text-gray-500">Memuat detail tryout...</div>
+  }
+  if (error) {
+    return (
+      <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-sm">
+        {error}
+      </div>
+    )
+  }
+
   const tryout = tryouts.find((t) => t.id === tryoutId) ?? null
 
   if (!tryout) {

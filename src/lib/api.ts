@@ -586,6 +586,80 @@ export interface StudentCoursesResponse {
   data: MyCourseItem[]
 }
 
+export interface OpenTryoutItem {
+  id: string
+  title: string
+  shortTitle?: string
+  description?: string
+  startAt: string
+  intervalDays: number
+  registrationDeadlineAt?: string
+  badge?: string
+  detailPath: string
+}
+
+function toIntSafe(v: unknown, fallback = 14): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.max(1, Math.trunc(v))
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v)
+    if (Number.isFinite(n)) return Math.max(1, Math.trunc(n))
+  }
+  return fallback
+}
+
+function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
+  const payload = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(payload.tryouts)
+      ? payload.tryouts
+      : (Array.isArray(raw) ? raw : []))
+
+  return (listRaw as Record<string, unknown>[])
+    .filter((item) => (item.is_open ?? item.isOpen ?? true) !== false)
+    .map((item) => {
+      const id = String(item.id ?? item.tryout_id ?? '')
+      const title = String(item.title ?? item.name ?? 'Tryout')
+      const shortTitleRaw = item.shortTitle ?? item.short_title
+      const descriptionRaw = item.description ?? item.desc
+      const startAt = String(
+        item.startAt ??
+        item.start_at ??
+        item.schedule_at ??
+        item.opens_at ??
+        item.open_at ??
+        ''
+      )
+      const intervalDays = toIntSafe(item.intervalDays ?? item.interval_days, 14)
+      const registrationDeadlineAtRaw =
+        item.registrationDeadlineAt ??
+        item.registration_deadline_at ??
+        item.deadline_at ??
+        item.closes_at ??
+        item.close_at
+
+      return {
+        id,
+        title,
+        shortTitle: shortTitleRaw ? String(shortTitleRaw) : undefined,
+        description: descriptionRaw ? String(descriptionRaw) : undefined,
+        startAt,
+        intervalDays,
+        registrationDeadlineAt: registrationDeadlineAtRaw ? String(registrationDeadlineAtRaw) : undefined,
+        badge: String(item.badge ?? 'Gratis'),
+        detailPath: `#/tryout-info/${encodeURIComponent(id)}`,
+      } satisfies OpenTryoutItem
+    })
+    .filter((item) => item.id && item.startAt)
+}
+
+/** GET /tryouts?status=open — daftar tryout dari database/backend */
+export async function getOpenTryouts(): Promise<OpenTryoutItem[]> {
+  const res = await fetch(`${API_BASE}/tryouts?status=open`, { headers: authHeaders() })
+  const data = await handleResponse<unknown>(res)
+  return parseOpenTryoutsResponse(data)
+}
+
 export interface TransactionItem {
   id: string
   orderId: string
