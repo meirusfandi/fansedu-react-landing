@@ -49,12 +49,11 @@ export default function InstructorTryoutsPage() {
       ) : (
         <div className="space-y-4">
           {tryouts.map((t) => (
-            <a
+            <div
               key={t.id}
-              href={`#/instructor/tryouts/${encodeURIComponent(t.id)}`}
               className="block rounded-2xl border bg-white p-6 hover:border-primary/30 hover:shadow-md transition-all"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <h2 className="font-semibold text-gray-900">{t.shortTitle || t.title}</h2>
@@ -69,9 +68,22 @@ export default function InstructorTryoutsPage() {
                   )}
                   <p className="text-sm text-gray-500">{getTryoutScheduleText(t)}</p>
                 </div>
-                <span className="shrink-0 text-primary font-medium text-sm">Lihat analisis →</span>
               </div>
-            </a>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`#/instructor/tryouts/${encodeURIComponent(t.id)}`}
+                  className="inline-flex px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover"
+                >
+                  Lihat Analisis
+                </a>
+                <a
+                  href={`#/instructor/leaderboard/${encodeURIComponent(t.id)}`}
+                  className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Leaderboard Internal
+                </a>
+              </div>
+            </div>
           ))}
         </div>
       )}

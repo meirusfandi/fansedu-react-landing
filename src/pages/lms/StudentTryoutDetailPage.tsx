@@ -1,12 +1,34 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
+import {
+  ApiError,
+  getStudentTryoutStatus,
+  getOpenTryouts,
+  registerStudentTryout,
+  startStudentTryout,
+  type OpenTryoutItem,
+} from '../../lib/api'
 import { isLeaderboardVisible } from '../../utils/tryoutDates'
 import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../../data/tryoutList'
 
+type TryoutActionState = 'unregistered' | 'registered' | 'attempted'
+
+function deriveTryoutActionState(tryout: OpenTryoutItem | null): TryoutActionState {
+  if (!tryout) return 'unregistered'
+  if (tryout.hasAttempted) return 'attempted'
+  if (tryout.isRegistered) return 'registered'
+  return 'unregistered'
+}
+
 export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string }) {
+  const tryoutStatusFeatureFlag = import.meta.env.VITE_TRYOUT_STATUS_ENDPOINT_ENABLED as string | undefined
+  const isTryoutStatusEndpointEnabled = tryoutStatusFeatureFlag ? tryoutStatusFeatureFlag === 'true' : true
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [registering, setRegistering] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionState, setActionState] = useState<TryoutActionState>('unregistered')
 
   useEffect(() => {
     getOpenTryouts()
@@ -20,6 +42,33 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    const tryout = tryouts.find((t) => t.id === tryoutId) ?? null
+    const fallbackState = deriveTryoutActionState(tryout)
+    setActionState(fallbackState)
+
+    // Endpoint status bersifat opsional.
+    // Default: OFF agar tidak spam 404 jika backend belum menyediakan endpoint ini.
+    if (!isTryoutStatusEndpointEnabled) return
+
+    getStudentTryoutStatus(tryoutId)
+      .then((status) => {
+        if (!status) return
+        if (status.hasAttempted) {
+          setActionState('attempted')
+          return
+        }
+        if (status.isRegistered) {
+          setActionState('registered')
+          return
+        }
+        setActionState('unregistered')
+      })
+      .catch(() => {
+        // Silently keep fallback state from open tryouts data.
+      })
+  }, [tryoutId, tryouts, isTryoutStatusEndpointEnabled])
 
   if (loading) {
     return <div className="py-8 text-gray-500">Memuat detail tryout...</div>
@@ -48,7 +97,41 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
 
   const scheduleText = getTryoutScheduleText(tryout)
   const deadlineText = getTryoutRegistrationDeadlineText(tryout.registrationDeadlineAt)
-  const leaderboardHref = `#/leaderboard/${tryout.id}`
+  const leaderboardHref = `#/student/leaderboard/${tryout.id}`
+  const onRegisterTryout = async () => {
+    setActionMessage(null)
+    setRegistering(true)
+    try {
+      await registerStudentTryout(tryout.id)
+      setActionState('registered')
+      setActionMessage('Pendaftaran tryout berhasil. Anda bisa lanjut mulai ujian.')
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Gagal mendaftarkan tryout.')
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const onStartExam = async () => {
+    setActionMessage(null)
+    setStarting(true)
+    try {
+      const res = await startStudentTryout(tryout.id)
+      if (typeof res.examUrl === 'string' && res.examUrl.trim()) {
+        window.location.href = res.examUrl
+        return
+      }
+      setActionMessage(
+        actionState === 'attempted'
+          ? 'Tryout ulang berhasil dimulai. Silakan lanjut ke halaman ujian.'
+          : 'Ujian berhasil dimulai. Silakan lanjut ke halaman ujian.'
+      )
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Gagal memulai ujian.')
+    } finally {
+      setStarting(false)
+    }
+  }
 
   return (
     <div>
@@ -77,22 +160,41 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
         <div className="rounded-2xl border bg-white p-6">
           <h2 className="font-semibold text-gray-900 mb-3">Aksi Peserta</h2>
           <div className="space-y-3">
-            <button
-              type="button"
-              className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
-              disabled
-              title="Aktifkan saat endpoint pendaftaran tryout sudah tersedia"
-            >
-              Daftar Tryout (coming soon)
-            </button>
-            <button
-              type="button"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 disabled:opacity-60"
-              disabled
-              title="Aktifkan saat endpoint mulai ujian sudah tersedia"
-            >
-              Mulai Ujian (coming soon)
-            </button>
+            {actionMessage && (
+              <div className={`p-3 rounded-lg text-sm ${actionMessage.includes('berhasil') ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
+                {actionMessage}
+              </div>
+            )}
+            {actionState === 'unregistered' && (
+              <button
+                type="button"
+                className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+                onClick={onRegisterTryout}
+                disabled={registering || starting}
+              >
+                {registering ? 'Mendaftarkan...' : 'Daftar Tryout'}
+              </button>
+            )}
+            {actionState === 'registered' && (
+              <button
+                type="button"
+                className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+                onClick={onStartExam}
+                disabled={starting || registering}
+              >
+                {starting ? 'Memulai...' : 'Mulai Ujian'}
+              </button>
+            )}
+            {actionState === 'attempted' && (
+              <button
+                type="button"
+                className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+                onClick={onStartExam}
+                disabled={starting || registering}
+              >
+                {starting ? 'Memulai Ulang...' : 'Mulai Ulang'}
+              </button>
+            )}
             {isLeaderboardVisible() && (
               <a href={leaderboardHref} className="block w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-center hover:bg-gray-50">
                 Lihat Leaderboard

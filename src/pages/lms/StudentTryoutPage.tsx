@@ -63,6 +63,15 @@ export default function StudentTryoutPage() {
                         {t.badge}
                       </span>
                     )}
+                    {t.hasAttempted ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
+                        Sudah dikerjakan
+                      </span>
+                    ) : t.isRegistered ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+                        Sudah daftar
+                      </span>
+                    ) : null}
                   </div>
                   {t.description && (
                     <p className="text-sm text-gray-600 mb-1 line-clamp-2">{t.description}</p>

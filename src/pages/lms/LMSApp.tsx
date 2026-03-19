@@ -7,6 +7,7 @@ import CheckoutSuccessPage from './CheckoutSuccessPage'
 import { StudentLayout } from './StudentLayout'
 import StudentDashboardPage from './StudentDashboardPage'
 import StudentCoursesPage from './StudentCoursesPage'
+import StudentCourseLearnPage from './StudentCourseLearnPage'
 import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
 import StudentTryoutDetailPage from './StudentTryoutDetailPage'
@@ -23,15 +24,17 @@ import InstructorProfilePage from './InstructorProfilePage'
 import InstructorTryoutsPage from './InstructorTryoutsPage'
 import InstructorTryoutAnalysisPage from './InstructorTryoutAnalysisPage'
 import InstructorAttemptAIAnalysisPage from './InstructorAttemptAIAnalysisPage'
+import TryoutLeaderboardPage from './TryoutLeaderboardPage'
 
 export interface LmsRoute {
-  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-tryout' | 'student-tryout-detail' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-profile' | 'instructor-tryouts' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
+  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-course-learn' | 'student-tryout' | 'student-tryout-detail' | 'student-leaderboard' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-profile' | 'instructor-tryouts' | 'instructor-leaderboard' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
   programSlug?: string
   authRedirect?: string
   authTab?: string
   checkoutProgramSlug?: string
   checkoutConfirmOrderId?: string
   codingProblemSlug?: string
+  courseSlug?: string
   studentTryoutId?: string
   studentPath?: string
   instructorPath?: string
@@ -61,9 +64,13 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   }
   if (pathOnly === '/student') return { type: 'student', studentPath: '/student' }
   if (pathOnly === '/student/courses') return { type: 'student-courses', studentPath: '/student/courses' }
+  const studentCourseLearnMatch = pathOnly.match(/^\/student\/courses\/([^/]+)$/)
+  if (studentCourseLearnMatch) return { type: 'student-course-learn', courseSlug: studentCourseLearnMatch[1], studentPath: '/student/courses' }
   if (pathOnly === '/student/tryout') return { type: 'student-tryout', studentPath: '/student/tryout' }
   const studentTryoutDetailMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)$/)
   if (studentTryoutDetailMatch) return { type: 'student-tryout-detail', studentTryoutId: studentTryoutDetailMatch[1], studentPath: '/student/tryout' }
+  const studentLeaderboardMatch = pathOnly.match(/^\/student\/leaderboard\/([^/]+)$/)
+  if (studentLeaderboardMatch) return { type: 'student-leaderboard', studentTryoutId: studentLeaderboardMatch[1], studentPath: '/student/tryout' }
   if (pathOnly === '/student/coding') return { type: 'student-coding', studentPath: '/student/coding' }
   const codingProblemMatch = pathOnly.match(/^\/student\/coding\/problem\/([^/]+)$/)
   if (codingProblemMatch) return { type: 'student-coding-problem', codingProblemSlug: codingProblemMatch[1], studentPath: '/student/coding' }
@@ -76,6 +83,8 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (pathOnly === '/instructor/earnings') return { type: 'instructor-earnings', instructorPath: '/instructor/earnings' }
   if (pathOnly === '/instructor/profile') return { type: 'instructor-profile', instructorPath: '/instructor/profile' }
   if (pathOnly === '/instructor/tryouts') return { type: 'instructor-tryouts', instructorPath: '/instructor/tryouts' }
+  const instructorLeaderboardMatch = pathOnly.match(/^\/instructor\/leaderboard\/([^/]+)$/)
+  if (instructorLeaderboardMatch) return { type: 'instructor-leaderboard', instructorTryoutId: instructorLeaderboardMatch[1], instructorPath: '/instructor/tryouts' }
   const tryoutAnalysisMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/?$/)
   if (tryoutAnalysisMatch) return { type: 'instructor-tryout-analysis', instructorTryoutId: tryoutAnalysisMatch[1], instructorPath: '/instructor/tryouts' }
   const attemptAiMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/attempts\/([^/]+)\/ai-analysis\/?$/)
@@ -109,6 +118,12 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
           <StudentCoursesPage />
         </StudentLayout>
       )
+    case 'student-course-learn':
+      return (
+        <StudentLayout currentPath="/student/courses">
+          <StudentCourseLearnPage courseSlug={route.courseSlug ?? ''} />
+        </StudentLayout>
+      )
     case 'student-tryout':
       return (
         <StudentLayout currentPath="/student/tryout">
@@ -119,6 +134,12 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/tryout">
           <StudentTryoutDetailPage tryoutId={route.studentTryoutId ?? ''} />
+        </StudentLayout>
+      )
+    case 'student-leaderboard':
+      return (
+        <StudentLayout currentPath="/student/tryout">
+          <TryoutLeaderboardPage tryoutId={route.studentTryoutId ?? ''} role="student" />
         </StudentLayout>
       )
     case 'student-coding':
@@ -185,6 +206,12 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
       return (
         <InstructorLayout currentPath="/instructor/tryouts">
           <InstructorTryoutsPage />
+        </InstructorLayout>
+      )
+    case 'instructor-leaderboard':
+      return (
+        <InstructorLayout currentPath="/instructor/tryouts">
+          <TryoutLeaderboardPage tryoutId={route.instructorTryoutId ?? ''} role="instructor" />
         </InstructorLayout>
       )
     case 'instructor-tryout-analysis':

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
-import { getPackages, trackPageview } from './lib/api'
+import { getPackages, trackAnalyticsEvent, trackPageview } from './lib/api'
 import { formatRupiah } from './lib/currency'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
@@ -84,6 +84,10 @@ function getEarlyBirdDaysLeft(): number {
   if (now >= end) return 0
   const diff = end.getTime() - now.getTime()
   return Math.max(1, Math.ceil(diff / (24 * 60 * 60 * 1000)))
+}
+
+function formatUrgencyDate(date: Date): string {
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 const MOCK_PACKAGES: LandingPackage[] = [
@@ -212,6 +216,7 @@ function App() {
   // Paket / program: diisi dari backend GET /api/v1/packages (hanya is_open = true)
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
+  const urgencyDateLabel = formatUrgencyDate(URGENCY.earlyBirdEnd)
   useEffect(() => {
     const onFocus = () => setAuthUser(getStoredAuthUser())
     window.addEventListener('focus', onFocus)
@@ -315,6 +320,14 @@ function App() {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setIsMenuOpen(false)
     }
+  }
+
+  const trackConversionEvent = (event: string, payload?: Record<string, unknown>) => {
+    trackAnalyticsEvent({
+      event,
+      page: '/',
+      metadata: payload,
+    })
   }
 
   return (
@@ -456,10 +469,20 @@ function App() {
               </ul>
 
               <div className="flex flex-wrap items-center gap-3 mb-12 reveal reveal-delay-3">
-                <a href={REGISTER_URL} className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm text-center">
+                <a
+                  href={REGISTER_URL}
+                  className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm text-center"
+                  onClick={() => trackConversionEvent('cta_register_click', { placement: 'hero' })}
+                >
                   Daftar Sekarang
                 </a>
-                <a href={waUrl(WA_TEMPLATES.tanyaProgram)} target="_blank" rel="noreferrer" className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm text-center">
+                <a
+                  href={waUrl(WA_TEMPLATES.tanyaProgram)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm text-center"
+                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'hero' })}
+                >
                   Tanya Program
                 </a>
                 <a href="#solusi" className="text-[var(--fg-muted)] hover:text-[var(--accent)] font-medium text-sm transition-colors" onClick={(event) => handleAnchorClick(event, '#solusi')}>
@@ -854,7 +877,7 @@ function App() {
                   {getEarlyBirdDaysLeft() > 0 && (
                     <>
                       <span className="text-[var(--fg-muted)]">·</span>
-                      <span className="text-xs font-semibold text-[var(--accent)]">Early bird hingga 25 Maret 2026</span>
+                      <span className="text-xs font-semibold text-[var(--accent)]">Early bird hingga {urgencyDateLabel}</span>
                     </>
                   )}
                 </div>
@@ -894,6 +917,7 @@ function App() {
                     <a
                       href={`#/program/${pkg.slug}`}
                       className="btn-primary px-6 py-3 rounded-full font-semibold text-center inline-block text-sm w-full"
+                      onClick={() => trackConversionEvent('program_card_click', { programId: pkg.id, programSlug: pkg.slug, placement: 'landing_programs' })}
                     >
                       {pkg.ctaLabel || 'Lihat Detail / Daftar'}
                     </a>
@@ -903,6 +927,7 @@ function App() {
                         target={pkg.ctaUrl.startsWith('http') ? '_blank' : undefined}
                         rel={pkg.ctaUrl.startsWith('http') ? 'noreferrer' : undefined}
                         className="btn-secondary px-6 py-3 rounded-full font-semibold text-center inline-block text-sm w-full border border-[var(--border)]"
+                        onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'program_card', programId: pkg.id, programSlug: pkg.slug })}
                       >
                         Tanya Program
                       </a>
@@ -989,7 +1014,11 @@ function App() {
           </div>
 
           <div className="text-center reveal">
-            <a href={REGISTER_URL} className="btn-primary px-8 py-4 rounded-full font-semibold inline-block">
+            <a
+              href={REGISTER_URL}
+              className="btn-primary px-8 py-4 rounded-full font-semibold inline-block"
+              onClick={() => trackConversionEvent('cta_register_click', { placement: 'tryout' })}
+            >
               Daftar akun untuk ikut TryOut
             </a>
             <p className="text-[var(--fg-muted)] text-sm mt-3">Sudah punya akun? <a href="#/auth" className="text-[var(--accent)] font-medium hover:underline">Masuk</a>, lalu buka menu Tryout di dashboard.</p>
@@ -1015,7 +1044,7 @@ function App() {
             </span>
             {getEarlyBirdDaysLeft() > 0 && (
               <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-sm font-semibold text-[var(--accent)]">
-                ⏰ Early bird hingga 25 Maret 2026
+                ⏰ Early bird hingga {urgencyDateLabel}
               </span>
             )}
           </div>
@@ -1024,10 +1053,17 @@ function App() {
             <a
               href={authUser ? `${LMS_BASE}/catalog` : REGISTER_URL}
               className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block"
+              onClick={() => trackConversionEvent('cta_register_click', { placement: 'cta_bottom' })}
             >
               Daftar Sekarang
             </a>
-            <a href={waUrl(WA_TEMPLATES.tanyaProgram)} target="_blank" rel="noreferrer" className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--border)] hover:border-[var(--accent)]">
+            <a
+              href={waUrl(WA_TEMPLATES.tanyaProgram)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--border)] hover:border-[var(--accent)]"
+              onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'cta_bottom' })}
+            >
               Tanya Program
             </a>
           </div>
@@ -1108,6 +1144,7 @@ function App() {
               target="_blank"
               rel="noreferrer"
               className="btn-primary px-8 py-4 rounded-full font-semibold text-center inline-block"
+              onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'request' })}
             >
               Kirim Request
             </a>
@@ -1164,7 +1201,13 @@ function App() {
                 <p className="text-[var(--fg-muted)] mb-8 max-w-md mx-auto">
                   Jangan biarkan kesempatan berlalu. Persiapkan diri Anda dengan program pelatihan terbaik untuk meraih medali di OSN Informatika.
                 </p>
-                <a href={waUrl(WA_TEMPLATES.contact)} target="_blank" rel="noreferrer" className="btn-primary px-8 py-4 rounded-full font-semibold text-center inline-block">
+                <a
+                  href={waUrl(WA_TEMPLATES.contact)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-primary px-8 py-4 rounded-full font-semibold text-center inline-block"
+                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'contact' })}
+                >
                   Hubungi Kami Sekarang
                 </a>
               </div>
@@ -1238,7 +1281,14 @@ function App() {
         </div>
       </footer>
 
-      <a href={waUrl(WA_TEMPLATES.float)} target="_blank" rel="noreferrer" className="wa-float" aria-label="Chat via WhatsApp">
+      <a
+        href={waUrl(WA_TEMPLATES.float)}
+        target="_blank"
+        rel="noreferrer"
+        className="wa-float"
+        aria-label="Chat via WhatsApp"
+        onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'floating' })}
+      >
         <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
         </svg>
@@ -1248,6 +1298,7 @@ function App() {
         <a
           href={REGISTER_URL}
           className="block w-full py-4 px-6 text-center font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-colors shadow-[0_-4px_20px_rgba(0,0,0,0.15)]"
+          onClick={() => trackConversionEvent('cta_register_click', { placement: 'sticky_mobile' })}
         >
           Daftar Sekarang
         </a>

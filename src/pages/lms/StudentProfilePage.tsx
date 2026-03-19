@@ -23,6 +23,7 @@ export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [passwordRequiredBanner, setPasswordRequiredBanner] = useState<string | null>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -40,6 +41,12 @@ export default function StudentProfilePage() {
     const timer = window.setTimeout(() => setPasswordMessage(null), 3000)
     return () => window.clearTimeout(timer)
   }, [passwordMessage])
+
+  useEffect(() => {
+    const currentHash = window.location.hash || ''
+    if (!currentHash.includes('password_setup_required=1')) return
+    setPasswordRequiredBanner('Akses dibatasi sementara. Silakan ubah password dulu untuk melanjutkan.')
+  }, [])
 
   useEffect(() => {
     getStudentProfile()
@@ -134,6 +141,18 @@ export default function StudentProfilePage() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Profile</h1>
       <div className="rounded-2xl border bg-white p-6 space-y-4 mb-6">
+        {passwordRequiredBanner && (
+          <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm flex items-start justify-between gap-3">
+            <span>{passwordRequiredBanner}</span>
+            <button
+              type="button"
+              onClick={() => setPasswordRequiredBanner(null)}
+              className="text-xs font-semibold opacity-80 hover:opacity-100"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
         {message && (
           <div className={`p-3 rounded-lg text-sm flex items-start justify-between gap-3 ${message.includes('berhasil') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             <span>{message}</span>

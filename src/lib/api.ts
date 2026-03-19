@@ -46,6 +46,26 @@ export class ApiError extends Error {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) clearAuthOnUnauthorized()
   const data = await res.json().catch(() => ({}))
+  if (
+    res.status === 403 &&
+    typeof window !== 'undefined' &&
+    ((data as { error?: string }).error === 'password_setup_required' ||
+      (data as { code?: string }).code === 'password_setup_required')
+  ) {
+    const role = (() => {
+      try {
+        const raw = localStorage.getItem('fansedu-auth')
+        if (!raw) return 'student'
+        const parsed = JSON.parse(raw) as { state?: { user?: { role?: 'student' | 'instructor' } } }
+        return parsed?.state?.user?.role === 'instructor' ? 'instructor' : 'student'
+      } catch {
+        return 'student'
+      }
+    })()
+    const current = window.location.hash || '#/'
+    const target = role === 'instructor' ? '#/instructor/profile' : '#/student/profile'
+    window.location.hash = `${target}?password_setup_required=1&redirect=${encodeURIComponent(current)}`
+  }
   if (!res.ok) {
     throw new ApiError(res.status, (data as { message?: string }).message || res.statusText, data as { error?: string; message?: string })
   }
@@ -571,6 +591,23 @@ export async function registerWithInvite(body: RegisterWithInviteRequest): Promi
 export interface StudentDashboardResponse {
   coursesCount?: number
   recentCourses?: MyCourseItem[]
+  tryoutSummary?: {
+    attemptedCount?: number
+    completedCount?: number
+    registeredCount?: number
+    averageScore?: number
+    bestScore?: number
+    upcomingCount?: number
+    streakDays?: number
+    lastAttemptAt?: string
+  }
+  weeklyTarget?: {
+    targetLessons?: number
+    targetTryouts?: number
+    completedLessons?: number
+    completedTryouts?: number
+  }
+  badges?: Array<{ id: string; label: string; description?: string; earnedAt?: string }>
   [key: string]: unknown
 }
 
@@ -584,6 +621,16 @@ export interface MyCourseItem {
 
 export interface StudentCoursesResponse {
   data: MyCourseItem[]
+  total?: number
+  page?: number
+  totalPages?: number
+}
+
+export interface StudentCoursesQuery {
+  page?: number
+  limit?: number
+  search?: string
+  progressStatus?: 'all' | 'in-progress' | 'completed'
 }
 
 export interface OpenTryoutItem {
@@ -595,7 +642,34 @@ export interface OpenTryoutItem {
   intervalDays: number
   registrationDeadlineAt?: string
   badge?: string
+  isRegistered?: boolean
+  hasAttempted?: boolean
+  canRetake?: boolean
   detailPath: string
+}
+
+export interface TryoutStartResponse {
+  attemptId?: string
+  examUrl?: string
+  startedAt?: string
+  [key: string]: unknown
+}
+
+export interface StudentTryoutStatusResponse {
+  isRegistered: boolean
+  hasAttempted: boolean
+  canRetake: boolean
+  attemptCount?: number
+  lastAttemptId?: string
+}
+
+export interface TryoutLeaderboardEntry {
+  rank: number
+  userId: string
+  userName: string
+  schoolName: string
+  hasAttempt: boolean
+  score?: number
 }
 
 function toIntSafe(v: unknown, fallback = 14): number {
@@ -647,6 +721,27 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
         intervalDays,
         registrationDeadlineAt: registrationDeadlineAtRaw ? String(registrationDeadlineAtRaw) : undefined,
         badge: String(item.badge ?? 'Gratis'),
+        isRegistered: Boolean(
+          item.isRegistered ??
+          item.is_registered ??
+          item.registered ??
+          item.has_registered
+        ),
+        hasAttempted: Boolean(
+          item.hasAttempted ??
+          item.has_attempted ??
+          item.hasAttempt ??
+          item.has_attempt ??
+          item.isCompleted ??
+          item.is_completed ??
+          item.completed
+        ),
+        canRetake: Boolean(
+          item.canRetake ??
+          item.can_retake ??
+          item.allowRetake ??
+          item.allow_retake
+        ),
         detailPath: `#/tryout-info/${encodeURIComponent(id)}`,
       } satisfies OpenTryoutItem
     })
@@ -658,6 +753,119 @@ export async function getOpenTryouts(): Promise<OpenTryoutItem[]> {
   const res = await fetch(`${API_BASE}/tryouts?status=open`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseOpenTryoutsResponse(data)
+}
+
+/** POST /student/tryouts/:id/register */
+export async function registerStudentTryout(tryoutId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/register`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse<void>(res)
+}
+
+/** POST /student/tryouts/:id/start */
+export async function startStudentTryout(tryoutId: string): Promise<TryoutStartResponse> {
+  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/start`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse<TryoutStartResponse>(res)
+}
+
+/**
+ * GET /student/tryouts/:id/status
+ * Optional endpoint (frontend akan fallback jika 404).
+ */
+export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentTryoutStatusResponse | null> {
+  const disabledKey = 'student-tryout-status-endpoint-disabled'
+  if (typeof window !== 'undefined' && sessionStorage.getItem(disabledKey) === '1') {
+    return null
+  }
+  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/status`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) {
+    if (typeof window !== 'undefined') sessionStorage.setItem(disabledKey, '1')
+    return null
+  }
+  const data = await handleResponse<Record<string, unknown>>(res)
+
+  const toBool = (value: unknown): boolean =>
+    value === true ||
+    value === 1 ||
+    value === '1' ||
+    value === 'true'
+
+  const isRegistered = toBool(
+    data.isRegistered ??
+    data.is_registered ??
+    data.registered ??
+    data.has_registered
+  )
+  const hasAttempted = toBool(
+    data.hasAttempted ??
+    data.has_attempted ??
+    data.hasAttempt ??
+    data.has_attempt ??
+    data.isCompleted ??
+    data.is_completed ??
+    data.completed
+  )
+  const canRetake = toBool(
+    data.canRetake ??
+    data.can_retake ??
+    data.allowRetake ??
+    data.allow_retake
+  )
+  const attemptCountRaw = data.attemptCount ?? data.attempt_count
+  const attemptCountNum = typeof attemptCountRaw === 'number'
+    ? Math.trunc(attemptCountRaw)
+    : (typeof attemptCountRaw === 'string' && attemptCountRaw.trim() ? Math.trunc(Number(attemptCountRaw)) : undefined)
+
+  return {
+    isRegistered,
+    hasAttempted,
+    canRetake,
+    attemptCount: Number.isFinite(attemptCountNum as number) ? (attemptCountNum as number) : undefined,
+    lastAttemptId: typeof data.lastAttemptId === 'string'
+      ? data.lastAttemptId
+      : (typeof data.last_attempt_id === 'string' ? data.last_attempt_id : undefined),
+  }
+}
+
+export async function getTryoutLeaderboard(tryoutId: string): Promise<TryoutLeaderboardEntry[]> {
+  const res = await fetch(`${API_BASE}/tryouts/${encodeURIComponent(tryoutId)}/leaderboard`, {
+    headers: authHeaders(),
+  })
+  const data = await handleResponse<unknown>(res)
+  const rowsRaw = Array.isArray(data)
+    ? data
+    : (data && typeof data === 'object' && 'leaderboard' in data && Array.isArray((data as { leaderboard?: unknown }).leaderboard)
+      ? (data as { leaderboard: unknown[] }).leaderboard
+      : (data && typeof data === 'object' && 'data' in data && Array.isArray((data as { data?: unknown }).data)
+        ? (data as { data: unknown[] }).data
+        : []))
+
+  return (rowsRaw as Record<string, unknown>[]).map((row, index) => {
+    const rankRaw = row.rank
+    const rankNum = typeof rankRaw === 'number'
+      ? Math.trunc(rankRaw)
+      : (typeof rankRaw === 'string' && rankRaw.trim() ? Math.trunc(Number(rankRaw)) : index + 1)
+    const scoreRaw = row.score
+    const scoreNum = typeof scoreRaw === 'number'
+      ? Math.trunc(scoreRaw)
+      : (typeof scoreRaw === 'string' && scoreRaw.trim() ? Math.trunc(Number(scoreRaw)) : undefined)
+
+    return {
+      rank: Number.isFinite(rankNum) ? rankNum : index + 1,
+      userId: String(row.user_id ?? row.userId ?? ''),
+      userName: String(row.user_name ?? row.userName ?? '—'),
+      schoolName: String(row.school_name ?? row.schoolName ?? '—'),
+      hasAttempt: Boolean(row.has_attempt ?? row.hasAttempt),
+      score: Number.isFinite(scoreNum as number) ? (scoreNum as number) : undefined,
+    } satisfies TryoutLeaderboardEntry
+  })
 }
 
 export interface TransactionItem {
@@ -673,6 +881,42 @@ export interface TransactionItem {
 
 export interface StudentTransactionsResponse {
   data: TransactionItem[]
+  total?: number
+  page?: number
+  totalPages?: number
+}
+
+export interface StudentTransactionsQuery {
+  page?: number
+  limit?: number
+  search?: string
+  status?: 'all' | 'pending' | 'paid'
+}
+
+export interface StudentTryoutHistoryItem {
+  tryoutId: string
+  tryoutTitle: string
+  attemptId?: string
+  score: number
+  submittedAt: string
+  improvementFromPrevious?: number
+}
+
+export interface StudentTryoutHistoryResponse {
+  data: StudentTryoutHistoryItem[]
+}
+
+export interface StudentNextActionItem {
+  id: string
+  type: 'continue_course' | 'start_tryout' | 'complete_profile' | 'payment_pending' | 'custom'
+  title: string
+  description?: string
+  href: string
+  priority?: number
+}
+
+export interface StudentNextActionsResponse {
+  data: StudentNextActionItem[]
 }
 
 function toInt(v: unknown): number | null {
@@ -723,7 +967,15 @@ function parseTransactionsResponse(raw: unknown): StudentTransactionsResponse {
     } satisfies TransactionItem
   })
 
-  return { data: list }
+  const totalRaw = payload.total
+  const pageRaw = payload.page
+  const totalPagesRaw = payload.totalPages ?? payload.total_pages
+  return {
+    data: list,
+    total: typeof totalRaw === 'number' ? Math.trunc(totalRaw) : undefined,
+    page: typeof pageRaw === 'number' ? Math.trunc(pageRaw) : undefined,
+    totalPages: typeof totalPagesRaw === 'number' ? Math.trunc(totalPagesRaw) : undefined,
+  }
 }
 
 export interface CertificateItem {
@@ -742,15 +994,81 @@ export async function getStudentDashboard(): Promise<StudentDashboardResponse> {
   return handleResponse<StudentDashboardResponse>(res)
 }
 
-export async function getMyCourses(): Promise<StudentCoursesResponse> {
-  const res = await fetch(`${API_BASE}/student/courses`, { headers: authHeaders() })
-  return handleResponse<StudentCoursesResponse>(res)
+export async function getMyCourses(params?: StudentCoursesQuery): Promise<StudentCoursesResponse> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.search) qs.set('search', params.search)
+  if (params?.progressStatus && params.progressStatus !== 'all') qs.set('progressStatus', params.progressStatus)
+  const q = qs.toString()
+  const res = await fetch(`${API_BASE}/student/courses${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  const data = await handleResponse<unknown>(res)
+  if (Array.isArray(data)) return { data: data as MyCourseItem[] }
+  if (data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>
+    const listRaw = Array.isArray(payload.data) ? payload.data : []
+    return {
+      data: listRaw as MyCourseItem[],
+      total: typeof payload.total === 'number' ? Math.trunc(payload.total) : undefined,
+      page: typeof payload.page === 'number' ? Math.trunc(payload.page) : undefined,
+      totalPages: typeof (payload.totalPages ?? payload.total_pages) === 'number'
+        ? Math.trunc((payload.totalPages ?? payload.total_pages) as number)
+        : undefined,
+    }
+  }
+  return { data: [] }
 }
 
-export async function getTransactions(): Promise<StudentTransactionsResponse> {
-  const res = await fetch(`${API_BASE}/student/transactions`, { headers: authHeaders() })
+export async function getTransactions(params?: StudentTransactionsQuery): Promise<StudentTransactionsResponse> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.search) qs.set('search', params.search)
+  if (params?.status && params.status !== 'all') qs.set('status', params.status)
+  const q = qs.toString()
+  const res = await fetch(`${API_BASE}/student/transactions${q ? `?${q}` : ''}`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseTransactionsResponse(data)
+}
+
+export async function getStudentTryoutHistory(): Promise<StudentTryoutHistoryResponse> {
+  const res = await fetch(`${API_BASE}/student/tryouts/history`, { headers: authHeaders() })
+  if (res.status === 404) return { data: [] }
+  const data = await handleResponse<unknown>(res)
+  const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(data) ? data : [])
+
+  const rows = (listRaw as Record<string, unknown>[]).map((item) => ({
+    tryoutId: String(item.tryoutId ?? item.tryout_id ?? ''),
+    tryoutTitle: String(item.tryoutTitle ?? item.tryout_title ?? item.title ?? 'Tryout'),
+    attemptId: item.attemptId != null ? String(item.attemptId) : (item.attempt_id != null ? String(item.attempt_id) : undefined),
+    score: toInt(item.score) ?? 0,
+    submittedAt: String(item.submittedAt ?? item.submitted_at ?? item.finished_at ?? ''),
+    improvementFromPrevious: toInt(item.improvementFromPrevious ?? item.improvement_from_previous) ?? undefined,
+  } satisfies StudentTryoutHistoryItem))
+  return { data: rows.filter((row) => row.tryoutId && row.submittedAt) }
+}
+
+export async function getStudentNextActions(): Promise<StudentNextActionsResponse> {
+  const res = await fetch(`${API_BASE}/student/next-actions`, { headers: authHeaders() })
+  if (res.status === 404) return { data: [] }
+  const data = await handleResponse<unknown>(res)
+  const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(data) ? data : [])
+  return {
+    data: (listRaw as Record<string, unknown>[]).map((item, index) => ({
+      id: String(item.id ?? `next-action-${index}`),
+      type: String(item.type ?? 'custom') as StudentNextActionItem['type'],
+      title: String(item.title ?? 'Lanjutkan progres Anda'),
+      description: item.description != null ? String(item.description) : undefined,
+      href: String(item.href ?? '#/student'),
+      priority: toInt(item.priority) ?? undefined,
+    })),
+  }
 }
 
 export async function getCertificates(): Promise<StudentCertificatesResponse> {
@@ -895,18 +1213,82 @@ export async function getInstructorEarnings(): Promise<InstructorEarningsRespons
   return handleResponse<InstructorEarningsResponse>(res)
 }
 
-export async function getInstructorProfile(): Promise<{ name: string; email: string }> {
-  const res = await fetch(`${API_BASE}/instructor/profile`, { headers: authHeaders() })
-  return handleResponse<{ name: string; email: string }>(res)
+export interface InstructorProfileResponse {
+  name: string
+  email: string
+  phone?: string
+  whatsapp?: string
+  school?: string
+  classLevel?: string
+  city?: string
+  province?: string
+  gender?: string
+  birthDate?: string
+  bio?: string
+  parentName?: string
+  parentPhone?: string
+  instagram?: string
+  [key: string]: unknown
 }
 
-export async function updateInstructorProfile(body: { name: string; email: string }): Promise<void> {
+export interface UpdateInstructorProfileRequest {
+  name: string
+  email: string
+  phone?: string
+  whatsapp?: string
+  school?: string
+  classLevel?: string
+  city?: string
+  province?: string
+  gender?: string
+  birthDate?: string
+  bio?: string
+  parentName?: string
+  parentPhone?: string
+  instagram?: string
+}
+
+export interface UpdateInstructorPasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword?: string
+}
+
+export async function getInstructorProfile(): Promise<InstructorProfileResponse> {
+  const res = await fetch(`${API_BASE}/instructor/profile`, { headers: authHeaders() })
+  return handleResponse<InstructorProfileResponse>(res)
+}
+
+export async function updateInstructorProfile(body: UpdateInstructorProfileRequest): Promise<void> {
   const res = await fetch(`${API_BASE}/instructor/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
   return handleResponse<void>(res)
+}
+
+export async function updateInstructorPassword(body: UpdateInstructorPasswordRequest): Promise<void> {
+  const payload = {
+    currentPassword: body.currentPassword,
+    oldPassword: body.currentPassword,
+    newPassword: body.newPassword,
+    confirmPassword: body.confirmPassword ?? body.newPassword,
+  }
+
+  const primary = await fetch(`${API_BASE}/instructor/profile/password`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  if (primary.status !== 404) return handleResponse<void>(primary)
+
+  const fallback = await fetch(`${API_BASE}/auth/change-password`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse<void>(fallback)
 }
 
 // --- Instructor / Trainer Tryout Analysis (Auth + role guru/instructor) ---
@@ -983,6 +1365,15 @@ export interface PageviewPayload {
   language?: string
 }
 
+export interface AnalyticsEventPayload {
+  event: string
+  page?: string
+  label?: string
+  programId?: string
+  programSlug?: string
+  metadata?: Record<string, unknown>
+}
+
 /**
  * Fire-and-forget: catat satu pageview ke backend.
  * Tidak throw error — gagal diam-diam agar tidak mengganggu UX.
@@ -998,6 +1389,27 @@ export function trackPageview(payload?: Partial<PageviewPayload>): void {
   }
 
   fetch(`${API_BASE}/analytics/pageview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    keepalive: true,
+  }).catch(() => {})
+}
+
+/**
+ * Event analytics untuk conversion/funnel. Fire-and-forget.
+ * Endpoint yang dipakai: POST /analytics/events.
+ */
+export function trackAnalyticsEvent(payload: AnalyticsEventPayload): void {
+  const body: AnalyticsEventPayload = {
+    event: payload.event,
+    page: payload.page ?? (window.location.hash.slice(1) || '/'),
+    label: payload.label,
+    programId: payload.programId,
+    programSlug: payload.programSlug,
+    metadata: payload.metadata,
+  }
+  fetch(`${API_BASE}/analytics/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
