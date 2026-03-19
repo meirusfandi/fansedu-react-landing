@@ -758,18 +758,90 @@ export async function getCertificates(): Promise<StudentCertificatesResponse> {
   return handleResponse<StudentCertificatesResponse>(res)
 }
 
-export async function getStudentProfile(): Promise<{ name: string; email: string }> {
-  const res = await fetch(`${API_BASE}/student/profile`, { headers: authHeaders() })
-  return handleResponse<{ name: string; email: string }>(res)
+export interface StudentProfileResponse {
+  name: string
+  email: string
+  phone?: string
+  whatsapp?: string
+  school?: string
+  classLevel?: string
+  city?: string
+  province?: string
+  gender?: string
+  birthDate?: string
+  bio?: string
+  parentName?: string
+  parentPhone?: string
+  instagram?: string
+  [key: string]: unknown
 }
 
-export async function updateStudentProfile(body: { name: string; email: string }): Promise<void> {
+export interface UpdateStudentProfileRequest {
+  name: string
+  email: string
+  phone?: string
+  whatsapp?: string
+  school?: string
+  classLevel?: string
+  city?: string
+  province?: string
+  gender?: string
+  birthDate?: string
+  bio?: string
+  parentName?: string
+  parentPhone?: string
+  instagram?: string
+}
+
+export interface UpdateStudentPasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword?: string
+}
+
+export async function getStudentProfile(): Promise<StudentProfileResponse> {
+  const res = await fetch(`${API_BASE}/student/profile`, { headers: authHeaders() })
+  return handleResponse<StudentProfileResponse>(res)
+}
+
+export async function updateStudentProfile(body: UpdateStudentProfileRequest): Promise<void> {
   const res = await fetch(`${API_BASE}/student/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
   return handleResponse<void>(res)
+}
+
+/**
+ * Update password siswa.
+ * Endpoint utama: /student/profile/password
+ * Fallback: /auth/change-password (jika backend memakai endpoint auth global)
+ */
+export async function updateStudentPassword(body: UpdateStudentPasswordRequest): Promise<void> {
+  const payload = {
+    currentPassword: body.currentPassword,
+    oldPassword: body.currentPassword,
+    newPassword: body.newPassword,
+    confirmPassword: body.confirmPassword ?? body.newPassword,
+  }
+
+  const primary = await fetch(`${API_BASE}/student/profile/password`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+  if (primary.status !== 404) {
+    return handleResponse<void>(primary)
+  }
+
+  const fallback = await fetch(`${API_BASE}/auth/change-password`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse<void>(fallback)
 }
 
 // --- Instructor ---
@@ -821,6 +893,20 @@ export async function getInstructorStudents(): Promise<InstructorStudentsRespons
 export async function getInstructorEarnings(): Promise<InstructorEarningsResponse> {
   const res = await fetch(`${API_BASE}/instructor/earnings`, { headers: authHeaders() })
   return handleResponse<InstructorEarningsResponse>(res)
+}
+
+export async function getInstructorProfile(): Promise<{ name: string; email: string }> {
+  const res = await fetch(`${API_BASE}/instructor/profile`, { headers: authHeaders() })
+  return handleResponse<{ name: string; email: string }>(res)
+}
+
+export async function updateInstructorProfile(body: { name: string; email: string }): Promise<void> {
+  const res = await fetch(`${API_BASE}/instructor/profile`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<void>(res)
 }
 
 // --- Instructor / Trainer Tryout Analysis (Auth + role guru/instructor) ---

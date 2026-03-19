@@ -20,6 +20,34 @@
       rel="stylesheet"
     />
 
+    <script>
+      (function () {
+        var NOISY_ASYNC_MSG = 'A listener indicated an asynchronous response by returning true'
+        var NOISY_CHANNEL_MSG = 'message channel closed before a response was received'
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event && event.reason
+          var message =
+            typeof reason === 'string'
+              ? reason
+              : reason && typeof reason.message === 'string'
+                ? reason.message
+                : ''
+
+          if (message.indexOf(NOISY_ASYNC_MSG) !== -1 && message.indexOf(NOISY_CHANNEL_MSG) !== -1) {
+            event.preventDefault()
+          }
+        })
+
+        window.addEventListener('error', function (event) {
+          var message = event && typeof event.message === 'string' ? event.message : ''
+          if (message.indexOf(NOISY_ASYNC_MSG) !== -1 && message.indexOf(NOISY_CHANNEL_MSG) !== -1) {
+            event.preventDefault()
+          }
+        })
+      })()
+    </script>
+
     <!-- TikTok Pixel Code Start (disable on localhost/dev) -->
     <script>
       (function () {

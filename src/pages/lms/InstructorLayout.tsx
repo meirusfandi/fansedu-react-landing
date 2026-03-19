@@ -7,6 +7,7 @@ const MENU = [
   { href: '#/instructor/students', label: 'Siswa' },
   { href: '#/instructor/tryouts', label: 'Analisis Tryout' },
   { href: '#/instructor/earnings', label: 'Pendapatan' },
+  { href: '#/instructor/profile', label: 'Profile' },
 ]
 
 export function InstructorLayout({ children, currentPath }: { children: React.ReactNode; currentPath: string }) {

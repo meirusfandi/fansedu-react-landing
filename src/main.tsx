@@ -31,6 +31,30 @@ function parseHash(): { route: 'home' | 'article' | 'tryout' | 'tryout-info' | '
 function Root() {
   const [location, setLocation] = useState(parseHash)
 
+  // Ignore noisy unhandled rejection from browser extensions
+  // (e.g. "A listener indicated an asynchronous response...")
+  useEffect(() => {
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      const message =
+        typeof reason === 'string'
+          ? reason
+          : (reason && typeof reason === 'object' && 'message' in reason && typeof (reason as { message?: unknown }).message === 'string'
+            ? (reason as { message: string }).message
+            : '')
+
+      if (
+        message.includes('A listener indicated an asynchronous response by returning true') &&
+        message.includes('message channel closed before a response was received')
+      ) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection)
+  }, [])
+
   useEffect(() => {
     const onHashChange = () => setLocation(parseHash())
     window.addEventListener('hashchange', onHashChange)

@@ -74,6 +74,10 @@ export default function InstructorDashboardPage() {
           <h2 className="font-semibold text-gray-900 mb-1">Analisis Tryout</h2>
           <p className="text-sm text-gray-500">Analisis per soal, daftar peserta, dan analisis AI per siswa</p>
         </a>
+        <a href="#/instructor/profile" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
+          <h2 className="font-semibold text-gray-900 mb-1">Profile</h2>
+          <p className="text-sm text-gray-500">Kelola data profil akun guru</p>
+        </a>
       </div>
     </div>
   )
