@@ -811,3 +811,101 @@ export async function getInstructorAttemptAIAnalysis(
   )
   return handleResponse<InstructorAttemptAIAnalysisResponse>(res)
 }
+
+// --- Analytics (Visitor Tracking) ---
+
+export interface PageviewPayload {
+  page: string
+  referrer?: string
+  screenWidth?: number
+  screenHeight?: number
+  timezone?: string
+  language?: string
+}
+
+/**
+ * Fire-and-forget: catat satu pageview ke backend.
+ * Tidak throw error — gagal diam-diam agar tidak mengganggu UX.
+ */
+export function trackPageview(payload?: Partial<PageviewPayload>): void {
+  const body: PageviewPayload = {
+    page: payload?.page ?? (window.location.hash.slice(1) || '/'),
+    referrer: payload?.referrer ?? (document.referrer || undefined),
+    screenWidth: payload?.screenWidth ?? window.screen?.width,
+    screenHeight: payload?.screenHeight ?? window.screen?.height,
+    timezone: payload?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: payload?.language ?? navigator.language,
+  }
+
+  fetch(`${API_BASE}/analytics/pageview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    keepalive: true,
+  }).catch(() => {})
+}
+
+// --- Admin Analytics ---
+
+export interface AnalyticsSummaryItem {
+  date: string
+  pageviews: number
+  uniqueVisitors: number
+}
+
+export interface AnalyticsSummaryResponse {
+  totalPageviews: number
+  uniqueVisitors: number
+  data: AnalyticsSummaryItem[]
+}
+
+export interface AnalyticsVisitorItem {
+  id: string
+  sessionId: string
+  page: string
+  ipAddress: string
+  userAgent: string
+  referrer: string
+  screenWidth: number
+  screenHeight: number
+  timezone: string
+  language: string
+  visitedAt: string
+}
+
+export interface AnalyticsVisitorsResponse {
+  data: AnalyticsVisitorItem[]
+  total: number
+  page: number
+  totalPages: number
+}
+
+export async function getAnalyticsSummary(params?: {
+  startDate?: string
+  endDate?: string
+  groupBy?: 'day' | 'week' | 'month'
+}): Promise<AnalyticsSummaryResponse> {
+  const qs = new URLSearchParams()
+  if (params?.startDate) qs.set('startDate', params.startDate)
+  if (params?.endDate) qs.set('endDate', params.endDate)
+  if (params?.groupBy) qs.set('groupBy', params.groupBy)
+  const q = qs.toString()
+  const res = await fetch(`${API_BASE}/admin/analytics/summary${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  return handleResponse<AnalyticsSummaryResponse>(res)
+}
+
+export async function getAnalyticsVisitors(params?: {
+  page?: number
+  limit?: number
+  startDate?: string
+  endDate?: string
+}): Promise<AnalyticsVisitorsResponse> {
+  const qs = new URLSearchParams()
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.limit) qs.set('limit', String(params.limit))
+  if (params?.startDate) qs.set('startDate', params.startDate)
+  if (params?.endDate) qs.set('endDate', params.endDate)
+  const q = qs.toString()
+  const res = await fetch(`${API_BASE}/admin/analytics/visitors${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  return handleResponse<AnalyticsVisitorsResponse>(res)
+}

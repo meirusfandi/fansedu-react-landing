@@ -450,7 +450,121 @@ Detail response shape ada di **docs/API_REQUIREMENTS.md**.
 
 ---
 
-## 7. Error Response
+## 7. Analytics (Visitor Tracking)
+
+Tracking pengunjung landing page untuk admin dashboard.
+
+### 7.1 Catat Pageview
+
+**POST /analytics/pageview** — Dipanggil frontend otomatis saat halaman landing dimuat. Tidak butuh auth.
+
+| Method | Endpoint | Auth |
+|--------|----------|------|
+| POST | `/analytics/pageview` | Tidak |
+
+**Request Body**
+
+```json
+{
+  "page": "/",
+  "referrer": "https://google.com/...",
+  "screenWidth": 1920,
+  "screenHeight": 1080,
+  "timezone": "Asia/Jakarta",
+  "language": "id-ID"
+}
+```
+
+**Response 201**
+
+```json
+{ "ok": true }
+```
+
+**Aturan backend:**
+- Simpan ke tabel `analytics_pageviews`.
+- Ambil IP dari header, User-Agent dari header.
+- Generate `session_id` dari hash (IP + UA + tanggal) untuk deduplikasi.
+- Rate limit: maks 1 per session per page per 5 menit.
+
+---
+
+### 7.2 Ringkasan Analytics (Admin)
+
+**GET /admin/analytics/summary** — Statistik kunjungan teragregasi.
+
+| Method | Endpoint | Auth |
+|--------|----------|------|
+| GET | `/admin/analytics/summary` | Bearer (admin) |
+
+**Query Parameters**
+
+| Parameter | Tipe | Wajib | Default | Keterangan |
+|-----------|------|-------|---------|------------|
+| startDate | string (YYYY-MM-DD) | Tidak | 30 hari lalu | |
+| endDate | string (YYYY-MM-DD) | Tidak | hari ini | |
+| groupBy | string | Tidak | day | `day` / `week` / `month` |
+
+**Response 200**
+
+```json
+{
+  "totalPageviews": 1250,
+  "uniqueVisitors": 830,
+  "data": [
+    { "date": "2026-03-01", "pageviews": 95, "uniqueVisitors": 72 },
+    { "date": "2026-03-02", "pageviews": 110, "uniqueVisitors": 85 }
+  ]
+}
+```
+
+---
+
+### 7.3 Detail Visitors (Admin)
+
+**GET /admin/analytics/visitors** — Daftar kunjungan individual dengan pagination.
+
+| Method | Endpoint | Auth |
+|--------|----------|------|
+| GET | `/admin/analytics/visitors` | Bearer (admin) |
+
+**Query Parameters**
+
+| Parameter | Tipe | Wajib | Default |
+|-----------|------|-------|---------|
+| page | number | Tidak | 1 |
+| limit | number | Tidak | 50 |
+| startDate | string | Tidak | 30 hari lalu |
+| endDate | string | Tidak | hari ini |
+
+**Response 200**
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "sessionId": "hash-string",
+      "page": "/",
+      "ipAddress": "103.x.x.x",
+      "userAgent": "Mozilla/5.0...",
+      "referrer": "https://google.com/...",
+      "screenWidth": 1920,
+      "screenHeight": 1080,
+      "timezone": "Asia/Jakarta",
+      "language": "id-ID",
+      "visitedAt": "2026-03-15T10:30:00Z"
+    }
+  ],
+  "total": 1250,
+  "page": 1,
+  "totalPages": 25
+}
+```
+
+---
+
+## 8. Error Response
 
 Format konsisten:
 
@@ -484,6 +598,9 @@ Format konsisten:
 | Profil user       | `/auth/me`                  | GET    | |
 | Kursus saya       | `/student/courses`         | GET    | |
 | Transaksi         | `/student/transactions`     | GET    | |
+| **Pageview tracking** | **`/analytics/pageview`** | **POST** | **Tanpa auth, fire-and-forget dari frontend** |
+| **Admin: ringkasan** | **`/admin/analytics/summary`** | **GET** | **Bearer admin** |
+| **Admin: detail visitor** | **`/admin/analytics/visitors`** | **GET** | **Bearer admin** |
 
 Contoh curl: **docs/API_CURL_EXAMPLES.md**.  
 Schema database: **database/lms_schema.sql**, **database/landing_schema.sql**.

@@ -458,6 +458,99 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/InstructorEarningItem' } }
 
+  # --- Analytics (Visitor Tracking) ---
+  /analytics/pageview:
+    post:
+      summary: Catat kunjungan halaman (dipanggil frontend otomatis, tanpa auth)
+      operationId: trackPageview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                page: { type: string, description: 'Path halaman, mis. /' }
+                referrer: { type: string, description: 'URL referrer' }
+                screenWidth: { type: integer }
+                screenHeight: { type: integer }
+                timezone: { type: string, description: 'Timezone browser, mis. Asia/Jakarta' }
+                language: { type: string, description: 'Bahasa browser, mis. id-ID' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /admin/analytics/summary:
+    get:
+      summary: Ringkasan statistik visitor (admin only)
+      operationId: getAnalyticsSummary
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: startDate
+          in: query
+          schema: { type: string, format: date }
+          description: Mulai periode (YYYY-MM-DD), default 30 hari lalu
+        - name: endDate
+          in: query
+          schema: { type: string, format: date }
+          description: Akhir periode (YYYY-MM-DD), default hari ini
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsSummaryResponse' }
+        '401':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/analytics/visitors:
+    get:
+      summary: Daftar detail kunjungan individual (admin only, pagination)
+      operationId: getAnalyticsVisitors
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: startDate
+          in: query
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsVisitorsResponse' }
+        '401':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -626,3 +719,39 @@ components:
         period: { type: string }
         revenue: { type: number }
         newStudents: { type: integer }
+    AnalyticsSummaryResponse:
+      type: object
+      properties:
+        totalPageviews: { type: integer }
+        uniqueVisitors: { type: integer }
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string }
+              pageviews: { type: integer }
+              uniqueVisitors: { type: integer }
+    AnalyticsVisitorsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyticsVisitorItem' }
+        total: { type: integer }
+        page: { type: integer }
+        totalPages: { type: integer }
+    AnalyticsVisitorItem:
+      type: object
+      properties:
+        id: { type: string }
+        sessionId: { type: string }
+        page: { type: string }
+        ipAddress: { type: string }
+        userAgent: { type: string }
+        referrer: { type: string }
+        screenWidth: { type: integer }
+        screenHeight: { type: integer }
+        timezone: { type: string }
+        language: { type: string }
+        visitedAt: { type: string, format: date-time }

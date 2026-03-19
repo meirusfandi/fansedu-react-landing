@@ -429,7 +429,123 @@ Schema tabel `packages` ada di **`database/landing_schema.sql`**.
 
 ---
 
-## 7. Error Response
+## 7. Analytics (Visitor Tracking)
+
+Tracking pengunjung landing page. Frontend mengirim pageview secara otomatis saat halaman dimuat. Admin bisa melihat data dari dashboard.
+
+| Method | Endpoint | Auth | Deskripsi |
+|--------|----------|------|-----------|
+| POST | `/analytics/pageview` | Tidak | Catat satu kunjungan halaman (dipanggil frontend otomatis) |
+| GET | `/admin/analytics/summary` | Bearer (admin) | Ringkasan statistik: total visitor, unique visitor, per hari/minggu/bulan |
+| GET | `/admin/analytics/visitors` | Bearer (admin) | Daftar detail kunjungan individual (pagination) |
+
+### POST /analytics/pageview
+
+Frontend memanggil endpoint ini sekali saat landing page dimuat (fire-and-forget, tidak blocking UI).
+
+```json
+// Request
+{
+  "page": "/",
+  "referrer": "https://google.com/...",
+  "screenWidth": 1920,
+  "screenHeight": 1080,
+  "timezone": "Asia/Jakarta",
+  "language": "id-ID"
+}
+```
+
+```json
+// Response 201
+{ "ok": true }
+```
+
+**Aturan backend:**
+- Simpan data ke tabel `analytics_pageviews` (lihat schema di bawah).
+- Ambil `IP address` dari request header (`X-Forwarded-For` / `X-Real-Ip` / remote addr).
+- Ambil `User-Agent` dari request header.
+- Generate `session_id` dari hash IP + User-Agent + tanggal (supaya unique per device per hari), atau pakai cookie/fingerprint jika mau lebih akurat.
+- Endpoint ini **tidak butuh auth** dan harus sangat ringan (async insert, return 201 segera).
+- Rate limit: maks 1 record per session_id per halaman per 5 menit (hindari duplikasi dari refresh berulang).
+
+### GET /admin/analytics/summary
+
+```json
+// Query params
+?startDate=2026-03-01&endDate=2026-03-15&groupBy=day
+
+// Response 200
+{
+  "totalPageviews": 1250,
+  "uniqueVisitors": 830,
+  "data": [
+    { "date": "2026-03-01", "pageviews": 95, "uniqueVisitors": 72 },
+    { "date": "2026-03-02", "pageviews": 110, "uniqueVisitors": 85 }
+  ]
+}
+```
+
+| Parameter | Tipe | Wajib | Default | Keterangan |
+|-----------|------|-------|---------|------------|
+| startDate | string (YYYY-MM-DD) | Tidak | 30 hari lalu | Mulai periode |
+| endDate | string (YYYY-MM-DD) | Tidak | hari ini | Akhir periode |
+| groupBy | string | Tidak | day | `day` / `week` / `month` |
+
+### GET /admin/analytics/visitors
+
+```json
+// Query params
+?page=1&limit=50&startDate=2026-03-01&endDate=2026-03-15
+
+// Response 200
+{
+  "data": [
+    {
+      "id": "uuid",
+      "sessionId": "hash-string",
+      "page": "/",
+      "ipAddress": "103.x.x.x",
+      "userAgent": "Mozilla/5.0...",
+      "referrer": "https://google.com/...",
+      "screenWidth": 1920,
+      "screenHeight": 1080,
+      "timezone": "Asia/Jakarta",
+      "language": "id-ID",
+      "visitedAt": "2026-03-15T10:30:00Z"
+    }
+  ],
+  "total": 1250,
+  "page": 1,
+  "totalPages": 25
+}
+```
+
+### Schema tabel (rekomendasi)
+
+```sql
+CREATE TABLE analytics_pageviews (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id  VARCHAR(128) NOT NULL,
+  page        VARCHAR(512) NOT NULL DEFAULT '/',
+  ip_address  VARCHAR(45),
+  user_agent  TEXT,
+  referrer    TEXT,
+  screen_width  INT,
+  screen_height INT,
+  timezone    VARCHAR(64),
+  language    VARCHAR(16),
+  visited_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_pageviews_visited_at ON analytics_pageviews(visited_at);
+CREATE INDEX idx_pageviews_session_id ON analytics_pageviews(session_id);
+CREATE INDEX idx_pageviews_page ON analytics_pageviews(page);
+```
+
+---
+
+## 8. Error Response
 
 Gunakan HTTP status code standar. Body konsisten:
 
@@ -454,5 +570,8 @@ Contoh: `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `422 Validation 
 | Upload bukti transfer | POST /checkout/orders/:orderId/payment-proof |
 | Success page, "Mulai Belajar" | GET /student/courses (setelah login) |
 | Landing — section Program | GET /packages (optional; fallback mock) |
+| **Landing page load** | **POST /analytics/pageview** (fire-and-forget, tracking visitor) |
+| **Admin: lihat statistik** | **GET /admin/analytics/summary** (Bearer admin) |
+| **Admin: detail visitor** | **GET /admin/analytics/visitors** (Bearer admin) |
 
 Schema database untuk mendukung API ini ada di **`database/lms_schema.sql`** (LMS) dan **`database/landing_schema.sql`** (packages, site settings).

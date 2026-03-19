@@ -9,6 +9,7 @@ import StudentDashboardPage from './StudentDashboardPage'
 import StudentCoursesPage from './StudentCoursesPage'
 import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
+import StudentTryoutDetailPage from './StudentTryoutDetailPage'
 import StudentCodingProblemPage from './StudentCodingProblemPage'
 import StudentTransactionsPage from './StudentTransactionsPage'
 import StudentCertificatesPage from './StudentCertificatesPage'
@@ -23,13 +24,14 @@ import InstructorTryoutAnalysisPage from './InstructorTryoutAnalysisPage'
 import InstructorAttemptAIAnalysisPage from './InstructorAttemptAIAnalysisPage'
 
 export interface LmsRoute {
-  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-tryout' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-tryouts' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
+  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-tryout' | 'student-tryout-detail' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-tryouts' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
   programSlug?: string
   authRedirect?: string
   authTab?: string
   checkoutProgramSlug?: string
   checkoutConfirmOrderId?: string
   codingProblemSlug?: string
+  studentTryoutId?: string
   studentPath?: string
   instructorPath?: string
   instructorTryoutId?: string
@@ -59,6 +61,8 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (pathOnly === '/student') return { type: 'student', studentPath: '/student' }
   if (pathOnly === '/student/courses') return { type: 'student-courses', studentPath: '/student/courses' }
   if (pathOnly === '/student/tryout') return { type: 'student-tryout', studentPath: '/student/tryout' }
+  const studentTryoutDetailMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)$/)
+  if (studentTryoutDetailMatch) return { type: 'student-tryout-detail', studentTryoutId: studentTryoutDetailMatch[1], studentPath: '/student/tryout' }
   if (pathOnly === '/student/coding') return { type: 'student-coding', studentPath: '/student/coding' }
   const codingProblemMatch = pathOnly.match(/^\/student\/coding\/problem\/([^/]+)$/)
   if (codingProblemMatch) return { type: 'student-coding-problem', codingProblemSlug: codingProblemMatch[1], studentPath: '/student/coding' }
@@ -107,6 +111,12 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/tryout">
           <StudentTryoutPage />
+        </StudentLayout>
+      )
+    case 'student-tryout-detail':
+      return (
+        <StudentLayout currentPath="/student/tryout">
+          <StudentTryoutDetailPage tryoutId={route.studentTryoutId ?? ''} />
         </StudentLayout>
       )
     case 'student-coding':

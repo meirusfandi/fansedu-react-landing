@@ -19,7 +19,7 @@ export default function StudentTryoutPage() {
           {tryouts.map((t) => (
             <a
               key={t.id}
-              href={t.detailPath}
+              href={`#/student/tryout/${t.id}`}
               className="block border rounded-2xl p-6 bg-white hover:border-primary/30 hover:shadow-md transition-all"
             >
               <div className="flex items-start justify-between gap-4">

@@ -258,6 +258,26 @@ Tanpa `jq`: hapus `| jq .` dan `| jq -r '.token'`.
 
 ---
 
+## Analytics (Visitor Tracking)
+
+```bash
+# Catat pageview (dipanggil frontend otomatis, tanpa auth)
+curl -s -X POST "$BASE/analytics/pageview" \
+  -H "Content-Type: application/json" \
+  -d '{"page":"/","referrer":"https://google.com","screenWidth":1920,"screenHeight":1080,"timezone":"Asia/Jakarta","language":"id-ID"}' | jq .
+
+# Ringkasan analytics (admin, butuh Bearer admin token)
+ADMIN_TOKEN="<TOKEN_ADMIN>"
+curl -s "$BASE/admin/analytics/summary?startDate=2026-03-01&endDate=2026-03-15&groupBy=day" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
+
+# Detail visitor (admin, pagination)
+curl -s "$BASE/admin/analytics/visitors?page=1&limit=50&startDate=2026-03-01&endDate=2026-03-15" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
+```
+
+---
+
 ## Ringkasan URL
 
 | Endpoint | Method | Auth |
@@ -273,6 +293,9 @@ Tanpa `jq`: hapus `| jq .` dan `| jq -r '.token'`.
 | `/checkout/initiate` | POST | Opsional (Bearer agar kembalikan order pending yang sama) |
 | `/checkout/payment-session` | POST | - |
 | `/checkout/orders/:orderId/complete-purchase-auth` | POST | Opsional |
+| `/analytics/pageview` | POST | - |
+| `/admin/analytics/summary` | GET | Bearer (admin) |
+| `/admin/analytics/visitors` | GET | Bearer (admin) |
 | `/student/dashboard` | GET | Bearer |
 | `/student/profile` | GET / PUT | Bearer |
 | `/student/courses` | GET | Bearer |

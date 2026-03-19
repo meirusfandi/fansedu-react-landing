@@ -26,10 +26,6 @@ export default function StudentDashboardPage() {
           <h2 className="font-semibold text-gray-900 mb-1">TryOut OSN</h2>
           <p className="text-sm text-gray-500">Daftar tryout dan ikut ujian dari sini setelah Anda punya akun.</p>
         </a>
-        <a href="#/student/coding" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
-          <h2 className="font-semibold text-gray-900 mb-1">Belajar Coding</h2>
-          <p className="text-sm text-gray-500">Auto grading, soal programming basic, interactive code training</p>
-        </a>
         <a href="#/student/transactions" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Transactions</h2>
           <p className="text-sm text-gray-500">Riwayat pembayaran</p>

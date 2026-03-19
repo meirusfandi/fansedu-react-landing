@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
-import { getPackages } from './lib/api'
+import { getPackages, trackPageview } from './lib/api'
 import { formatRupiah } from './lib/currency'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
@@ -225,6 +225,14 @@ function App() {
       .then((data: Article[]) => setArticles(Array.isArray(data) ? data : []))
       .catch(() => {})
   }, [])
+  // Track pageview saat landing page dimuat (fire-and-forget)
+  const pageviewTrackedRef = useRef(false)
+  useEffect(() => {
+    if (pageviewTrackedRef.current) return
+    pageviewTrackedRef.current = true
+    trackPageview({ page: '/' })
+  }, [])
+
   // Fetch packages dari api/v1/packages sekali saja (sumber: landing, katalog, detail)
   const packagesFetchedRef = useRef(false)
   useEffect(() => {
