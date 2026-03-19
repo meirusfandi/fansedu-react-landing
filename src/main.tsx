@@ -39,8 +39,14 @@ function Root() {
 
   // TikTok Pixel: track virtual page views on hash change (SPA)
   useEffect(() => {
-    const ttq = (window as Window & { ttq?: { page: () => void } }).ttq
-    ttq?.page()
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isLocalDev) return
+    try {
+      const ttq = (window as Window & { ttq?: { page: () => void } }).ttq
+      ttq?.page()
+    } catch {
+      // Best effort only: jangan ganggu UX jika tracker pihak ketiga gagal.
+    }
   }, [location.route, location.slug])
 
   if (location.route === 'leaderboard') return <TryoutLeaderboardPage tryoutId={location.tryoutId} />

@@ -6,6 +6,10 @@ export default {
       colors: {
         primary: { DEFAULT: '#2563eb', hover: '#1d4ed8' },
       },
+      fontFamily: {
+        display: ['Space Grotesk', 'sans-serif'],
+        body: ['DM Sans', 'sans-serif'],
+      },
     },
   },
   plugins: [],
