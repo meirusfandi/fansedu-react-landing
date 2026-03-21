@@ -6,7 +6,7 @@
 console.log('MODE:', import.meta.env.MODE)
 console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
 
-const RAW = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8080/api/v1'
+const RAW = (import.meta.env.VITE_API_URL as string | undefined) || 'https://api.fansedu.web.id/api/v1'
 
 /** Base path API (auth, programs, checkout, student, instructor, packages) — sama dengan VITE_API_URL */
 export const API_BASE = RAW.replace(/\/$/, '')
@@ -15,4 +15,4 @@ export const API_BASE = RAW.replace(/\/$/, '')
 export const PACKAGES_API_URL = `${API_BASE}/packages`
 
 /** Origin backend (tanpa /api/v1) — untuk tryouts: BACKEND_BASE + /api/v1/tryouts/... */
-export const BACKEND_BASE = RAW.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') || 'http://localhost:8080'
+export const BACKEND_BASE = RAW.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') || 'https://api.fansedu.web.id'
