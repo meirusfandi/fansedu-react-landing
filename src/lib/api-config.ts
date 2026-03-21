@@ -3,6 +3,9 @@
  * Satu env: VITE_API_URL = http://localhost:8080/api/v1 (semua endpoint di bawah /api/v1).
  */
 
+console.log('MODE:', import.meta.env.MODE)
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL)
+
 const RAW = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8080/api/v1'
 
 /** Base path API (auth, programs, checkout, student, instructor, packages) — sama dengan VITE_API_URL */
