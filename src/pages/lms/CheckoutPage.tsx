@@ -9,7 +9,10 @@ import {
   createPaymentSession,
   submitPaymentProof,
   apiRegister,
+  getInstructorProfile,
+  getStudentsBySchool,
   ApiError,
+  type SchoolStudentItem,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
 
@@ -31,6 +34,13 @@ function generateUniqueCode(): number {
 /** Validasi format email sederhana */
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+interface CollectiveStudentItem {
+  id: string
+  name: string
+  email: string
+  userId?: string
 }
 
 /** Ambil harga rupiah dari Course, utamakan field numerik */
@@ -107,6 +117,15 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loadingSetPassword, setLoadingSetPassword] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
+  const [isCollectivePurchase, setIsCollectivePurchase] = useState(false)
+  const [collectiveStudents, setCollectiveStudents] = useState<CollectiveStudentItem[]>([
+    { id: crypto.randomUUID(), name: '', email: '' },
+  ])
+  const [instructorSchoolId, setInstructorSchoolId] = useState('')
+  const [schoolStudentPool, setSchoolStudentPool] = useState<SchoolStudentItem[]>([])
+  const [selectedSchoolStudentIds, setSelectedSchoolStudentIds] = useState<string[]>([])
+  const [loadingSchoolStudents, setLoadingSchoolStudents] = useState(false)
+  const [schoolStudentsError, setSchoolStudentsError] = useState<string | null>(null)
   const prefilledFromUser = useRef(false)
 
   // --- Harga dari field numerik (utama), bukan dari string ---
@@ -119,12 +138,35 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   // Harga efektif: utamakan field numerik course.price (sudah dihitung oleh packageToCourse)
   const basePrice = useMemo(() => resolveNumericPrice(course), [course])
 
-  // Total bayar: dari backend jika > 0, else basePrice
-  const totalToPay = orderSummary != null && orderSummary.total > 0 ? orderSummary.total : basePrice
+  const isInstructorBuyer = user?.role === 'instructor'
+  const validCollectiveStudents = useMemo(
+    () =>
+      collectiveStudents.filter(
+        (item) => item.name.trim() && item.email.trim() && isValidEmail(item.email.trim())
+      ),
+    [collectiveStudents]
+  )
+  const collectiveParticipantCount = Math.max(1, validCollectiveStudents.length)
+  const purchaseCount = isInstructorBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
+  const unitPromoPrice = earlyNum > 0 ? earlyNum : basePrice
+  const unitNormalPrice = normalNum
+  const expectedTotalFromCount = unitPromoPrice > 0 ? unitPromoPrice * purchaseCount : 0
+  const expectedNormalTotalFromCount = unitNormalPrice > 0 ? unitNormalPrice * purchaseCount : 0
 
-  // Potongan dari kode promo HANYA tampil jika user mengisi kode promo DAN backend mengembalikan total lebih kecil dari basePrice.
-  const hasPromoDiscount = Boolean(promoCode.trim() && orderSummary && basePrice > 0 && orderSummary.total < basePrice)
-  const promoDiscountAmount = hasPromoDiscount ? basePrice - orderSummary!.total : 0
+  // Total bayar: dari backend jika > 0, else total hasil perhitungan quantity.
+  const totalToPay = orderSummary != null && orderSummary.total > 0 ? orderSummary.total : expectedTotalFromCount
+
+  // Subtotal sebelum promo berdasarkan jumlah item kolektif.
+  const subtotalBeforePromo = expectedTotalFromCount > 0 ? expectedTotalFromCount : (basePrice > 0 ? basePrice * purchaseCount : 0)
+  // Potongan dari kode promo tampil jika backend mengembalikan total lebih kecil dari subtotal kolektif.
+  const hasPromoDiscount = Boolean(
+    promoCode.trim() &&
+    orderSummary &&
+    subtotalBeforePromo > 0 &&
+    orderSummary.total > 0 &&
+    orderSummary.total < subtotalBeforePromo
+  )
+  const promoDiscountAmount = hasPromoDiscount ? subtotalBeforePromo - orderSummary!.total : 0
 
   // Jika sudah login, isi Data Diri dari user (sekali per sesi login)
   useEffect(() => {
@@ -180,6 +222,86 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug])
 
+  useEffect(() => {
+    if (!isInstructorBuyer || !isCollectivePurchase) return
+    let cancelled = false
+    getInstructorProfile()
+      .then((profile) => {
+        if (cancelled) return
+        const schoolId = String(profile.schoolId ?? profile.school_id ?? '').trim()
+        setInstructorSchoolId(schoolId)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setInstructorSchoolId('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isInstructorBuyer, isCollectivePurchase])
+
+  const loadSchoolStudents = useCallback(async () => {
+    if (!instructorSchoolId) {
+      setSchoolStudentsError('School ID akun guru belum tersedia. Lengkapi profil guru dulu.')
+      setSchoolStudentPool([])
+      return
+    }
+    setLoadingSchoolStudents(true)
+    setSchoolStudentsError(null)
+    try {
+      const rows = await getStudentsBySchool(instructorSchoolId)
+      setSchoolStudentPool(rows)
+      if (rows.length === 0) setSchoolStudentsError('Belum ada siswa di sekolah ini atau endpoint belum tersedia.')
+    } catch (err) {
+      setSchoolStudentPool([])
+      setSchoolStudentsError(err instanceof ApiError ? err.message : 'Gagal memuat list siswa sekolah.')
+    } finally {
+      setLoadingSchoolStudents(false)
+    }
+  }, [instructorSchoolId])
+
+  const updateCollectiveStudent = useCallback((id: string, field: 'name' | 'email', value: string) => {
+    setCollectiveStudents((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    )
+  }, [])
+
+  const addCollectiveStudent = useCallback(() => {
+    setCollectiveStudents((prev) => [...prev, { id: crypto.randomUUID(), name: '', email: '' }])
+  }, [])
+
+  const removeCollectiveStudent = useCallback((id: string) => {
+    setCollectiveStudents((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((item) => item.id !== id)
+    })
+  }, [])
+
+  const mergeSelectedSchoolStudents = useCallback(() => {
+    if (selectedSchoolStudentIds.length === 0) return
+    const selected = schoolStudentPool.filter((item) => selectedSchoolStudentIds.includes(item.userId))
+    setCollectiveStudents((prev) => {
+      const map = new Map<string, CollectiveStudentItem>()
+      for (const row of prev) {
+        const key = row.email.trim().toLowerCase() || row.id
+        map.set(key, row)
+      }
+      for (const row of selected) {
+        const email = row.email.trim().toLowerCase()
+        if (!email) continue
+        if (!map.has(email)) {
+          map.set(email, {
+            id: crypto.randomUUID(),
+            name: row.name,
+            email: row.email,
+            userId: row.userId,
+          })
+        }
+      }
+      return Array.from(map.values())
+    })
+  }, [schoolStudentPool, selectedSchoolStudentIds])
+
   const onContinue = useCallback(async () => {
     const currentCourse = useCheckoutStore.getState().course
     const currentUserInfo = useCheckoutStore.getState().userInfo
@@ -194,40 +316,77 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setError('Masukkan alamat email yang valid.')
       return
     }
+    if (isInstructorBuyer && isCollectivePurchase) {
+      if (validCollectiveStudents.length === 0) {
+        setError('Isi minimal 1 data siswa (nama + email valid) untuk pembelian kolektif.')
+        return
+      }
+      const invalidRows = collectiveStudents.some(
+        (item) => (item.name.trim() || item.email.trim()) && (!item.name.trim() || !isValidEmail(item.email.trim()))
+      )
+      if (invalidRows) {
+        setError('Periksa kembali data siswa. Nama wajib dan email harus valid.')
+        return
+      }
+    }
 
     setError(null)
     setLoadingContinue(true)
 
     // ── Harga untuk initiate: ambil langsung dari data integer course ──
     // Prioritas total: early bird -> price -> normal -> basePrice
-    const expectedTotalRupiah = (
+    const unitExpectedRupiah = (
       (typeof currentCourse.priceEarlyBird === 'number' && currentCourse.priceEarlyBird > 0 ? currentCourse.priceEarlyBird : 0)
       || (typeof currentCourse.price === 'number' && currentCourse.price > 0 ? currentCourse.price : 0)
       || (typeof currentCourse.priceNormal === 'number' && currentCourse.priceNormal > 0 ? currentCourse.priceNormal : 0)
       || basePrice
     )
+    const participantsCount = isInstructorBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
+    const expectedTotalRupiah = unitExpectedRupiah > 0 ? unitExpectedRupiah * participantsCount : 0
     // Prioritas harga normal: normal -> price
-    const normalPriceRupiah = (
+    const unitNormalRupiah = (
       (typeof currentCourse.priceNormal === 'number' && currentCourse.priceNormal > 0 ? currentCourse.priceNormal : 0)
       || (typeof currentCourse.price === 'number' && currentCourse.price > 0 ? currentCourse.price : 0)
     )
+    const normalPriceRupiah = unitNormalRupiah > 0 ? unitNormalRupiah * participantsCount : 0
 
     try {
+      const currentPromoCode = useCheckoutStore.getState().promoCode.trim()
       const res = await initiateCheckout({
         programSlug: currentCourse.slug,
         programId: currentCourse.id,
         name: currentUserInfo.name.trim(),
         email: currentUserInfo.email.trim(),
         ...(currentUser?.id && { userId: currentUser.id }),
-        promoCode: useCheckoutStore.getState().promoCode.trim() || '',
+        promoCode: currentPromoCode || '',
         expectedTotal: expectedTotalRupiah,
         normalPrice: normalPriceRupiah,
+        buyerRole: isInstructorBuyer ? 'guru' : 'student',
+        roleHint: isInstructorBuyer ? 'guru' : 'student',
+        quantity: participantsCount,
+        students:
+          isInstructorBuyer && isCollectivePurchase
+            ? validCollectiveStudents.map((item) => ({
+              name: item.name.trim(),
+              email: item.email.trim(),
+              userId: item.userId,
+            }))
+            : undefined,
       })
 
       setCheckoutId(res.checkoutId)
 
       // Utamakan total dari backend; fallback ke expectedTotal jika backend return 0
-      const effectiveTotal = (res.total > 0 ? res.total : 0) || expectedTotalRupiah || basePrice
+      const backendTotal = res.total > 0 ? res.total : 0
+      const shouldPreserveCollectiveTotal =
+        participantsCount > 1 &&
+        expectedTotalRupiah > 0 &&
+        !currentPromoCode &&
+        backendTotal > 0 &&
+        backendTotal < expectedTotalRupiah
+      const effectiveTotal = shouldPreserveCollectiveTotal
+        ? expectedTotalRupiah
+        : (backendTotal || expectedTotalRupiah || expectedTotalFromCount)
       setOrderSummary({
         orderId: res.orderId,
         total: effectiveTotal,
@@ -251,7 +410,19 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     } finally {
       setLoadingContinue(false)
     }
-  }, [basePrice, setCheckoutId, setOrderSummary, setStep, setUniqueCode])
+  }, [
+    basePrice,
+    collectiveParticipantCount,
+    collectiveStudents,
+    expectedTotalFromCount,
+    isCollectivePurchase,
+    isInstructorBuyer,
+    setCheckoutId,
+    setOrderSummary,
+    setStep,
+    setUniqueCode,
+    validCollectiveStudents,
+  ])
 
   const onPay = useCallback(async () => {
     const paymentOrderId = orderSummary?.orderId ?? checkoutId
@@ -568,7 +739,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
             </section>
 
             <p className="text-center text-sm text-gray-500">
-              Belum transfer? Anda bisa upload bukti nanti dari halaman <a href="#/student/transactions" className="text-primary font-medium hover:underline">Riwayat Transaksi</a>.
+              Belum transfer? Anda bisa upload bukti nanti dari halaman <a href={user?.role === 'instructor' ? '#/instructor/transactions' : '#/student/transactions'} className="text-primary font-medium hover:underline">Riwayat Transaksi</a>.
             </p>
           </div>
         </main>
@@ -616,6 +787,134 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input type="email" value={userInfo.email} onChange={(e) => setUserInfo({ ...userInfo, email: e.target.value })} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="email@contoh.com" />
                   </div>
+                  {isInstructorBuyer && (
+                    <div className="rounded-xl border border-slate-200 p-4 bg-slate-50 space-y-3">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={isCollectivePurchase}
+                          onChange={(e) => setIsCollectivePurchase(e.target.checked)}
+                          className="rounded border-gray-300 text-primary focus:ring-primary/30"
+                        />
+                        Pembelian kolektif untuk beberapa siswa
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Aktifkan ini jika akun guru membeli 1 kelas untuk beberapa siswa sekaligus.
+                      </p>
+                    </div>
+                  )}
+                  {isInstructorBuyer && isCollectivePurchase && (
+                    <div className="rounded-xl border border-slate-200 p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">Daftar Siswa</h3>
+                        <button
+                          type="button"
+                          onClick={addCollectiveStudent}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5"
+                        >
+                          + Tambah Siswa
+                        </button>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 p-3 mb-3 bg-slate-50">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <button
+                            type="button"
+                            onClick={loadSchoolStudents}
+                            disabled={loadingSchoolStudents || !instructorSchoolId}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-50"
+                          >
+                            {loadingSchoolStudents ? 'Memuat siswa sekolah...' : 'Ambil dari list siswa 1 sekolah'}
+                          </button>
+                          {schoolStudentPool.length > 0 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSchoolStudentIds(schoolStudentPool.map((s) => s.userId))}
+                                className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-white"
+                              >
+                                Pilih semua
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSchoolStudentIds([])}
+                                className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-white"
+                              >
+                                Reset pilih
+                              </button>
+                              <button
+                                type="button"
+                                onClick={mergeSelectedSchoolStudents}
+                                className="text-xs px-3 py-1.5 rounded border border-primary text-primary hover:bg-primary/5"
+                              >
+                                Tambahkan siswa terpilih
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {schoolStudentsError && (
+                          <p className="text-xs text-amber-700 mb-2">{schoolStudentsError}</p>
+                        )}
+                        {schoolStudentPool.length > 0 && (
+                          <div className="max-h-40 overflow-auto rounded border bg-white p-2 space-y-1">
+                            {schoolStudentPool.map((row) => {
+                              const checked = selectedSchoolStudentIds.includes(row.userId)
+                              return (
+                                <label key={row.userId} className="flex items-center gap-2 text-xs text-gray-700 px-1 py-1 rounded hover:bg-slate-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const isChecked = e.target.checked
+                                      setSelectedSchoolStudentIds((prev) =>
+                                        isChecked ? [...prev, row.userId] : prev.filter((id) => id !== row.userId)
+                                      )
+                                    }}
+                                  />
+                                  <span className="font-medium">{row.name}</span>
+                                  <span className="text-gray-500">({row.email})</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-3">
+                        {collectiveStudents.map((item, idx) => (
+                          <div key={item.id} className="grid md:grid-cols-12 gap-2 items-center">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => updateCollectiveStudent(item.id, 'name', e.target.value)}
+                              placeholder={`Nama siswa #${idx + 1}`}
+                              className="md:col-span-5 rounded-lg border px-3 py-2 text-sm"
+                            />
+                            <input
+                              type="email"
+                              value={item.email}
+                              onChange={(e) => updateCollectiveStudent(item.id, 'email', e.target.value)}
+                              placeholder={`Email siswa #${idx + 1}`}
+                              className="md:col-span-6 rounded-lg border px-3 py-2 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeCollectiveStudent(item.id)}
+                              disabled={collectiveStudents.length <= 1}
+                              className="md:col-span-1 inline-flex items-center justify-center px-2 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                              title="Hapus siswa"
+                              aria-label="Hapus siswa"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-5-3h4a1 1 0 011 1v2H9V5a1 1 0 011-1z" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">
+                        Jumlah siswa valid: <strong>{collectiveParticipantCount}</strong>
+                      </p>
+                    </div>
+                  )}
                   {step === 'info' && (
                     <button onClick={onContinue} disabled={!userInfo.name || !userInfo.email || loadingContinue} className="w-full py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50">
                       {loadingContinue ? 'Memproses...' : 'Lanjutkan'}
@@ -650,19 +949,38 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   <p className="text-xs text-gray-500 mb-2">Order ID: {orderSummary.orderId}</p>
                 )}
                 <div className="space-y-2 text-sm">
+                  {purchaseCount > 1 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Jumlah item (siswa)</span>
+                      <span>{purchaseCount}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Harga normal</span>
-                    <span>{course.priceNormal ? formatRupiah(course.priceNormal) : (course.price > 0 ? formatRupiah(course.price) : (orderSummary?.program?.priceDisplay || '—'))}</span>
+                    <span className="text-gray-600">
+                      Item program
+                      {purchaseCount > 1 ? ` (${course.title} x ${purchaseCount})` : ''}
+                    </span>
+                    <span>{subtotalBeforePromo > 0 ? formatRupiah(subtotalBeforePromo) : '—'}</span>
+                  </div>
+                  {purchaseCount > 1 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Harga per item</span>
+                    <span>{unitPromoPrice > 0 ? formatRupiah(unitPromoPrice) : '—'}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{purchaseCount > 1 ? 'Harga normal (total)' : 'Harga normal'}</span>
+                    <span>{expectedNormalTotalFromCount > 0 ? formatRupiah(expectedNormalTotalFromCount) : (expectedTotalFromCount > 0 ? formatRupiah(expectedTotalFromCount) : (orderSummary?.program?.priceDisplay || '—'))}</span>
                   </div>
                   {hasEarlyBirdDiscount && (
                     <>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Potongan harga (Early bird)</span>
-                        <span className="text-green-600">- Rp{earlyBirdDiscountAmount.toLocaleString('id-ID')}</span>
+                        <span className="text-green-600">- Rp{(earlyBirdDiscountAmount * purchaseCount).toLocaleString('id-ID')}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Harga promo (Early bird)</span>
-                        <span>{course.priceEarlyBird ? formatRupiah(course.priceEarlyBird) : '—'}</span>
+                        <span className="text-gray-600">{purchaseCount > 1 ? 'Harga promo (total)' : 'Harga promo (Early bird)'}</span>
+                        <span>{expectedTotalFromCount > 0 ? formatRupiah(expectedTotalFromCount) : '—'}</span>
                       </div>
                     </>
                   )}

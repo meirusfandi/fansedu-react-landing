@@ -334,6 +334,18 @@ export interface CheckoutInitiateRequest {
   expectedTotal?: number
   /** Harga normal program, rupiah integer */
   normalPrice?: number
+  /** Role pembeli untuk flow kolektif (mis. instructor) */
+  buyerRole?: 'student' | 'instructor' | 'guru'
+  /** Hint role untuk backend normalisasi flow */
+  roleHint?: 'student' | 'instructor' | 'guru'
+  /** Jumlah item pembelian (mis. jumlah siswa pada pembelian kolektif) */
+  quantity?: number
+  /** Daftar siswa yang dibelikan kelas oleh guru */
+  students?: Array<{
+    name: string
+    email: string
+    userId?: string
+  }>
 }
 
 /** Response 201 POST /checkout/initiate */
@@ -392,6 +404,40 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
   console.log('[initiateCheckout][7] set body.email', body.email)
   console.log('[initiateCheckout][8] set body.promoCode', body.promoCode)
   console.log('[initiateCheckout][9] set body.promo_code', body.promo_code)
+
+  if (payload.buyerRole) {
+    body.buyerRole = payload.buyerRole
+    body.buyer_role = payload.buyerRole
+    console.log('[initiateCheckout][9a] set buyer role', payload.buyerRole)
+  }
+  if (payload.roleHint) {
+    body.roleHint = payload.roleHint
+    body.role_hint = payload.roleHint
+    console.log('[initiateCheckout][9a-2] set role hint', payload.roleHint)
+  }
+
+  if (payload.quantity != null && payload.quantity > 0) {
+    const qty = Math.max(1, Math.trunc(payload.quantity))
+    body.quantity = qty
+    body.itemCount = qty
+    body.item_count = qty
+    console.log('[initiateCheckout][9b] set quantity/item_count', qty)
+  }
+
+  if (Array.isArray(payload.students) && payload.students.length > 0) {
+    const normalizedStudents = payload.students
+      .map((student) => ({
+        name: String(student.name ?? '').trim(),
+        email: String(student.email ?? '').trim(),
+        user_id: student.userId ? String(student.userId).trim() : undefined,
+      }))
+      .filter((student) => student.name && student.email)
+    if (normalizedStudents.length > 0) {
+      body.students = normalizedStudents
+      body.student_items = normalizedStudents
+      console.log('[initiateCheckout][9c] set students payload count', normalizedStudents.length)
+    }
+  }
 
   if (payload.userId) {
     body.userId = payload.userId
@@ -875,6 +921,12 @@ export interface TransactionItem {
   orderId: string
   status: string
   total: number
+  quantity?: number
+  unitPrice?: number
+  subtotal?: number
+  uniqueCode?: number
+  isCollective?: boolean
+  students?: Array<{ userId?: string; name?: string; email?: string }>
   finalPrice?: number
   confirmationCode?: number
   programs: { title: string }[]
@@ -921,6 +973,41 @@ export interface StudentNextActionsResponse {
   data: StudentNextActionItem[]
 }
 
+export interface ClassItem {
+  id: string
+  name: string
+  schoolName?: string
+  city?: string
+  province?: string
+}
+
+export interface ClassesResponse {
+  data: ClassItem[]
+}
+
+export interface SchoolItem {
+  id: string
+  name: string
+  slug?: string
+  description?: string
+  address?: string
+  logoUrl?: string
+}
+
+export interface SchoolDetailResponse extends SchoolItem {}
+
+export interface CreateSchoolRequest {
+  name: string
+  slug?: string
+  description?: string
+  address?: string
+  logoUrl?: string
+}
+
+export interface SchoolsResponse {
+  data: SchoolItem[]
+}
+
 function toInt(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
   if (typeof v === 'string' && v.trim()) {
@@ -945,21 +1032,62 @@ function parseTransactionsResponse(raw: unknown): StudentTransactionsResponse {
       toInt(item.confirmationCode) ??
       toInt(item.confirmation_code)
 
+    const uniqueCode =
+      toInt(item.uniqueCode) ??
+      toInt(item.unique_code) ??
+      confirmationCode
+    const quantity =
+      toInt(item.quantity) ??
+      toInt(item.item_count) ??
+      toInt(item.itemCount) ??
+      (Array.isArray(item.students) ? item.students.length : null) ??
+      (Array.isArray(item.student_items) ? item.student_items.length : null) ??
+      1
+    const unitPrice =
+      toInt(item.unitPrice) ??
+      toInt(item.unit_price)
+    const subtotal =
+      toInt(item.subtotal) ??
+      (unitPrice != null && quantity != null ? unitPrice * Math.max(1, quantity) : null)
     const totalRaw =
+      toInt(item.grand_total) ??
       toInt(item.total) ??
       toInt(item.total_amount) ??
       0
 
-    // Total transaksi ditampilkan sebagai harga final + kode konfirmasi (jika ada).
+    // Prioritas total: subtotal + unique code -> total backend -> fallback lama.
     const totalComputed =
-      (finalPrice != null && finalPrice > 0 ? finalPrice : totalRaw) +
-      (confirmationCode != null && confirmationCode > 0 ? confirmationCode : 0)
+      (subtotal != null && subtotal > 0 ? subtotal : (finalPrice != null && finalPrice > 0 ? finalPrice : 0)) +
+      (uniqueCode != null && uniqueCode > 0 ? uniqueCode : 0)
+    const resolvedTotal = totalComputed > 0 ? totalComputed : (totalRaw > 0 ? totalRaw : 0)
+
+    const studentsRaw = Array.isArray(item.students)
+      ? item.students
+      : (Array.isArray(item.student_items) ? item.student_items : [])
+    const students = (studentsRaw as Record<string, unknown>[]).map((student) => ({
+      userId:
+        student.userId != null
+          ? String(student.userId)
+          : (student.user_id != null ? String(student.user_id) : undefined),
+      name: student.name != null ? String(student.name) : undefined,
+      email: student.email != null ? String(student.email) : undefined,
+    }))
+    const isCollective =
+      Boolean(item.isCollective ?? item.is_collective) ||
+      (quantity != null && quantity > 1) ||
+      students.length > 1
 
     return {
       id: String(item.id ?? ''),
       orderId: String(item.orderId ?? item.order_id ?? ''),
       status: String(item.status ?? ''),
-      total: totalComputed > 0 ? totalComputed : 0,
+      total: resolvedTotal,
+      quantity: quantity != null && quantity > 0 ? quantity : 1,
+      unitPrice: unitPrice != null && unitPrice > 0 ? unitPrice : undefined,
+      subtotal: subtotal != null && subtotal > 0 ? subtotal : undefined,
+      uniqueCode: uniqueCode != null && uniqueCode > 0 ? uniqueCode : undefined,
+      isCollective,
+      students: students.length > 0 ? students : undefined,
       finalPrice: finalPrice != null && finalPrice > 0 ? finalPrice : undefined,
       confirmationCode: confirmationCode != null && confirmationCode > 0 ? confirmationCode : undefined,
       programs: Array.isArray(item.programs)
@@ -1070,6 +1198,108 @@ export async function getStudentNextActions(): Promise<StudentNextActionsRespons
       href: String(item.href ?? '#/student'),
       priority: toInt(item.priority) ?? undefined,
     })),
+  }
+}
+
+export async function getClasses(): Promise<ClassesResponse> {
+  const endpoints = [`${API_BASE}/classes`, `${API_BASE}/class`]
+  let lastStatus = 404
+
+  for (const endpoint of endpoints) {
+    const res = await fetch(endpoint, { headers: authHeaders() })
+    if (res.status === 404) {
+      lastStatus = res.status
+      continue
+    }
+    const raw = await handleResponse<unknown>(res)
+    const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+    const listRaw = Array.isArray(payload.data)
+      ? payload.data
+      : (Array.isArray(payload.classes)
+        ? payload.classes
+        : (Array.isArray(raw) ? raw : []))
+
+    return {
+      data: (listRaw as Record<string, unknown>[]).map((item, index) => ({
+        id: String(item.id ?? item.class_id ?? `class-${index}`),
+        name: String(item.name ?? item.class_name ?? item.title ?? 'Class'),
+        schoolName:
+          item.school_name != null
+            ? String(item.school_name)
+            : (item.schoolName != null
+              ? String(item.schoolName)
+              : (item.school != null ? String(item.school) : undefined)),
+        city: item.city != null
+          ? String(item.city)
+          : (item.city_name != null ? String(item.city_name) : undefined),
+        province: item.province != null
+          ? String(item.province)
+          : (item.province_name != null ? String(item.province_name) : undefined),
+      })),
+    }
+  }
+
+  if (lastStatus === 404) return { data: [] }
+  return { data: [] }
+}
+
+export async function getSchools(): Promise<SchoolsResponse> {
+  const res = await fetch(`${API_BASE}/schools`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(res)
+  const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const listRaw = Array.isArray(payload.data)
+    ? payload.data
+    : (Array.isArray(payload.schools)
+      ? payload.schools
+      : (Array.isArray(raw) ? raw : []))
+  return {
+    data: (listRaw as Record<string, unknown>[]).map((item, index) => ({
+      id: String(item.id ?? item.school_id ?? `school-${index}`),
+      name: String(item.name ?? 'Sekolah'),
+      slug: item.slug != null ? String(item.slug) : undefined,
+      description: item.description != null ? String(item.description) : undefined,
+      address: item.address != null ? String(item.address) : undefined,
+      logoUrl: item.logo_url != null ? String(item.logo_url) : (item.logoUrl != null ? String(item.logoUrl) : undefined),
+    })),
+  }
+}
+
+export async function getSchoolById(schoolId: string): Promise<SchoolDetailResponse> {
+  const res = await fetch(`${API_BASE}/schools/${encodeURIComponent(schoolId)}`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(res)
+  const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  return {
+    id: String(payload.id ?? schoolId),
+    name: String(payload.name ?? 'Sekolah'),
+    slug: payload.slug != null ? String(payload.slug) : undefined,
+    description: payload.description != null ? String(payload.description) : undefined,
+    address: payload.address != null ? String(payload.address) : undefined,
+    logoUrl: payload.logo_url != null ? String(payload.logo_url) : (payload.logoUrl != null ? String(payload.logoUrl) : undefined),
+  }
+}
+
+export async function createSchool(body: CreateSchoolRequest): Promise<SchoolDetailResponse> {
+  const payload = {
+    name: body.name,
+    slug: body.slug ?? undefined,
+    description: body.description ?? undefined,
+    address: body.address ?? undefined,
+    logo_url: body.logoUrl ?? undefined,
+  }
+  const res = await fetch(`${API_BASE}/schools`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  const raw = await handleResponse<unknown>(res)
+  const data = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  return {
+    id: String(data.id ?? ''),
+    name: String(data.name ?? body.name),
+    slug: data.slug != null ? String(data.slug) : body.slug,
+    description: data.description != null ? String(data.description) : body.description,
+    address: data.address != null ? String(data.address) : body.address,
+    logoUrl: data.logo_url != null ? String(data.logo_url) : (data.logoUrl != null ? String(data.logoUrl) : body.logoUrl),
   }
 }
 
@@ -1190,6 +1420,14 @@ export interface InstructorStudentsResponse {
   data: InstructorStudentItem[]
 }
 
+export interface SchoolStudentItem {
+  userId: string
+  name: string
+  email: string
+  schoolId?: string
+  schoolName?: string
+}
+
 export interface InstructorEarningItem {
   period: string
   revenue: number
@@ -1210,6 +1448,42 @@ export async function getInstructorStudents(): Promise<InstructorStudentsRespons
   return handleResponse<InstructorStudentsResponse>(res)
 }
 
+export async function getStudentsBySchool(schoolId: string): Promise<SchoolStudentItem[]> {
+  const sid = schoolId.trim()
+  if (!sid) return []
+  const endpoints = [
+    `${API_BASE}/schools/${encodeURIComponent(sid)}/students`,
+    `${API_BASE}/school/${encodeURIComponent(sid)}/students`,
+    `${API_BASE}/instructor/schools/${encodeURIComponent(sid)}/students`,
+    `${API_BASE}/instructor/students?schoolId=${encodeURIComponent(sid)}`,
+    `${API_BASE}/instructor/students?school_id=${encodeURIComponent(sid)}`,
+  ]
+
+  const normalize = (raw: unknown): SchoolStudentItem[] => {
+    const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+    const listRaw = Array.isArray(payload.data)
+      ? payload.data
+      : (Array.isArray(payload.students)
+        ? payload.students
+        : (Array.isArray(raw) ? raw : []))
+    return (listRaw as Record<string, unknown>[]).map((item, index) => ({
+      userId: String(item.userId ?? item.user_id ?? item.id ?? `student-${index}`),
+      name: String(item.name ?? item.full_name ?? item.user_name ?? 'Siswa'),
+      email: String(item.email ?? item.user_email ?? ''),
+      schoolId: item.schoolId != null ? String(item.schoolId) : (item.school_id != null ? String(item.school_id) : undefined),
+      schoolName: item.schoolName != null ? String(item.schoolName) : (item.school_name != null ? String(item.school_name) : undefined),
+    })).filter((item) => item.email)
+  }
+
+  for (const endpoint of endpoints) {
+    const res = await fetch(endpoint, { headers: authHeaders() })
+    if (res.status === 404) continue
+    const data = await handleResponse<unknown>(res)
+    return normalize(data)
+  }
+  return []
+}
+
 export async function getInstructorEarnings(): Promise<InstructorEarningsResponse> {
   const res = await fetch(`${API_BASE}/instructor/earnings`, { headers: authHeaders() })
   return handleResponse<InstructorEarningsResponse>(res)
@@ -1221,6 +1495,8 @@ export interface InstructorProfileResponse {
   phone?: string
   whatsapp?: string
   school?: string
+  schoolId?: string
+  school_id?: string
   classLevel?: string
   city?: string
   province?: string
@@ -1239,6 +1515,8 @@ export interface UpdateInstructorProfileRequest {
   phone?: string
   whatsapp?: string
   school?: string
+  schoolId?: string
+  school_id?: string
   classLevel?: string
   city?: string
   province?: string

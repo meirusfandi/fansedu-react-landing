@@ -11,6 +11,13 @@ export default function InstructorAttemptAIAnalysisPage({
   const [data, setData] = useState<Awaited<ReturnType<typeof getInstructorAttemptAIAnalysis>> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const backHref = (() => {
+    const hash = window.location.hash || ''
+    const queryIndex = hash.indexOf('?')
+    if (queryIndex === -1) return '#/instructor/students'
+    const query = new URLSearchParams(hash.slice(queryIndex + 1))
+    return query.get('redirect') || '#/instructor/students'
+  })()
 
   useEffect(() => {
     setLoading(true)
@@ -29,10 +36,10 @@ export default function InstructorAttemptAIAnalysisPage({
     return (
       <div className="space-y-4">
         <a
-          href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}`}
+          href={backHref}
           className="text-primary font-medium text-sm hover:underline"
         >
-          ← Kembali ke analisis tryout
+          ← Kembali
         </a>
         <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-sm">{error}</div>
       </div>
@@ -44,10 +51,10 @@ export default function InstructorAttemptAIAnalysisPage({
   return (
     <div className="space-y-6">
       <a
-        href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}`}
+        href={backHref}
         className="inline-block text-primary font-medium text-sm hover:underline"
       >
-        ← Kembali ke analisis tryout
+        ← Kembali
       </a>
 
       <div className="rounded-2xl border bg-white p-6 space-y-6">

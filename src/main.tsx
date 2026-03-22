@@ -8,7 +8,7 @@ import TryoutInfoPage from './pages/TryoutInfo.tsx'
 import TryoutLeaderboardPage from './pages/TryoutLeaderboard.tsx'
 import LMSApp, { parseLmsRoute } from './pages/lms/LMSApp.tsx'
 
-const LMS_PATHS = /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/(success|confirm))?|student(\/[^?]*)?|instructor(\/[^/]*)?)(\?|$)/
+const LMS_PATHS = /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/(success|confirm))?|student(\/[^?]*)?|instructor(\/[^?]*)?)(\?|$)/
 
 function parseHash(): { route: 'home' | 'article' | 'tryout' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
   const hash = window.location.hash.slice(1) || '/'

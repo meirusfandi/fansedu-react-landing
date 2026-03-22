@@ -1,11 +1,27 @@
 import { useState, useEffect } from 'react'
 import {
+  createSchool,
   getInstructorProfile,
+  getSchools,
   updateInstructorPassword,
   updateInstructorProfile,
 } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { ApiError } from '../../lib/api'
+
+interface ProvinceItem {
+  id: string
+  name: string
+}
+
+interface CityItem {
+  id: string
+  name: string
+}
+
+const OPEN_PROVINCES_API = 'https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json'
+const OPEN_CITIES_API_BY_PROVINCE = (provinceId: string) =>
+  `https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${encodeURIComponent(provinceId)}.json`
 
 export default function InstructorProfilePage() {
   const setUser = useAuthStore((s) => s.setUser)
@@ -14,16 +30,25 @@ export default function InstructorProfilePage() {
   const [email, setEmail] = useState(user?.email ?? '')
   const [phone, setPhone] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
-  const [school, setSchool] = useState('')
-  const [classLevel, setClassLevel] = useState('')
+  const [schoolId, setSchoolId] = useState('')
+  const [schoolNameFallback, setSchoolNameFallback] = useState('')
+  const [schoolOptions, setSchoolOptions] = useState<Array<{ id: string; name: string }>>([])
+  const [showAddSchool, setShowAddSchool] = useState(false)
+  const [creatingSchool, setCreatingSchool] = useState(false)
+  const [schoolMessage, setSchoolMessage] = useState<string | null>(null)
+  const [newSchoolName, setNewSchoolName] = useState('')
+  const [newSchoolDescription, setNewSchoolDescription] = useState('')
+  const [newSchoolAddress, setNewSchoolAddress] = useState('')
+  const [newSchoolLogoUrl, setNewSchoolLogoUrl] = useState('')
   const [city, setCity] = useState('')
+  const [cityOptions, setCityOptions] = useState<CityItem[]>([])
+  const [loadingSchoolOptions, setLoadingSchoolOptions] = useState(false)
+  const [provinces, setProvinces] = useState<ProvinceItem[]>([])
+  const [provinceId, setProvinceId] = useState('')
+  const [loadingProvinces, setLoadingProvinces] = useState(false)
+  const [loadingCities, setLoadingCities] = useState(false)
   const [province, setProvince] = useState('')
   const [gender, setGender] = useState('')
-  const [birthDate, setBirthDate] = useState('')
-  const [bio, setBio] = useState('')
-  const [parentName, setParentName] = useState('')
-  const [parentPhone, setParentPhone] = useState('')
-  const [instagram, setInstagram] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -59,41 +84,120 @@ export default function InstructorProfilePage() {
         setEmail(String(res.email ?? ''))
         setPhone(String((res.phone ?? res.phoneNumber ?? '') as string))
         setWhatsapp(String((res.whatsapp ?? res.whatsappNumber ?? '') as string))
-        setSchool(String((res.school ?? res.schoolName ?? '') as string))
-        setClassLevel(String((res.classLevel ?? res.class ?? res.grade ?? '') as string))
+        setSchoolId(String((res.schoolId ?? res.school_id ?? '') as string))
+        setSchoolNameFallback(String((res.school ?? res.schoolName ?? '') as string))
         setCity(String((res.city ?? '') as string))
         setProvince(String((res.province ?? '') as string))
         setGender(String((res.gender ?? '') as string))
-        setBirthDate(String((res.birthDate ?? res.birth_date ?? '') as string))
-        setBio(String((res.bio ?? '') as string))
-        setParentName(String((res.parentName ?? res.parent_name ?? '') as string))
-        setParentPhone(String((res.parentPhone ?? res.parent_phone ?? '') as string))
-        setInstagram(String((res.instagram ?? '') as string))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    setLoadingSchoolOptions(true)
+    getSchools()
+      .then((res) => {
+        setSchoolOptions((res.data || []).map((item) => ({ id: item.id, name: item.name })))
+      })
+      .catch(() => {
+        setSchoolOptions([])
+      })
+      .finally(() => setLoadingSchoolOptions(false))
+  }, [])
+
+  useEffect(() => {
+    if (!schoolId && schoolNameFallback.trim() && schoolOptions.length > 0) {
+      const matched = schoolOptions.find(
+        (item) => item.name.trim().toLowerCase() === schoolNameFallback.trim().toLowerCase()
+      )
+      if (matched) setSchoolId(matched.id)
+    }
+  }, [schoolId, schoolNameFallback, schoolOptions])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingProvinces(true)
+    fetch(OPEN_PROVINCES_API)
+      .then((res) => res.json())
+      .then((rows: unknown) => {
+        if (cancelled) return
+        const list = Array.isArray(rows)
+          ? rows.map((item) => item as Record<string, unknown>)
+          : []
+        const parsed = list.map((item) => ({
+          id: String(item.id ?? ''),
+          name: String(item.name ?? ''),
+        })).filter((item) => item.id && item.name)
+        setProvinces(parsed)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setProvinces([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProvinces(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!provinceId) {
+      setCityOptions([])
+      return
+    }
+    let cancelled = false
+    setLoadingCities(true)
+    fetch(OPEN_CITIES_API_BY_PROVINCE(provinceId))
+      .then((res) => res.json())
+      .then((rows: unknown) => {
+        if (cancelled) return
+        const list = Array.isArray(rows)
+          ? rows.map((item) => item as Record<string, unknown>)
+          : []
+        const parsed = list.map((item) => ({
+          id: String(item.id ?? ''),
+          name: String(item.name ?? ''),
+        })).filter((item) => item.id && item.name)
+        setCityOptions(parsed)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setCityOptions([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCities(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [provinceId])
+
+  useEffect(() => {
+    if (!province || provinces.length === 0 || provinceId) return
+    const matched = provinces.find((item) => item.name.toLowerCase() === province.toLowerCase())
+    if (matched) setProvinceId(matched.id)
+  }, [province, provinces, provinceId])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
     setSaving(true)
     try {
+      const selectedSchool = schoolOptions.find((item) => item.id === schoolId)
       await updateInstructorProfile({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
         whatsapp: whatsapp.trim(),
-        school: school.trim(),
-        classLevel: classLevel.trim(),
+        schoolId: schoolId || undefined,
+        school_id: schoolId || undefined,
+        school: selectedSchool?.name ?? undefined,
         city: city.trim(),
         province: province.trim(),
         gender: gender.trim(),
-        birthDate: birthDate.trim(),
-        bio: bio.trim(),
-        parentName: parentName.trim(),
-        parentPhone: parentPhone.trim(),
-        instagram: instagram.trim(),
       })
       if (user) setUser({ ...user, name: name.trim(), email: email.trim() })
       setMessage('Profil berhasil disimpan.')
@@ -136,6 +240,42 @@ export default function InstructorProfilePage() {
       setPasswordMessage(err instanceof ApiError ? err.message : 'Gagal memperbarui password.')
     } finally {
       setSavingPassword(false)
+    }
+  }
+
+  const handleCreateSchool = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSchoolMessage(null)
+    if (!newSchoolName.trim()) {
+      setSchoolMessage('Nama sekolah wajib diisi.')
+      return
+    }
+    setCreatingSchool(true)
+    try {
+      const created = await createSchool({
+        name: newSchoolName.trim(),
+        description: newSchoolDescription.trim() || undefined,
+        address: newSchoolAddress.trim() || undefined,
+        logoUrl: newSchoolLogoUrl.trim() || undefined,
+      })
+      const option = { id: created.id || `school-${Date.now()}`, name: created.name }
+      setSchoolOptions((prev) => {
+        const exists = prev.some((item) => item.name.toLowerCase() === option.name.toLowerCase())
+        if (exists) return prev
+        return [option, ...prev]
+      })
+      setSchoolId(option.id)
+      setSchoolNameFallback(option.name)
+      setShowAddSchool(false)
+      setSchoolMessage('Sekolah berhasil ditambahkan.')
+      setNewSchoolName('')
+      setNewSchoolDescription('')
+      setNewSchoolAddress('')
+      setNewSchoolLogoUrl('')
+    } catch (err) {
+      setSchoolMessage(err instanceof ApiError ? err.message : 'Gagal menambahkan sekolah.')
+    } finally {
+      setCreatingSchool(false)
     }
   }
 
@@ -193,21 +333,116 @@ export default function InstructorProfilePage() {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
-              <input type="text" value={school} onChange={(e) => setSchool(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-              <input type="text" value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
+              <select
+                value={schoolId}
+                onChange={(e) => setSchoolId(e.target.value)}
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                disabled={loadingSchoolOptions}
+              >
+                <option value="">Pilih sekolah</option>
+                {schoolOptions.map((schoolItem) => (
+                  <option key={schoolItem.id} value={schoolItem.id}>{schoolItem.name}</option>
+                ))}
+              </select>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs text-primary font-medium hover:underline"
+                  onClick={() => setShowAddSchool((prev) => !prev)}
+                >
+                  {showAddSchool ? 'Tutup form sekolah baru' : 'Sekolah tidak ada? Tambah sekolah'}
+                </button>
+              </div>
+              {schoolMessage && (
+                <p className={`mt-1 text-xs ${schoolMessage.includes('berhasil') ? 'text-green-700' : 'text-red-700'}`}>
+                  {schoolMessage}
+                </p>
+              )}
+              {schoolOptions.length === 0 && !loadingSchoolOptions && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Data sekolah belum tersedia dari API schools.
+                </p>
+              )}
+              {showAddSchool && (
+                <form onSubmit={handleCreateSchool} className="mt-3 rounded-lg border border-slate-200 p-3 space-y-2 bg-slate-50">
+                  <input
+                    type="text"
+                    value={newSchoolName}
+                    onChange={(e) => setNewSchoolName(e.target.value)}
+                    placeholder="Nama sekolah"
+                    className="w-full rounded-md border px-3 py-2 text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={newSchoolAddress}
+                    onChange={(e) => setNewSchoolAddress(e.target.value)}
+                    placeholder="Alamat (opsional)"
+                    className="w-full rounded-md border px-3 py-2 text-sm bg-white"
+                  />
+                  <textarea
+                    value={newSchoolDescription}
+                    onChange={(e) => setNewSchoolDescription(e.target.value)}
+                    placeholder="Deskripsi (opsional)"
+                    className="w-full rounded-md border px-3 py-2 text-sm bg-white"
+                    rows={2}
+                  />
+                  <input
+                    type="url"
+                    value={newSchoolLogoUrl}
+                    onChange={(e) => setNewSchoolLogoUrl(e.target.value)}
+                    placeholder="Logo URL (opsional)"
+                    className="w-full rounded-md border px-3 py-2 text-sm bg-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingSchool}
+                    className="w-full rounded-md bg-primary text-white text-sm font-medium py-2 disabled:opacity-50"
+                  >
+                    {creatingSchool ? 'Menyimpan...' : 'Simpan sekolah'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kota</label>
-              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Provinsi</label>
+              <select
+                value={provinceId}
+                onChange={(e) => {
+                  const selectedId = e.target.value
+                  setProvinceId(selectedId)
+                  const selectedProvince = provinces.find((item) => item.id === selectedId)
+                  setProvince(selectedProvince?.name ?? '')
+                  setCity('')
+                }}
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                disabled={loadingProvinces}
+              >
+                <option value="">Pilih provinsi</option>
+                {provinces.map((provinceItem) => (
+                  <option key={provinceItem.id} value={provinceItem.id}>{provinceItem.name}</option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Provinsi</label>
-              <input type="text" value={province} onChange={(e) => setProvince(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kabupaten/Kota</label>
+              <select
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                disabled={!provinceId || loadingCities}
+              >
+                <option value="">Pilih kabupaten/kota</option>
+                {cityOptions.map((cityItem) => (
+                  <option key={cityItem.id} value={cityItem.name}>{cityItem.name}</option>
+                ))}
+              </select>
+              {cityOptions.length === 0 && !loadingCities && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {provinceId ? 'Data kabupaten/kota belum tersedia dari API global.' : 'Pilih provinsi dulu untuk melihat kabupaten/kota.'}
+                </p>
+              )}
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
@@ -216,7 +451,7 @@ export default function InstructorProfilePage() {
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
-                className="w-full rounded-lg border px-4 py-2.5 text-sm bg-white"
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
               >
                 <option value="">Pilih jenis kelamin</option>
                 <option value="male">Laki-laki</option>
@@ -224,28 +459,6 @@ export default function InstructorProfilePage() {
                 <option value="other">Lainnya</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Lahir</label>
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
-            </div>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label>
-              <input type="text" value={parentName} onChange={(e) => setParentName(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">No. HP Orang Tua</label>
-              <input type="text" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram</label>
-            <input type="text" value={instagram} onChange={(e) => setInstagram(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
-            <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
           </div>
           <button type="submit" disabled={saving} className="w-full py-2.5 rounded-xl bg-primary text-white font-medium text-sm hover:bg-primary-hover disabled:opacity-50">
             {saving ? 'Menyimpan...' : 'Simpan'}

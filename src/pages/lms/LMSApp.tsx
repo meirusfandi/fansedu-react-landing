@@ -19,15 +19,18 @@ import { InstructorLayout } from './InstructorLayout'
 import InstructorDashboardPage from './InstructorDashboardPage'
 import InstructorCoursesPage from './InstructorCoursesPage'
 import InstructorStudentsPage from './InstructorStudentsPage'
+import InstructorStudentDetailPage from './InstructorStudentDetailPage'
+import InstructorTransactionsPage from './InstructorTransactionsPage'
 import InstructorEarningsPage from './InstructorEarningsPage'
 import InstructorProfilePage from './InstructorProfilePage'
 import InstructorTryoutsPage from './InstructorTryoutsPage'
 import InstructorTryoutAnalysisPage from './InstructorTryoutAnalysisPage'
 import InstructorAttemptAIAnalysisPage from './InstructorAttemptAIAnalysisPage'
+import InstructorTryoutStudentDetailPage from './InstructorTryoutStudentDetailPage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
 
 export interface LmsRoute {
-  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-course-learn' | 'student-tryout' | 'student-tryout-detail' | 'student-leaderboard' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-earnings' | 'instructor-profile' | 'instructor-tryouts' | 'instructor-leaderboard' | 'instructor-tryout-analysis' | 'instructor-attempt-ai'
+  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-course-learn' | 'student-tryout' | 'student-tryout-detail' | 'student-leaderboard' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-student-detail' | 'instructor-transactions' | 'instructor-checkout-confirm' | 'instructor-earnings' | 'instructor-profile' | 'instructor-tryouts' | 'instructor-leaderboard' | 'instructor-tryout-analysis' | 'instructor-tryout-student-detail' | 'instructor-attempt-ai'
   programSlug?: string
   authRedirect?: string
   authTab?: string
@@ -39,6 +42,7 @@ export interface LmsRoute {
   studentPath?: string
   instructorPath?: string
   instructorTryoutId?: string
+  instructorStudentId?: string
   instructorAttemptId?: string
 }
 
@@ -80,13 +84,34 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (pathOnly === '/instructor') return { type: 'instructor', instructorPath: '/instructor' }
   if (pathOnly === '/instructor/courses') return { type: 'instructor-courses', instructorPath: '/instructor/courses' }
   if (pathOnly === '/instructor/students') return { type: 'instructor-students', instructorPath: '/instructor/students' }
+  const instructorStudentDetailMatch = pathOnly.match(/^\/instructor\/students\/([^/]+)$/)
+  if (instructorStudentDetailMatch) {
+    return {
+      type: 'instructor-student-detail',
+      instructorStudentId: instructorStudentDetailMatch[1],
+      instructorPath: '/instructor/students',
+    }
+  }
+  if (pathOnly === '/instructor/transactions') return { type: 'instructor-transactions', instructorPath: '/instructor/transactions' }
+  if (pathOnly === '/instructor/transactions/confirm') {
+    return { type: 'instructor-checkout-confirm', checkoutConfirmOrderId: query.get('order') || undefined, instructorPath: '/instructor/transactions' }
+  }
   if (pathOnly === '/instructor/earnings') return { type: 'instructor-earnings', instructorPath: '/instructor/earnings' }
   if (pathOnly === '/instructor/profile') return { type: 'instructor-profile', instructorPath: '/instructor/profile' }
-  if (pathOnly === '/instructor/tryouts') return { type: 'instructor-tryouts', instructorPath: '/instructor/tryouts' }
+  if (pathOnly === '/instructor/tryouts') return { type: 'instructor-students', instructorPath: '/instructor/students' }
   const instructorLeaderboardMatch = pathOnly.match(/^\/instructor\/leaderboard\/([^/]+)$/)
   if (instructorLeaderboardMatch) return { type: 'instructor-leaderboard', instructorTryoutId: instructorLeaderboardMatch[1], instructorPath: '/instructor/tryouts' }
   const tryoutAnalysisMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/?$/)
   if (tryoutAnalysisMatch) return { type: 'instructor-tryout-analysis', instructorTryoutId: tryoutAnalysisMatch[1], instructorPath: '/instructor/tryouts' }
+  const tryoutStudentDetailMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/students\/([^/]+)\/?$/)
+  if (tryoutStudentDetailMatch) {
+    return {
+      type: 'instructor-tryout-student-detail',
+      instructorTryoutId: tryoutStudentDetailMatch[1],
+      instructorStudentId: tryoutStudentDetailMatch[2],
+      instructorPath: '/instructor/tryouts',
+    }
+  }
   const attemptAiMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/attempts\/([^/]+)\/ai-analysis\/?$/)
   if (attemptAiMatch) return { type: 'instructor-attempt-ai', instructorTryoutId: attemptAiMatch[1], instructorAttemptId: attemptAiMatch[2], instructorPath: '/instructor/tryouts' }
   return null
@@ -190,6 +215,24 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
           <InstructorStudentsPage />
         </InstructorLayout>
       )
+    case 'instructor-student-detail':
+      return (
+        <InstructorLayout currentPath="/instructor/students">
+          <InstructorStudentDetailPage studentId={route.instructorStudentId ?? ''} />
+        </InstructorLayout>
+      )
+    case 'instructor-transactions':
+      return (
+        <InstructorLayout currentPath="/instructor/transactions">
+          <InstructorTransactionsPage />
+        </InstructorLayout>
+      )
+    case 'instructor-checkout-confirm':
+      return (
+        <InstructorLayout currentPath="/instructor/transactions">
+          <CheckoutConfirmPage orderId={route.checkoutConfirmOrderId ?? null} embedded scope="instructor" />
+        </InstructorLayout>
+      )
     case 'instructor-earnings':
       return (
         <InstructorLayout currentPath="/instructor/earnings">
@@ -218,6 +261,15 @@ export default function LMSApp({ route }: { route: LmsRoute }) {
       return (
         <InstructorLayout currentPath="/instructor/tryouts">
           <InstructorTryoutAnalysisPage tryoutId={route.instructorTryoutId ?? ''} />
+        </InstructorLayout>
+      )
+    case 'instructor-tryout-student-detail':
+      return (
+        <InstructorLayout currentPath="/instructor/tryouts">
+          <InstructorTryoutStudentDetailPage
+            tryoutId={route.instructorTryoutId ?? ''}
+            studentId={route.instructorStudentId ?? ''}
+          />
         </InstructorLayout>
       )
     case 'instructor-attempt-ai':

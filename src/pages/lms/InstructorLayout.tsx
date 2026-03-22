@@ -5,8 +5,7 @@ const MENU = [
   { href: '#/instructor', label: 'Dashboard' },
   { href: '#/instructor/courses', label: 'Kursus Saya' },
   { href: '#/instructor/students', label: 'Siswa' },
-  { href: '#/instructor/tryouts', label: 'Analisis Tryout' },
-  { href: '#/instructor/earnings', label: 'Pendapatan' },
+  { href: '#/instructor/transactions', label: 'Transaksi' },
   { href: '#/instructor/profile', label: 'Profile' },
 ]
 

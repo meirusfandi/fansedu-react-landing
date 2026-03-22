@@ -83,8 +83,21 @@ export default function InstructorStudentsPage() {
           </thead>
           <tbody>
             {filtered.map((r) => (
-              <tr key={r.userId} className="border-b last:border-0">
-                <td className="py-4 px-4 font-medium">{r.name}</td>
+              <tr
+                key={r.userId}
+                className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
+                onClick={() => {
+                  window.location.hash = `/instructor/students/${encodeURIComponent(r.userId)}`
+                }}
+              >
+                <td className="py-4 px-4 font-medium">
+                  <a
+                    href={`#/instructor/students/${encodeURIComponent(r.userId)}`}
+                    className="text-primary hover:underline"
+                  >
+                    {r.name}
+                  </a>
+                </td>
                 <td className="py-4 px-4 text-gray-600">{r.email}</td>
                 <td className="py-4 px-4">{r.programTitle}</td>
                 <td className="py-4 px-4">

@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getTransactions } from '../../lib/api'
-import { ApiError } from '../../lib/api'
+import { useEffect, useState } from 'react'
+import { ApiError, getTransactions } from '../../lib/api'
 
 function formatDate(iso: string) {
   try {
@@ -14,7 +13,7 @@ function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 }
 
-export default function StudentTransactionsPage() {
+export default function InstructorTransactionsPage() {
   const [data, setData] = useState<Array<{
     id: string
     orderId: string
@@ -47,15 +46,11 @@ export default function StudentTransactionsPage() {
         setTotalPages(typeof res.totalPages === 'number' ? res.totalPages : null)
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat data.')
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat data transaksi.')
         setData([])
       })
       .finally(() => setLoading(false))
   }, [page, search, statusFilter])
-
-  const safePage = Math.max(1, page)
-  const totalPagesResolved = totalPages ?? 1
-  const totalResolved = total ?? data.length
 
   useEffect(() => {
     setPage(1)
@@ -63,6 +58,10 @@ export default function StudentTransactionsPage() {
 
   if (loading) return <div className="py-8 text-gray-500">Memuat...</div>
   if (error) return <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-sm">{error}</div>
+
+  const safePage = Math.max(1, page)
+  const totalPagesResolved = totalPages ?? 1
+  const totalResolved = total ?? data.length
 
   const statusLabel = (s: string) => {
     const lower = s?.toLowerCase() ?? ''
@@ -73,7 +72,7 @@ export default function StudentTransactionsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Riwayat Transaksi</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Transaksi</h1>
       <div className="rounded-2xl border bg-white p-4 mb-4 flex flex-col md:flex-row gap-3">
         <input
           type="text"
@@ -129,7 +128,7 @@ export default function StudentTransactionsPage() {
                 </td>
                 <td className="py-4 px-4">
                   {(r.status?.toLowerCase() === 'pending') && r.orderId ? (
-                    <a href={`#/checkout/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
+                    <a href={`#/instructor/transactions/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
                       Upload bukti
                     </a>
                   ) : (
