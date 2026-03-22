@@ -4,6 +4,10 @@ import { useNotificationsStore } from '../../store/notifications'
 import { apiLogout, apiGetMe, getMyNotifications } from '../../lib/api'
 import type { AuthUser } from '../../types/auth'
 
+function isAllowedLmsRole(role: unknown): role is AuthUser['role'] {
+  return role === 'student' || role === 'instructor'
+}
+
 export function LmsHeader() {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
@@ -23,9 +27,16 @@ export function LmsHeader() {
   useEffect(() => {
     if (!token) return
     apiGetMe()
-      .then((me) => setUser({ id: me.id, name: me.name, email: me.email, role: me.role as AuthUser['role'] }))
+      .then((me) => {
+        if (!isAllowedLmsRole(me.role)) {
+          logout()
+          window.location.hash = '/auth'
+          return
+        }
+        setUser({ id: me.id, name: me.name, email: me.email, role: me.role })
+      })
       .catch(() => {})
-  }, [token, setUser])
+  }, [token, setUser, logout])
 
   useEffect(() => {
     if (!token) {

@@ -10,7 +10,9 @@ import type { Course } from '../types/course'
 
 function getStoredToken(): string | null {
   try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('fansedu-auth') : null
+    const raw = typeof window !== 'undefined'
+      ? (localStorage.getItem('fansedu-auth') ?? sessionStorage.getItem('fansedu-auth'))
+      : null
     if (!raw) return null
     const parsed = JSON.parse(raw) as { state?: { token?: string } }
     return parsed?.state?.token ?? null
@@ -54,7 +56,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
   ) {
     const role = (() => {
       try {
-        const raw = localStorage.getItem('fansedu-auth')
+        const raw = localStorage.getItem('fansedu-auth') ?? sessionStorage.getItem('fansedu-auth')
         if (!raw) return 'student'
         const parsed = JSON.parse(raw) as { state?: { user?: { role?: 'student' | 'instructor' } } }
         return parsed?.state?.user?.role === 'instructor' ? 'instructor' : 'student'

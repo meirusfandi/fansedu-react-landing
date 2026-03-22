@@ -61,7 +61,7 @@ const AUTH_STORAGE_KEY = 'fansedu-auth'
 function getStoredAuthUser(): { name: string; role: string } | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY) ?? sessionStorage.getItem(AUTH_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as { state?: { user?: { name?: string; role?: string } } }
     const user = parsed?.state?.user

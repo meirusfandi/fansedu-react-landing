@@ -6,6 +6,10 @@ import { apiLogin, apiRegister, ApiError } from '../../lib/api'
 
 type Tab = 'login' | 'register'
 
+function isAllowedLmsRole(role: unknown): role is UserRole {
+  return role === 'student' || role === 'instructor'
+}
+
 export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: { redirect?: string; tab?: string }) {
   const [tab, setTab] = useState<Tab>(tabParam === 'register' ? 'register' : 'login')
 
@@ -53,6 +57,7 @@ export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: {
 function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const login = useAuthStore((s) => s.login)
@@ -67,9 +72,14 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
     setLoading(true)
     try {
       const res = await apiLogin({ email: email.trim(), password })
+      if (!isAllowedLmsRole(res.user.role)) {
+        setError('Akses ditolak. Login hanya untuk akun siswa atau guru.')
+        return
+      }
       login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role as UserRole },
-        res.token
+        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
+        res.token,
+        rememberMe
       )
       window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
@@ -113,6 +123,15 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
             autoComplete="current-password"
           />
         </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary/30"
+          />
+          Ingat saya
+        </label>
         <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50">
           {loading ? 'Memproses...' : 'Masuk'}
         </button>
@@ -157,9 +176,13 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
         password,
         role: role as 'student' | 'instructor',
       })
+      if (!isAllowedLmsRole(res.user.role)) {
+        setError('Akses ditolak. Registrasi di aplikasi ini hanya untuk siswa atau guru.')
+        return
+      }
       // Flow tanpa verifikasi email: langsung login setelah register berhasil.
       login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role as UserRole },
+        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
         res.token
       )
       setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
