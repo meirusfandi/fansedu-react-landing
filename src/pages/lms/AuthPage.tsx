@@ -10,6 +10,35 @@ function isAllowedLmsRole(role: unknown): role is UserRole {
   return role === 'student' || role === 'instructor'
 }
 
+function PasswordToggleButton({
+  visible,
+  onToggle,
+}: {
+  visible: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-primary"
+      aria-label={visible ? 'Sembunyikan password' : 'Lihat password'}
+      title={visible ? 'Sembunyikan password' : 'Lihat password'}
+    >
+      {visible ? (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-4.42M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-0.45 1.35-1.27 2.7-2.38 3.9M6.1 6.1C4.27 7.4 2.88 9.16 2 12c1 3 5 7 10 7 1.76 0 3.4-.5 4.83-1.35" />
+        </svg>
+      ) : (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: { redirect?: string; tab?: string }) {
   const [tab, setTab] = useState<Tab>(tabParam === 'register' ? 'register' : 'login')
 
@@ -57,6 +86,7 @@ export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: {
 function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -113,15 +143,18 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
         </div>
         <div>
           <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">Kata sandi</label>
-          <input
-            id="login-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            placeholder="••••••••"
-            autoComplete="current-password"
-          />
+          <div className="relative">
+            <input
+              id="login-password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 pr-11 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+            <PasswordToggleButton visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+          </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <input
@@ -150,6 +183,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState<UserRole>('student')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -229,15 +263,18 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
         </div>
         <div>
           <label htmlFor="reg-password" className="block text-sm font-medium text-gray-700 mb-1">Kata sandi</label>
-          <input
-            id="reg-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            placeholder="Min. 6 karakter"
-            autoComplete="new-password"
-          />
+          <div className="relative">
+            <input
+              id="reg-password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 pr-11 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              placeholder="Min. 6 karakter"
+              autoComplete="new-password"
+            />
+            <PasswordToggleButton visible={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Daftar sebagai</label>

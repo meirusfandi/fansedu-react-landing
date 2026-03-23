@@ -115,6 +115,8 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [proofError, setProofError] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loadingSetPassword, setLoadingSetPassword] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
   const [isCollectivePurchase, setIsCollectivePurchase] = useState(false)
@@ -126,6 +128,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [selectedSchoolStudentIds, setSelectedSchoolStudentIds] = useState<string[]>([])
   const [loadingSchoolStudents, setLoadingSchoolStudents] = useState(false)
   const [schoolStudentsError, setSchoolStudentsError] = useState<string | null>(null)
+  const [lastLoadedSchoolId, setLastLoadedSchoolId] = useState('')
   const prefilledFromUser = useRef(false)
 
   // --- Harga dari field numerik (utama), bukan dari string ---
@@ -153,8 +156,15 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const expectedTotalFromCount = unitPromoPrice > 0 ? unitPromoPrice * purchaseCount : 0
   const expectedNormalTotalFromCount = unitNormalPrice > 0 ? unitNormalPrice * purchaseCount : 0
 
-  // Total bayar: dari backend jika > 0, else total hasil perhitungan quantity.
-  const totalToPay = orderSummary != null && orderSummary.total > 0 ? orderSummary.total : expectedTotalFromCount
+  // Di halaman checkout (sebelum bayar), jangan tampilkan 3 digit kode unik.
+  // Jika backend sudah mengembalikan total yang termasuk uniqueCode, kurangi dulu untuk display/summary checkout.
+  const totalBeforeUniqueCode = useMemo(() => {
+    const backendTotal = orderSummary != null && orderSummary.total > 0 ? orderSummary.total : 0
+    if (backendTotal > 0 && uniqueCode != null && uniqueCode >= 100 && uniqueCode <= 999 && backendTotal > uniqueCode) {
+      return backendTotal - uniqueCode
+    }
+    return backendTotal > 0 ? backendTotal : expectedTotalFromCount
+  }, [orderSummary, uniqueCode, expectedTotalFromCount])
 
   // Subtotal sebelum promo berdasarkan jumlah item kolektif.
   const subtotalBeforePromo = expectedTotalFromCount > 0 ? expectedTotalFromCount : (basePrice > 0 ? basePrice * purchaseCount : 0)
@@ -246,11 +256,15 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setSchoolStudentPool([])
       return
     }
+    if (lastLoadedSchoolId === instructorSchoolId && schoolStudentPool.length > 0) {
+      return
+    }
     setLoadingSchoolStudents(true)
     setSchoolStudentsError(null)
     try {
       const rows = await getStudentsBySchool(instructorSchoolId)
       setSchoolStudentPool(rows)
+      setLastLoadedSchoolId(instructorSchoolId)
       if (rows.length === 0) setSchoolStudentsError('Belum ada siswa di sekolah ini atau endpoint belum tersedia.')
     } catch (err) {
       setSchoolStudentPool([])
@@ -258,7 +272,20 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     } finally {
       setLoadingSchoolStudents(false)
     }
-  }, [instructorSchoolId])
+  }, [instructorSchoolId, lastLoadedSchoolId, schoolStudentPool.length])
+
+  useEffect(() => {
+    if (!isInstructorBuyer || !isCollectivePurchase || !instructorSchoolId) return
+    if (lastLoadedSchoolId === instructorSchoolId && schoolStudentPool.length > 0) return
+    loadSchoolStudents().catch(() => {})
+  }, [
+    instructorSchoolId,
+    isCollectivePurchase,
+    isInstructorBuyer,
+    lastLoadedSchoolId,
+    loadSchoolStudents,
+    schoolStudentPool.length,
+  ])
 
   const updateCollectiveStudent = useCallback((id: string, field: 'name' | 'email', value: string) => {
     setCollectiveStudents((prev) =>
@@ -305,7 +332,6 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const onContinue = useCallback(async () => {
     const currentCourse = useCheckoutStore.getState().course
     const currentUserInfo = useCheckoutStore.getState().userInfo
-    const currentUser = useAuthStore.getState().user
 
     if (!currentCourse) return
     if (!currentUserInfo.name.trim()) {
@@ -357,7 +383,6 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         programId: currentCourse.id,
         name: currentUserInfo.name.trim(),
         email: currentUserInfo.email.trim(),
-        ...(currentUser?.id && { userId: currentUser.id }),
         promoCode: currentPromoCode || '',
         expectedTotal: expectedTotalRupiah,
         normalPrice: normalPriceRupiah,
@@ -437,7 +462,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
 
     // Gunakan uniqueCode dari backend (confirmationCode) jika tersedia, else generate baru
     const code = uniqueCode ?? generateUniqueCode()
-    const transferAmount = totalToPay + code
+    const transferAmount = totalBeforeUniqueCode + code
 
     try {
       await createPaymentSession({
@@ -459,7 +484,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     } finally {
       setLoadingPay(false)
     }
-  }, [checkoutId, orderSummary?.orderId, totalToPay, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
+  }, [checkoutId, orderSummary?.orderId, totalBeforeUniqueCode, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
 
   const onSetPassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -514,7 +539,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     setProofError(null)
     setLoadingProof(true)
     try {
-      const transferAmount = totalToPay + (uniqueCode ?? 0)
+      const transferAmount = totalBeforeUniqueCode + (uniqueCode ?? 0)
       const form = new FormData()
       form.append('proof', proofFile)
       form.append('amount', String(transferAmount))
@@ -601,25 +626,63 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password baru</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
-                    placeholder="Minimal 6 karakter"
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-11 text-sm"
+                      placeholder="Minimal 6 karakter"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-primary"
+                      aria-label={showNewPassword ? 'Sembunyikan password' : 'Lihat password'}
+                    >
+                      {showNewPassword ? (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-4.42M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-0.45 1.35-1.27 2.7-2.38 3.9M6.1 6.1C4.27 7.4 2.88 9.16 2 12c1 3 5 7 10 7 1.76 0 3.4-.5 4.83-1.35" />
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Konfirmasi password</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
-                    placeholder="Ulangi password"
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pr-11 text-sm"
+                      placeholder="Ulangi password"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-primary"
+                      aria-label={showConfirmPassword ? 'Sembunyikan password' : 'Lihat password'}
+                    >
+                      {showConfirmPassword ? (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-4.42M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-0.45 1.35-1.27 2.7-2.38 3.9M6.1 6.1C4.27 7.4 2.88 9.16 2 12c1 3 5 7 10 7 1.76 0 3.4-.5 4.83-1.35" />
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <button
                   type="submit"
@@ -638,7 +701,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
 
   // Halaman instruksi transfer + slip setelah user klik Bayar & Daftar Program
   if (step === 'instructions') {
-    const transferAmount = totalToPay + (uniqueCode ?? 0)
+    const transferAmount = totalBeforeUniqueCode + (uniqueCode ?? 0)
     const transferAmountFormatted = `Rp${transferAmount.toLocaleString('id-ID')}`
     // Copy hanya nominal angka (tanpa "Rp") agar saat paste di bank/transfer yang terisi angka saja
     const transferAmountToCopy = String(transferAmount)
@@ -996,7 +1059,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   </div>
                   <div className="border-t pt-3 flex justify-between font-bold">
                     <span>Total</span>
-                    <span>Rp{totalToPay.toLocaleString('id-ID')}</span>
+                    <span>Rp{totalBeforeUniqueCode.toLocaleString('id-ID')}</span>
                   </div>
                 </div>
                 {step === 'payment' && (

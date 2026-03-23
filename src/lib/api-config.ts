@@ -29,7 +29,7 @@ function isLocalApiUrl(value: string): boolean {
   }
 }
 
-const fallbackApi = 'http://localhost:8080/api/v1'
+const fallbackApi = 'https://api.fansedu.web.id/api/v1'
 const configuredApi = ensureUrlProtocol((rawFromEnv && rawFromEnv.trim()) || fallbackApi)
 const useDevProxy = import.meta.env.DEV && ENV.VITE_USE_DEV_PROXY !== 'false'
 const RAW = useDevProxy && isLocalApiUrl(configuredApi) ? '/api/v1' : configuredApi
@@ -51,4 +51,4 @@ export const BACKEND_BASE =
     ? ''
     : (rawBaseFromEnv && ensureUrlProtocol(rawBaseFromEnv).replace(/\/$/, '')) ||
       configuredApi.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') ||
-      'http://localhost:8080'
+      'https://api.fansedu.web.id'

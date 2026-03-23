@@ -1428,6 +1428,8 @@ export interface SchoolStudentItem {
   schoolName?: string
 }
 
+const schoolStudentsCache = new Map<string, { expiresAt: number; data: SchoolStudentItem[] }>()
+
 export interface InstructorEarningItem {
   period: string
   revenue: number
@@ -1451,12 +1453,16 @@ export async function getInstructorStudents(): Promise<InstructorStudentsRespons
 export async function getStudentsBySchool(schoolId: string): Promise<SchoolStudentItem[]> {
   const sid = schoolId.trim()
   if (!sid) return []
+  const cached = schoolStudentsCache.get(sid)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data
+  }
   const endpoints = [
+    `${API_BASE}/instructor/students?school_id=${encodeURIComponent(sid)}`,
+    `${API_BASE}/instructor/students?schoolId=${encodeURIComponent(sid)}`,
     `${API_BASE}/schools/${encodeURIComponent(sid)}/students`,
     `${API_BASE}/school/${encodeURIComponent(sid)}/students`,
     `${API_BASE}/instructor/schools/${encodeURIComponent(sid)}/students`,
-    `${API_BASE}/instructor/students?schoolId=${encodeURIComponent(sid)}`,
-    `${API_BASE}/instructor/students?school_id=${encodeURIComponent(sid)}`,
   ]
 
   const normalize = (raw: unknown): SchoolStudentItem[] => {
@@ -1475,12 +1481,34 @@ export async function getStudentsBySchool(schoolId: string): Promise<SchoolStude
     })).filter((item) => item.email)
   }
 
-  for (const endpoint of endpoints) {
-    const res = await fetch(endpoint, { headers: authHeaders() })
-    if (res.status === 404) continue
-    const data = await handleResponse<unknown>(res)
-    return normalize(data)
+  const fetchWithTimeout = async (url: string, timeoutMs = 4500): Promise<Response> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      return await fetch(url, { headers: authHeaders(), signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
   }
+
+  const batches = [endpoints.slice(0, 2), endpoints.slice(2)]
+  for (const batch of batches) {
+    const settled = await Promise.allSettled(batch.map((url) => fetchWithTimeout(url)))
+    for (let i = 0; i < settled.length; i++) {
+      const result = settled[i]
+      if (result.status !== 'fulfilled') continue
+      const res = result.value
+      if (res.status === 404) continue
+      const data = await handleResponse<unknown>(res)
+      const rows = normalize(data)
+      schoolStudentsCache.set(sid, {
+        expiresAt: Date.now() + 60_000,
+        data: rows,
+      })
+      return rows
+    }
+  }
+  schoolStudentsCache.set(sid, { expiresAt: Date.now() + 15_000, data: [] })
   return []
 }
 

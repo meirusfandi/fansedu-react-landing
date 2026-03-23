@@ -1,10 +1,29 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import https from 'node:https'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8080'
+  const pickProxyTarget = (): string => {
+    if (env.VITE_API_PROXY_TARGET) return env.VITE_API_PROXY_TARGET
+    const base = env.VITE_API_BASE_URL || env.VITE_API_URL
+    if (base) {
+      try {
+        return new URL(base).origin
+      } catch {
+        // ignore invalid URL and fallback below
+      }
+    }
+    return 'http://localhost:8080'
+  }
+  const proxyTarget = pickProxyTarget()
+  const httpsAgent = proxyTarget.startsWith('https://')
+    ? new https.Agent({
+      keepAlive: true,
+      rejectUnauthorized: false,
+    })
+    : undefined
 
   return {
     plugins: [react()],
@@ -13,6 +32,11 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
+          secure: false,
+          ws: false,
+          agent: httpsAgent,
+          timeout: 60000,
+          proxyTimeout: 60000,
         },
       },
     },
