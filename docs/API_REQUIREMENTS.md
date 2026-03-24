@@ -6,6 +6,8 @@ Dokumen ini mendeskripsikan endpoint dan payload yang dibutuhkan frontend LMS. B
 - **docs/API_SPEC.md** — Spesifikasi terstruktur per flow (katalog, detail product, packages, checkout, auth, student, instructor).
 - **docs/openapi.yaml** — OpenAPI 3.0 untuk generate client/server (Swagger, codegen).
 - **docs/API_CURL_EXAMPLES.md** — Contoh curl siap pakai.
+- **docs/GEO_REDIS_BACKEND.md** — Cache provinsi/kab-kota di Redis (backend).
+- **docs/REDIS_CACHE_FRONTEND.md** — Panduan Flutter/web: tidak konek Redis dari klien; endpoint ter-cache; leaderboard polling; env Redis hanya server.
 
 ---
 
@@ -545,6 +547,27 @@ CREATE INDEX idx_pageviews_page ON analytics_pageviews(page);
 
 ---
 
+## Geo / Wilayah Indonesia (cache Redis di backend)
+
+Untuk dropdown **Provinsi** dan **Kabupaten/Kota** di form (mis. profil instruktur), frontend **tidak bisa** menyimpan ke Redis — **Redis hanya di server**. Backend disarankan mengekspos endpoint yang membaca/menulis cache Redis, lalu frontend memakai URL internal (bukan memanggil API publik setiap kali).
+
+| Method | Endpoint | Auth | Keterangan |
+|--------|----------|------|------------|
+| GET | `/geo/provinces` | Tidak | Daftar provinsi (`[{ "id", "name" }]`, sama format emsifa) |
+| GET | `/geo/regencies/:provinceId` | Tidak | Kab/kota untuk `provinceId` (BPS) |
+
+**Alur backend (disarankan):**
+
+1. `GET` request masuk → cek Redis key mis. `fansedu:geo:provinces:v1` / `fansedu:geo:regencies:v1:{provinceId}`.
+2. **Hit** → kembalikan JSON dari Redis.
+3. **Miss** → fetch dari sumber (HTTP ke `https://www.emsifa.com/api-wilayah-indonesia/...` atau file statis), **SET** Redis dengan TTL panjang (mis. **30 hari**), lalu response.
+
+Detail key, TTL, dan contoh pseudo-code: **`docs/GEO_REDIS_BACKEND.md`**.
+
+**Frontend:** set `VITE_GEO_SOURCE=internal` agar memanggil `{VITE_API_URL}/geo/provinces` dan `{VITE_API_URL}/geo/regencies/:id`. Tanpa env tersebut, frontend memakai API publik emsifa dengan **cache `localStorage` 7 hari** di sisi browser (bukan Redis).
+
+---
+
 ## 8. Error Response
 
 Gunakan HTTP status code standar. Body konsisten:
@@ -573,5 +596,6 @@ Contoh: `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `422 Validation 
 | **Landing page load** | **POST /analytics/pageview** (fire-and-forget, tracking visitor) |
 | **Admin: lihat statistik** | **GET /admin/analytics/summary** (Bearer admin) |
 | **Admin: detail visitor** | **GET /admin/analytics/visitors** (Bearer admin) |
+| **Wilayah (opsional, Redis)** | **GET /geo/provinces**, **GET /geo/regencies/:provinceId** | Tanpa auth; cache Redis di backend |
 
 Schema database untuk mendukung API ini ada di **`database/lms_schema.sql`** (LMS) dan **`database/landing_schema.sql`** (packages, site settings).

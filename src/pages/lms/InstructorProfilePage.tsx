@@ -8,20 +8,12 @@ import {
 } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { ApiError } from '../../lib/api'
-
-interface ProvinceItem {
-  id: string
-  name: string
-}
-
-interface CityItem {
-  id: string
-  name: string
-}
-
-const OPEN_PROVINCES_API = 'https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json'
-const OPEN_CITIES_API_BY_PROVINCE = (provinceId: string) =>
-  `https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${encodeURIComponent(provinceId)}.json`
+import {
+  fetchProvinces,
+  fetchRegenciesByProvince,
+  type GeoCityItem,
+  type GeoProvinceItem,
+} from '../../lib/geo-wilayah'
 
 export default function InstructorProfilePage() {
   const setUser = useAuthStore((s) => s.setUser)
@@ -41,9 +33,9 @@ export default function InstructorProfilePage() {
   const [newSchoolAddress, setNewSchoolAddress] = useState('')
   const [newSchoolLogoUrl, setNewSchoolLogoUrl] = useState('')
   const [city, setCity] = useState('')
-  const [cityOptions, setCityOptions] = useState<CityItem[]>([])
+  const [cityOptions, setCityOptions] = useState<GeoCityItem[]>([])
   const [loadingSchoolOptions, setLoadingSchoolOptions] = useState(false)
-  const [provinces, setProvinces] = useState<ProvinceItem[]>([])
+  const [provinces, setProvinces] = useState<GeoProvinceItem[]>([])
   const [provinceId, setProvinceId] = useState('')
   const [loadingProvinces, setLoadingProvinces] = useState(false)
   const [loadingCities, setLoadingCities] = useState(false)
@@ -121,17 +113,9 @@ export default function InstructorProfilePage() {
   useEffect(() => {
     let cancelled = false
     setLoadingProvinces(true)
-    fetch(OPEN_PROVINCES_API)
-      .then((res) => res.json())
-      .then((rows: unknown) => {
+    fetchProvinces()
+      .then((parsed) => {
         if (cancelled) return
-        const list = Array.isArray(rows)
-          ? rows.map((item) => item as Record<string, unknown>)
-          : []
-        const parsed = list.map((item) => ({
-          id: String(item.id ?? ''),
-          name: String(item.name ?? ''),
-        })).filter((item) => item.id && item.name)
         setProvinces(parsed)
       })
       .catch(() => {
@@ -153,17 +137,9 @@ export default function InstructorProfilePage() {
     }
     let cancelled = false
     setLoadingCities(true)
-    fetch(OPEN_CITIES_API_BY_PROVINCE(provinceId))
-      .then((res) => res.json())
-      .then((rows: unknown) => {
+    fetchRegenciesByProvince(provinceId)
+      .then((parsed) => {
         if (cancelled) return
-        const list = Array.isArray(rows)
-          ? rows.map((item) => item as Record<string, unknown>)
-          : []
-        const parsed = list.map((item) => ({
-          id: String(item.id ?? ''),
-          name: String(item.name ?? ''),
-        })).filter((item) => item.id && item.name)
         setCityOptions(parsed)
       })
       .catch(() => {

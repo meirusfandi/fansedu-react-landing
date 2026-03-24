@@ -130,7 +130,7 @@ Program tidak ditemukan. Body standar error:
 
 ## 3. Packages (Landing — Program yang Dibuka)
 
-**GET /packages** — Daftar paket untuk section **Program yang Sedang Dibuka** di landing page. Tanpa auth. Response **snake_case**.
+**GET /packages** — Daftar paket untuk section **Program yang Sedang Dibuka** di landing page. Tanpa auth. Response **snake_case**. Backend boleh cache daftar di Redis (detail untuk FE: **docs/REDIS_CACHE_FRONTEND.md**).
 
 | Method | Endpoint   | Auth |
 |--------|------------|------|
@@ -564,6 +564,28 @@ Tracking pengunjung landing page untuk admin dashboard.
 
 ---
 
+## Geo / Wilayah Indonesia (provinsi & kab/kota)
+
+Digunakan untuk dropdown alamat (mis. profil instruktur). **Cache Redis diimplementasikan di backend** — lihat **docs/GEO_REDIS_BACKEND.md**; untuk panduan klien (Flutter/web, tanpa koneksi Redis), **docs/REDIS_CACHE_FRONTEND.md**.
+
+| Method | Endpoint | Auth |
+|--------|----------|------|
+| GET | `/geo/provinces` | Tidak |
+| GET | `/geo/regencies/:provinceId` | Tidak |
+
+**Response 200** — array objek (format kompatibel dengan emsifa):
+
+```json
+[
+  { "id": "11", "name": "ACEH" },
+  { "id": "12", "name": "SUMATERA UTARA" }
+]
+```
+
+**Frontend:** `VITE_GEO_SOURCE=internal` memakai `{VITE_API_URL}` untuk kedua endpoint di atas. Tanpa itu, frontend memakai API publik dengan cache `localStorage`.
+
+---
+
 ## 8. Error Response
 
 Format konsisten:
@@ -601,6 +623,8 @@ Format konsisten:
 | **Pageview tracking** | **`/analytics/pageview`** | **POST** | **Tanpa auth, fire-and-forget dari frontend** |
 | **Admin: ringkasan** | **`/admin/analytics/summary`** | **GET** | **Bearer admin** |
 | **Admin: detail visitor** | **`/admin/analytics/visitors`** | **GET** | **Bearer admin** |
+| Wilayah (cache Redis) | `/geo/provinces` | GET | Tanpa auth |
+| Wilayah (cache Redis) | `/geo/regencies/:provinceId` | GET | Tanpa auth |
 
 Contoh curl: **docs/API_CURL_EXAMPLES.md**.  
 Schema database: **database/lms_schema.sql**, **database/landing_schema.sql**.

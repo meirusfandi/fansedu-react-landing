@@ -278,6 +278,20 @@ curl -s "$BASE/admin/analytics/visitors?page=1&limit=50&startDate=2026-03-01&end
 
 ---
 
+## Geo / Wilayah (cache Redis di backend)
+
+Backend mengembalikan format yang sama dengan [emsifa/api-wilayah-indonesia](https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json). Lihat **docs/GEO_REDIS_BACKEND.md** untuk key Redis & TTL; untuk perilaku cache dari sisi aplikasi (Flutter/web), lihat **docs/REDIS_CACHE_FRONTEND.md**.
+
+```bash
+# Daftar provinsi
+curl -s "$BASE/geo/provinces" | jq .
+
+# Kabupaten/kota di provinsi (ganti 11 = Aceh)
+curl -s "$BASE/geo/regencies/11" | jq .
+```
+
+---
+
 ## Ringkasan URL
 
 | Endpoint | Method | Auth |
@@ -296,6 +310,8 @@ curl -s "$BASE/admin/analytics/visitors?page=1&limit=50&startDate=2026-03-01&end
 | `/analytics/pageview` | POST | - |
 | `/admin/analytics/summary` | GET | Bearer (admin) |
 | `/admin/analytics/visitors` | GET | Bearer (admin) |
+| `/geo/provinces` | GET | - |
+| `/geo/regencies/:provinceId` | GET | - |
 | `/student/dashboard` | GET | Bearer |
 | `/student/profile` | GET / PUT | Bearer |
 | `/student/courses` | GET | Bearer |

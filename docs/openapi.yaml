@@ -458,6 +458,39 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/InstructorEarningItem' } }
 
+  # --- Geo / Wilayah (cache Redis di backend; format sama emsifa) ---
+  /geo/provinces:
+    get:
+      summary: Daftar provinsi Indonesia (cache Redis)
+      operationId: getGeoProvinces
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GeoWilayahItem' }
+
+  /geo/regencies/{provinceId}:
+    get:
+      summary: Kabupaten/kota per provinsi (cache Redis)
+      operationId: getGeoRegencies
+      parameters:
+        - name: provinceId
+          in: path
+          required: true
+          schema: { type: string }
+          description: ID provinsi (BPS), mis. "11"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GeoWilayahItem' }
+
   # --- Analytics (Visitor Tracking) ---
   /analytics/pageview:
     post:
@@ -563,6 +596,12 @@ components:
       properties:
         error: { type: string }
         message: { type: string }
+    GeoWilayahItem:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, description: 'Kode wilayah BPS' }
+        name: { type: string }
     ProgramListItem:
       type: object
       properties:
