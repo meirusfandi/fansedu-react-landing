@@ -6,7 +6,7 @@ import {
 } from '../../lib/api'
 import { getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
 
-export default function InstructorTryoutAnalysisPage({ tryoutId }: { tryoutId: string }) {
+export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string }) {
   const [students, setStudents] = useState<InstructorTryoutStudentItem[]>([])
   const [tryout, setTryout] = useState<OpenTryoutItem | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,7 +33,7 @@ export default function InstructorTryoutAnalysisPage({ tryoutId }: { tryoutId: s
   if (error) {
     return (
       <div className="space-y-4">
-        <a href="#/instructor/tryouts" className="text-primary font-medium text-sm hover:underline">← Daftar tryout</a>
+        <a href="#/guru/tryouts" className="text-primary font-medium text-sm hover:underline">← Daftar tryout</a>
         <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-sm">{error}</div>
       </div>
     )
@@ -42,7 +42,7 @@ export default function InstructorTryoutAnalysisPage({ tryoutId }: { tryoutId: s
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
-        <a href="#/instructor/tryouts" className="text-primary font-medium text-sm hover:underline">← Daftar tryout</a>
+        <a href="#/guru/tryouts" className="text-primary font-medium text-sm hover:underline">← Daftar tryout</a>
       </div>
 
       <div className="rounded-2xl border bg-white p-6">
@@ -87,13 +87,13 @@ export default function InstructorTryoutAnalysisPage({ tryoutId }: { tryoutId: s
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <a
-                          href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}/students/${encodeURIComponent(s.user_id)}`}
+                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/students/${encodeURIComponent(s.user_id)}`}
                           className="text-slate-700 font-medium hover:underline"
                         >
                           Detail siswa
                         </a>
                         <a
-                          href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(s.attempt_id)}/ai-analysis`}
+                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(s.attempt_id)}/ai-analysis`}
                           className="text-primary font-medium hover:underline"
                         >
                           Analisis AI →

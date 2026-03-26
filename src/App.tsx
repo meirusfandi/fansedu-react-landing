@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
 import { getPackages, trackAnalyticsEvent, trackPageview } from './lib/api'
+import { normalizeAuthFields } from './types/auth'
 import { formatRupiah } from './lib/currency'
 
 /** Paket / program yang sedang dibuka — dari GET /api/v1/packages atau mock */
@@ -52,7 +53,7 @@ const WA_TEMPLATES = {
   float: 'Halo Fansedu, saya ada pertanyaan.',
 } as const
 
-/** Base path LMS: gunakan hash routing dalam project yang sama (#/auth, #/student, #/instructor) */
+/** Base path LMS: gunakan hash routing dalam project yang sama (#/auth, #/student, #/guru) */
 const LMS_BASE = '#'
 
 /** Link daftar akun di platform (LMS) — tetap di URL yang sama (hash routing) */
@@ -66,9 +67,10 @@ function getStoredAuthUser(): { name: string; role: string } | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY) ?? sessionStorage.getItem(AUTH_STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as { state?: { user?: { name?: string; role?: string } } }
+    const parsed = JSON.parse(raw) as { state?: { user?: { name?: string; role?: string; roleCode?: string } } }
     const user = parsed?.state?.user
-    return user && (user.name || user.role) ? { name: user.name ?? '', role: user.role ?? 'student' } : null
+    if (!user || (!user.name && !user.role)) return null
+    return { name: user.name ?? '', role: normalizeAuthFields(user.role, user.roleCode, null) }
   } catch {
     return null
   }
@@ -218,7 +220,7 @@ const MOCK_PACKAGES: LandingPackage[] = [
 ]
 
 const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@fansedu.official'
-// Set to first video ID from channel to show its thumbnail; or use VITE_HERO_YOUTUBE_VIDEO_ID in .env
+/** Set di .env: `VITE_HERO_YOUTUBE_VIDEO_ID=xxxxx` (11 karakter dari URL watch) — paling andal di production. */
 const YOUTUBE_VIDEO_ID_PLACEHOLDER = (import.meta.env.VITE_HERO_YOUTUBE_VIDEO_ID as string) || ''
 
 // Placeholder artikel; nanti diganti dengan fetch dari backend (mis. GET /api/articles)
@@ -342,21 +344,22 @@ function App() {
     }
   }, [])
 
-  // Fetch channel page to get first video ID for hero thumbnail (CORS proxy)
+  // Dev: ambil videoId pertama lewat proxy Vite same-origin (lihat vite.config `/__youtube_channel`).
+  // Production: jangan fetch ke proxy pihak ketiga (CORS/522); pakai VITE_HERO_YOUTUBE_VIDEO_ID atau placeholder.
   useEffect(() => {
     if (YOUTUBE_VIDEO_ID_PLACEHOLDER) return
+    if (!import.meta.env.DEV) return
+
     const controller = new AbortController()
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(`${YOUTUBE_CHANNEL_URL}/videos`)}`
-    fetch(url, { signal: controller.signal })
-      .then((res) => res.text())
+    fetch('/__youtube_channel', { signal: controller.signal })
+      .then((res) => (res.ok ? res.text() : ''))
       .then((html) => {
-        // Try ytInitialData first (videoId in gridVideoRenderer or richItemRenderer)
+        if (!html) return
         const videoIdMatch = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/)
         if (videoIdMatch?.[1]) {
           setHeroVideoId(videoIdMatch[1])
           return
         }
-        // Fallback: first /watch?v= link
         const watchMatch = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/)
         if (watchMatch?.[1]) setHeroVideoId(watchMatch[1])
       })
@@ -420,7 +423,7 @@ function App() {
               </nav>
               {authUser ? (
                 <a
-                  href={authUser.role === 'instructor' ? `${LMS_BASE}/instructor` : `${LMS_BASE}/student`}
+                  href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
                   className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
                 >
                   Dashboard
@@ -472,7 +475,7 @@ function App() {
           </nav>
           <div className="mt-8 flex flex-col gap-3">
             {authUser ? (
-              <a href={authUser.role === 'instructor' ? `${LMS_BASE}/instructor` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+              <a href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
                 Dashboard
               </a>
             ) : (
@@ -490,7 +493,7 @@ function App() {
 
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-24 pb-16 w-full">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            <div className="order-2 lg:order-1">
+            <div className="order-1">
               <div className="reveal flex flex-wrap items-center gap-2 mb-4">
                 <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
                   <span aria-hidden>⚠️</span>
@@ -590,7 +593,7 @@ function App() {
 
             </div>
 
-            <div className="order-1 lg:order-2 reveal">
+            <div className="order-2 reveal">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-transparent opacity-20 rounded-3xl blur-3xl"></div>
                 <div className="relative bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden">

@@ -11,7 +11,7 @@ function scorePercent(score: number, maxScore: number): number {
   return (score / maxScore) * 100
 }
 
-export default function InstructorTryoutStudentDetailPage({
+export default function GuruTryoutStudentDetailPage({
   tryoutId,
   studentId,
 }: {
@@ -67,7 +67,7 @@ export default function InstructorTryoutStudentDetailPage({
     return (
       <div className="space-y-4">
         <a
-          href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}`}
+          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}`}
           className="text-primary font-medium text-sm hover:underline"
         >
           ← Kembali ke analisis tryout
@@ -81,7 +81,7 @@ export default function InstructorTryoutStudentDetailPage({
     return (
       <div className="space-y-4">
         <a
-          href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}`}
+          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}`}
           className="text-primary font-medium text-sm hover:underline"
         >
           ← Kembali ke analisis tryout
@@ -96,7 +96,7 @@ export default function InstructorTryoutStudentDetailPage({
   return (
     <div className="space-y-6">
       <a
-        href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}`}
+        href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}`}
         className="inline-block text-primary font-medium text-sm hover:underline"
       >
         ← Kembali ke analisis tryout
@@ -162,7 +162,7 @@ export default function InstructorTryoutStudentDetailPage({
                   </td>
                   <td className="py-3 px-4">
                     <a
-                      href={`#/instructor/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attempt.attempt_id)}/ai-analysis`}
+                      href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attempt.attempt_id)}/ai-analysis`}
                       className="text-primary font-medium hover:underline"
                     >
                       Lihat Analisis AI →

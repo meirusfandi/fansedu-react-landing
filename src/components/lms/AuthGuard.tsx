@@ -20,7 +20,7 @@ export function AuthGuard({ children, role, currentPath, onRedirect }: AuthGuard
       return
     }
     if (role && user.role !== role) {
-      const dashboard = user.role === 'instructor' ? '#/instructor' : '#/student'
+      const dashboard = user.role === 'guru' ? '#/guru' : '#/student'
       onRedirect(dashboard)
     }
   }, [isAuthenticated, user, role, currentPath, onRedirect])

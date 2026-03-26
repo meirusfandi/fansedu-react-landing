@@ -13,7 +13,7 @@ function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 }
 
-export default function InstructorTransactionsPage() {
+export default function GuruTransactionsPage() {
   const [data, setData] = useState<Array<{
     id: string
     orderId: string
@@ -128,7 +128,7 @@ export default function InstructorTransactionsPage() {
                 </td>
                 <td className="py-4 px-4">
                   {(r.status?.toLowerCase() === 'pending') && r.orderId ? (
-                    <a href={`#/instructor/transactions/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
+                    <a href={`#/guru/transactions/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
                       Upload bukti
                     </a>
                   ) : (

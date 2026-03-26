@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getInstructorAttemptAIAnalysis, ApiError } from '../../lib/api'
 
-export default function InstructorAttemptAIAnalysisPage({
+export default function GuruAttemptAIAnalysisPage({
   tryoutId,
   attemptId,
 }: {
@@ -14,9 +14,9 @@ export default function InstructorAttemptAIAnalysisPage({
   const backHref = (() => {
     const hash = window.location.hash || ''
     const queryIndex = hash.indexOf('?')
-    if (queryIndex === -1) return '#/instructor/students'
+    if (queryIndex === -1) return '#/guru/students'
     const query = new URLSearchParams(hash.slice(queryIndex + 1))
-    return query.get('redirect') || '#/instructor/students'
+    return query.get('redirect') || '#/guru/students'
   })()
 
   useEffect(() => {

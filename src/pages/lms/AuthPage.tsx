@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
-import type { UserRole } from '../../types/auth'
+import { authUserFromApiResponse, type UserRole } from '../../types/auth'
 import { apiLogin, apiRegister, ApiError } from '../../lib/api'
 
 type Tab = 'login' | 'register'
-
-function isAllowedLmsRole(role: unknown): role is UserRole {
-  return role === 'student' || role === 'instructor'
-}
 
 function PasswordToggleButton({
   visible,
@@ -39,7 +35,16 @@ function PasswordToggleButton({
   )
 }
 
-export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: { redirect?: string; tab?: string }) {
+export default function AuthPage({
+  redirect = '#/',
+  tab: tabParam = 'login',
+  programSlug,
+}: {
+  redirect?: string
+  tab?: string
+  /** Dari query `slug` / `program` — diisi otomatis di form daftar. */
+  programSlug?: string
+}) {
   const [tab, setTab] = useState<Tab>(tabParam === 'register' ? 'register' : 'login')
 
   useEffect(() => {
@@ -71,7 +76,11 @@ export default function AuthPage({ redirect = '#/', tab: tabParam = 'login' }: {
             {tab === 'login' ? (
               <LoginSection redirect={redirect} onSwitch={() => setTab('register')} />
             ) : (
-              <RegisterSection redirect={redirect} onSwitch={() => setTab('login')} />
+              <RegisterSection
+                redirect={redirect}
+                onSwitch={() => setTab('login')}
+                initialProgramSlug={programSlug ?? ''}
+              />
             )}
           </div>
           <p className="mt-6 text-center text-sm text-gray-500">
@@ -102,15 +111,8 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
     setLoading(true)
     try {
       const res = await apiLogin({ email: email.trim(), password })
-      if (!isAllowedLmsRole(res.user.role)) {
-        setError('Akses ditolak. Login hanya untuk akun siswa atau guru.')
-        return
-      }
-      login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
-        res.token,
-        rememberMe
-      )
+      const authUser = authUserFromApiResponse(res.user, res.token)
+      login(authUser, res.token, rememberMe)
       window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -179,16 +181,29 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
   )
 }
 
-function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
+function RegisterSection({
+  redirect,
+  onSwitch,
+  initialProgramSlug,
+}: {
+  redirect: string
+  onSwitch: () => void
+  initialProgramSlug: string
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState<UserRole>('student')
+  const [programSlug, setProgramSlug] = useState(initialProgramSlug.trim())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const login = useAuthStore((s) => s.login)
+
+  useEffect(() => {
+    setProgramSlug(initialProgramSlug.trim())
+  }, [initialProgramSlug])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -202,23 +217,22 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
       setError('Kata sandi minimal 6 karakter.')
       return
     }
+    const slugTrim = programSlug.trim()
+    if (!slugTrim) {
+      setError('Slug program wajib (pakai link dari halaman program atau isi manual).')
+      return
+    }
     setLoading(true)
     try {
       const res = await apiRegister({
         name: name.trim(),
         email: email.trim(),
         password,
-        role: role as 'student' | 'instructor',
+        role,
+        slug: slugTrim,
       })
-      if (!isAllowedLmsRole(res.user.role)) {
-        setError('Akses ditolak. Registrasi di aplikasi ini hanya untuk siswa atau guru.')
-        return
-      }
-      // Flow tanpa verifikasi email: langsung login setelah register berhasil.
-      login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
-        res.token
-      )
+      const authUser = authUserFromApiResponse(res.user, res.token)
+      login(authUser, res.token)
       setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
       window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
     } catch (err) {
@@ -277,6 +291,21 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
           </div>
         </div>
         <div>
+          <label htmlFor="reg-program-slug" className="block text-sm font-medium text-gray-700 mb-1">
+            Slug program
+          </label>
+          <input
+            id="reg-program-slug"
+            type="text"
+            value={programSlug}
+            onChange={(e) => setProgramSlug(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            placeholder="contoh: algorithm-programming-foundation"
+            autoComplete="off"
+          />
+          <p className="mt-1 text-xs text-gray-500">Sama dengan slug di URL katalog /checkout (wajib untuk pendaftaran).</p>
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Daftar sebagai</label>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -284,7 +313,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
               <span>Siswa</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="role" value="instructor" checked={role === 'instructor'} onChange={() => setRole('instructor')} className="text-primary" />
+              <input type="radio" name="role" value="guru" checked={role === 'guru'} onChange={() => setRole('guru')} className="text-primary" />
               <span>Guru</span>
             </label>
           </div>

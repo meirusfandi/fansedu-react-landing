@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
-import type { AuthUser } from '../types/auth'
+import { normalizeAuthFields, type AuthUser } from '../types/auth'
 
 interface AuthStore {
   user: AuthUser | null
@@ -54,6 +54,21 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'fansedu-auth',
+      version: 2,
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== 'object') return persisted
+        const p = persisted as {
+          state?: { user?: { role?: string; roleCode?: string }; token?: string | null; rememberMe?: boolean }
+        }
+        if (!p.state?.user) return { ...p, version: 2 }
+        const u = p.state.user
+        const nextRole = normalizeAuthFields(u.role, u.roleCode, null)
+        return {
+          ...p,
+          version: 2,
+          state: { ...p.state, user: { ...u, role: nextRole } },
+        }
+      },
       storage: createJSONStorage(() => authStorage),
     }
   )

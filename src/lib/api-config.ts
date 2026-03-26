@@ -29,26 +29,29 @@ function isLocalApiUrl(value: string): boolean {
   }
 }
 
-const fallbackApi = 'https://api.fansedu.web.id/api/v1'
+const LOCAL_API = 'http://localhost:8080/api/v1'
+const PROD_API = 'https://api.fansedu.web.id/api/v1'
+/** Tanpa env: dev → API lokal; build production → API production. */
+const fallbackApi = import.meta.env.DEV ? LOCAL_API : PROD_API
 const configuredApi = ensureUrlProtocol((rawFromEnv && rawFromEnv.trim()) || fallbackApi)
 const useDevProxy = import.meta.env.DEV && ENV.VITE_USE_DEV_PROXY !== 'false'
 const RAW = useDevProxy && isLocalApiUrl(configuredApi) ? '/api/v1' : configuredApi
 
 if (import.meta.env.DEV && !rawFromEnv) {
-  // Helpful warning in development when env is not loaded.
-  console.warn('[api-config] VITE_API_URL is undefined, using fallback:', configuredApi)
+  console.info('[api-config] VITE_API_URL unset — using local default:', configuredApi)
 }
 
-/** Base path API (auth, programs, checkout, student, instructor, packages) — sama dengan VITE_API_URL */
+/** Base path API (auth, programs, checkout, student, guru, packages) — sama dengan VITE_API_URL */
 export const API_BASE = RAW.replace(/\/$/, '')
 
 /** URL daftar paket landing: GET /packages (relatif ke API_BASE) */
 export const PACKAGES_API_URL = `${API_BASE}/packages`
 
 /** Origin backend (tanpa /api/v1) — untuk tryouts: BACKEND_BASE + /api/v1/tryouts/... */
+const fallbackBackendOrigin = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api.fansedu.web.id'
 export const BACKEND_BASE =
   useDevProxy
     ? ''
     : (rawBaseFromEnv && ensureUrlProtocol(rawBaseFromEnv).replace(/\/$/, '')) ||
       configuredApi.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '') ||
-      'https://api.fansedu.web.id'
+      fallbackBackendOrigin

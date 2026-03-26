@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getInstructorCourses, getInstructorStudents } from '../../lib/api'
 
-export default function InstructorDashboardPage() {
+export default function GuruDashboardPage() {
   const [coursesCount, setCoursesCount] = useState<number>(0)
   const [studentsCount, setStudentsCount] = useState<number>(0)
   const [studentsActive, setStudentsActive] = useState<number>(0)
@@ -58,19 +58,19 @@ export default function InstructorDashboardPage() {
         </div>
       </div>
       <div className="grid sm:grid-cols-2 gap-6">
-        <a href="#/instructor/courses" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
+        <a href="#/guru/courses" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Kursus Saya</h2>
           <p className="text-sm text-gray-500">Kelola materi dan modul kursus</p>
         </a>
-        <a href="#/instructor/students" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
+        <a href="#/guru/students" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Siswa</h2>
           <p className="text-sm text-gray-500">Lihat daftar siswa dan progress</p>
         </a>
-        <a href="#/instructor/transactions" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
+        <a href="#/guru/transactions" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Transaksi</h2>
           <p className="text-sm text-gray-500">Pantau pembelian kelas untuk siswa dan status pembayaran</p>
         </a>
-        <a href="#/instructor/profile" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
+        <a href="#/guru/profile" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Profile</h2>
           <p className="text-sm text-gray-500">Kelola data profil akun guru</p>
         </a>

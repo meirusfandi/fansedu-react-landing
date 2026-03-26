@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getInstructorStudents } from '../../lib/api'
 import { ApiError } from '../../lib/api'
 
-export default function InstructorStudentsPage() {
+export default function GuruStudentsPage() {
   const [data, setData] = useState<{ userId: string; name: string; email: string; programTitle: string; progressPercent: number }[]>([])
   const [search, setSearch] = useState('')
   const [courseFilter, setCourseFilter] = useState('all')
@@ -87,12 +87,12 @@ export default function InstructorStudentsPage() {
                 key={r.userId}
                 className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
                 onClick={() => {
-                  window.location.hash = `/instructor/students/${encodeURIComponent(r.userId)}`
+                  window.location.hash = `/guru/students/${encodeURIComponent(r.userId)}`
                 }}
               >
                 <td className="py-4 px-4 font-medium">
                   <a
-                    href={`#/instructor/students/${encodeURIComponent(r.userId)}`}
+                    href={`#/guru/students/${encodeURIComponent(r.userId)}`}
                     className="text-primary hover:underline"
                   >
                     {r.name}

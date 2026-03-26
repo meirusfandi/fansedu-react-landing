@@ -2,11 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { useNotificationsStore } from '../../store/notifications'
 import { apiLogout, apiGetMe, getMyNotifications } from '../../lib/api'
-import type { AuthUser } from '../../types/auth'
-
-function isAllowedLmsRole(role: unknown): role is AuthUser['role'] {
-  return role === 'student' || role === 'instructor'
-}
+import { authUserFromApiResponse } from '../../types/auth'
 
 export function LmsHeader() {
   const user = useAuthStore((s) => s.user)
@@ -28,12 +24,8 @@ export function LmsHeader() {
     if (!token) return
     apiGetMe()
       .then((me) => {
-        if (!isAllowedLmsRole(me.role)) {
-          logout()
-          window.location.hash = '/auth'
-          return
-        }
-        setUser({ id: me.id, name: me.name, email: me.email, role: me.role })
+        const authUser = authUserFromApiResponse(me, token)
+        setUser(authUser)
       })
       .catch(() => {})
   }, [token, setUser, logout])
@@ -54,7 +46,7 @@ export function LmsHeader() {
               id: item.id,
               title: item.title,
               message: item.body,
-              href: item.href || (user?.role === 'instructor' ? '#/instructor' : '#/student'),
+              href: item.href || (user?.role === 'guru' ? '#/guru' : '#/student'),
               read: Boolean(item.read),
               level: item.type === 'progress_update' ? 'success' : 'info',
               createdAt: item.createdAt || new Date().toISOString(),
@@ -81,8 +73,8 @@ export function LmsHeader() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
-  const dashboardHref = user?.role === 'instructor' ? '#/instructor' : '#/student'
-  const dashboardLabel = user?.role === 'instructor' ? 'Dashboard Guru' : 'Dashboard Siswa'
+  const dashboardHref = user?.role === 'guru' ? '#/guru' : '#/student'
+  const dashboardLabel = user?.role === 'guru' ? 'Dashboard Guru' : 'Dashboard Siswa'
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">

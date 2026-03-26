@@ -15,6 +15,7 @@ import {
   type SchoolStudentItem,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
+import { authUserFromApiResponse } from '../../types/auth'
 
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
@@ -141,7 +142,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   // Harga efektif: utamakan field numerik course.price (sudah dihitung oleh packageToCourse)
   const basePrice = useMemo(() => resolveNumericPrice(course), [course])
 
-  const isInstructorBuyer = user?.role === 'instructor'
+  const isGuruBuyer = user?.role === 'guru'
   const validCollectiveStudents = useMemo(
     () =>
       collectiveStudents.filter(
@@ -150,7 +151,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     [collectiveStudents]
   )
   const collectiveParticipantCount = Math.max(1, validCollectiveStudents.length)
-  const purchaseCount = isInstructorBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
+  const purchaseCount = isGuruBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
   const unitPromoPrice = earlyNum > 0 ? earlyNum : basePrice
   const unitNormalPrice = normalNum
   const expectedTotalFromCount = unitPromoPrice > 0 ? unitPromoPrice * purchaseCount : 0
@@ -233,7 +234,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   }, [slug])
 
   useEffect(() => {
-    if (!isInstructorBuyer || !isCollectivePurchase) return
+    if (!isGuruBuyer || !isCollectivePurchase) return
     let cancelled = false
     getInstructorProfile()
       .then((profile) => {
@@ -248,7 +249,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     return () => {
       cancelled = true
     }
-  }, [isInstructorBuyer, isCollectivePurchase])
+  }, [isGuruBuyer, isCollectivePurchase])
 
   const loadSchoolStudents = useCallback(async () => {
     if (!instructorSchoolId) {
@@ -275,13 +276,13 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   }, [instructorSchoolId, lastLoadedSchoolId, schoolStudentPool.length])
 
   useEffect(() => {
-    if (!isInstructorBuyer || !isCollectivePurchase || !instructorSchoolId) return
+    if (!isGuruBuyer || !isCollectivePurchase || !instructorSchoolId) return
     if (lastLoadedSchoolId === instructorSchoolId && schoolStudentPool.length > 0) return
     loadSchoolStudents().catch(() => {})
   }, [
     instructorSchoolId,
     isCollectivePurchase,
-    isInstructorBuyer,
+    isGuruBuyer,
     lastLoadedSchoolId,
     loadSchoolStudents,
     schoolStudentPool.length,
@@ -342,7 +343,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setError('Masukkan alamat email yang valid.')
       return
     }
-    if (isInstructorBuyer && isCollectivePurchase) {
+    if (isGuruBuyer && isCollectivePurchase) {
       if (validCollectiveStudents.length === 0) {
         setError('Isi minimal 1 data siswa (nama + email valid) untuk pembelian kolektif.')
         return
@@ -367,7 +368,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       || (typeof currentCourse.priceNormal === 'number' && currentCourse.priceNormal > 0 ? currentCourse.priceNormal : 0)
       || basePrice
     )
-    const participantsCount = isInstructorBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
+    const participantsCount = isGuruBuyer && isCollectivePurchase ? collectiveParticipantCount : 1
     const expectedTotalRupiah = unitExpectedRupiah > 0 ? unitExpectedRupiah * participantsCount : 0
     // Prioritas harga normal: normal -> price
     const unitNormalRupiah = (
@@ -386,11 +387,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         promoCode: currentPromoCode || '',
         expectedTotal: expectedTotalRupiah,
         normalPrice: normalPriceRupiah,
-        buyerRole: isInstructorBuyer ? 'guru' : 'student',
-        roleHint: isInstructorBuyer ? 'guru' : 'student',
+        buyerRole: isGuruBuyer ? 'guru' : 'student',
+        roleHint: isGuruBuyer ? 'guru' : 'student',
         quantity: participantsCount,
         students:
-          isInstructorBuyer && isCollectivePurchase
+          isGuruBuyer && isCollectivePurchase
             ? validCollectiveStudents.map((item) => ({
               name: item.name.trim(),
               email: item.email.trim(),
@@ -441,7 +442,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     collectiveStudents,
     expectedTotalFromCount,
     isCollectivePurchase,
-    isInstructorBuyer,
+    isGuruBuyer,
     setCheckoutId,
     setOrderSummary,
     setStep,
@@ -511,21 +512,19 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         email: currentInfo.email.trim(),
         password: newPassword,
         role: 'student',
+        slug: slug ?? undefined,
       })
-      login(
-        { id: res.user.id, name: res.user.name, email: res.user.email, role: res.user.role },
-        res.token
-      )
+      login(authUserFromApiResponse(res.user, res.token), res.token)
       setStep('instructions')
     } catch (err) {
       setSetPasswordError(err instanceof ApiError ? err.message : 'Gagal menyimpan password.')
     } finally {
       setLoadingSetPassword(false)
     }
-  }, [newPassword, confirmPassword, login, setStep])
+  }, [newPassword, confirmPassword, login, setStep, slug])
 
   const onLeaveTransfer = () => {
-    window.location.hash = user?.role === 'instructor' ? '#/instructor' : '#/student'
+    window.location.hash = user?.role === 'guru' ? '#/guru' : '#/student'
   }
 
   const onSubmitPaymentProof = async (e: React.FormEvent) => {
@@ -802,7 +801,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
             </section>
 
             <p className="text-center text-sm text-gray-500">
-              Belum transfer? Anda bisa upload bukti nanti dari halaman <a href={user?.role === 'instructor' ? '#/instructor/transactions' : '#/student/transactions'} className="text-primary font-medium hover:underline">Riwayat Transaksi</a>.
+              Belum transfer? Anda bisa upload bukti nanti dari halaman <a href={user?.role === 'guru' ? '#/guru/transactions' : '#/student/transactions'} className="text-primary font-medium hover:underline">Riwayat Transaksi</a>.
             </p>
           </div>
         </main>
@@ -850,7 +849,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input type="email" value={userInfo.email} onChange={(e) => setUserInfo({ ...userInfo, email: e.target.value })} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="email@contoh.com" />
                   </div>
-                  {isInstructorBuyer && (
+                  {isGuruBuyer && (
                     <div className="rounded-xl border border-slate-200 p-4 bg-slate-50 space-y-3">
                       <label className="flex items-center gap-2 text-sm text-gray-700 font-medium">
                         <input
@@ -866,7 +865,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                       </p>
                     </div>
                   )}
-                  {isInstructorBuyer && isCollectivePurchase && (
+                  {isGuruBuyer && isCollectivePurchase && (
                     <div className="rounded-xl border border-slate-200 p-4 bg-white">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-gray-900">Daftar Siswa</h3>

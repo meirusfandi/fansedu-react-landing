@@ -15,7 +15,7 @@ import {
   type GeoProvinceItem,
 } from '../../lib/geo-wilayah'
 
-export default function InstructorProfilePage() {
+export default function GuruProfilePage() {
   const setUser = useAuthStore((s) => s.setUser)
   const user = useAuthStore((s) => s.user)
   const [name, setName] = useState(user?.name ?? '')

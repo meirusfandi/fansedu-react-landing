@@ -27,7 +27,7 @@ function toPercent(score: number, maxScore: number): string {
   return `${((score / maxScore) * 100).toFixed(1)}%`
 }
 
-export default function InstructorStudentDetailPage({ studentId }: { studentId: string }) {
+export default function GuruStudentDetailPage({ studentId }: { studentId: string }) {
   const [coursesRows, setCoursesRows] = useState<InstructorStudentItem[]>([])
   const [tryoutRows, setTryoutRows] = useState<TryoutAttemptWithMeta[]>([])
   const [loading, setLoading] = useState(true)
@@ -181,7 +181,7 @@ export default function InstructorStudentDetailPage({ studentId }: { studentId: 
                     <td className="py-3 px-4 text-gray-600">{formatDateTime(row.submitted_at)}</td>
                     <td className="py-3 px-4">
                       <a
-                        href={`#/instructor/tryouts/${encodeURIComponent(row.tryoutId)}/attempts/${encodeURIComponent(row.attempt_id)}/ai-analysis?redirect=${encodeURIComponent(`#/instructor/students/${studentId}`)}`}
+                        href={`#/guru/tryouts/${encodeURIComponent(row.tryoutId)}/attempts/${encodeURIComponent(row.attempt_id)}/ai-analysis?redirect=${encodeURIComponent(`#/guru/students/${studentId}`)}`}
                         className="text-primary font-medium hover:underline"
                       >
                         Analisis AI →

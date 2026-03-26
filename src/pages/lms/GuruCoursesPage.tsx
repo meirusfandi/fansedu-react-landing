@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getInstructorCourses } from '../../lib/api'
 import { ApiError } from '../../lib/api'
 
-export default function InstructorCoursesPage() {
+export default function GuruCoursesPage() {
   const [data, setData] = useState<{ id: string; title: string; slug: string; category?: string; studentCount?: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

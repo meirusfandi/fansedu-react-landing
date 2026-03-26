@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
 
-export default function InstructorTryoutsPage() {
+export default function GuruTryoutsPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,13 +71,13 @@ export default function InstructorTryoutsPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <a
-                  href={`#/instructor/tryouts/${encodeURIComponent(t.id)}`}
+                  href={`#/guru/tryouts/${encodeURIComponent(t.id)}`}
                   className="inline-flex px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover"
                 >
                   Lihat Analisis
                 </a>
                 <a
-                  href={`#/instructor/leaderboard/${encodeURIComponent(t.id)}`}
+                  href={`#/guru/leaderboard/${encodeURIComponent(t.id)}`}
                   className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                 >
                   Leaderboard Internal

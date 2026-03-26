@@ -38,6 +38,22 @@ export default defineConfig(({ mode }) => {
           timeout: 60000,
           proxyTimeout: 60000,
         },
+        /** Same-origin fetch dari App.tsx untuk parse halaman channel (hindari CORS di dev). */
+        '/__youtube_channel': {
+          target: 'https://www.youtube.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: () => '/@fansedu.official/videos',
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader(
+                'User-Agent',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              )
+              proxyReq.setHeader('Accept-Language', 'id-ID,id;q=0.9,en;q=0.8')
+            })
+          },
+        },
       },
     },
   }

@@ -40,7 +40,7 @@ export default function CheckoutConfirmPage({
 }: {
   orderId: string | null
   embedded?: boolean
-  scope?: 'student' | 'instructor'
+  scope?: 'student' | 'guru'
 }) {
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [senderAccountNo, setSenderAccountNo] = useState('')
@@ -50,7 +50,7 @@ export default function CheckoutConfirmPage({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [transferAmount, setTransferAmount] = useState<number | null>(null)
-  const transactionsHref = scope === 'instructor' ? '#/instructor/transactions' : '#/student/transactions'
+  const transactionsHref = scope === 'guru' ? '#/guru/transactions' : '#/student/transactions'
 
   useEffect(() => {
     if (!orderId) return

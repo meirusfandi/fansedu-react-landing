@@ -17,7 +17,7 @@ function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 }
 
-export default function InstructorEarningsPage() {
+export default function GuruEarningsPage() {
   const [data, setData] = useState<{ period: string; revenue: number; newStudents: number }[]>([])
   const [periodFilter, setPeriodFilter] = useState('all')
   const [courseFilter, setCourseFilter] = useState('all')

@@ -1,287 +1,32 @@
-import AuthPage from './AuthPage'
-import CatalogPage from './CatalogPage'
-import ProgramDetailPage from './ProgramDetailPage'
-import CheckoutPage from './CheckoutPage'
-import CheckoutConfirmPage from './CheckoutConfirmPage'
-import CheckoutSuccessPage from './CheckoutSuccessPage'
-import { StudentLayout } from './StudentLayout'
-import StudentDashboardPage from './StudentDashboardPage'
-import StudentCoursesPage from './StudentCoursesPage'
-import StudentCourseLearnPage from './StudentCourseLearnPage'
-import StudentCodingPage from './StudentCodingPage'
-import StudentTryoutPage from './StudentTryoutPage'
-import StudentTryoutDetailPage from './StudentTryoutDetailPage'
-import StudentCodingProblemPage from './StudentCodingProblemPage'
-import StudentTransactionsPage from './StudentTransactionsPage'
-import StudentCertificatesPage from './StudentCertificatesPage'
-import StudentProfilePage from './StudentProfilePage'
-import { InstructorLayout } from './InstructorLayout'
-import InstructorDashboardPage from './InstructorDashboardPage'
-import InstructorCoursesPage from './InstructorCoursesPage'
-import InstructorStudentsPage from './InstructorStudentsPage'
-import InstructorStudentDetailPage from './InstructorStudentDetailPage'
-import InstructorTransactionsPage from './InstructorTransactionsPage'
-import InstructorEarningsPage from './InstructorEarningsPage'
-import InstructorProfilePage from './InstructorProfilePage'
-import InstructorTryoutsPage from './InstructorTryoutsPage'
-import InstructorTryoutAnalysisPage from './InstructorTryoutAnalysisPage'
-import InstructorAttemptAIAnalysisPage from './InstructorAttemptAIAnalysisPage'
-import InstructorTryoutStudentDetailPage from './InstructorTryoutStudentDetailPage'
-import TryoutLeaderboardPage from './TryoutLeaderboardPage'
+import { lazy, Suspense } from 'react'
+import type { LmsRoute } from './lmsRoutes'
+import { isGuruLmsRoute, isStudentLmsRoute } from './lmsRoutes'
 
-export interface LmsRoute {
-  type: 'auth' | 'catalog' | 'program' | 'checkout' | 'checkout-confirm' | 'checkout-success' | 'student' | 'student-courses' | 'student-course-learn' | 'student-tryout' | 'student-tryout-detail' | 'student-leaderboard' | 'student-coding' | 'student-coding-problem' | 'student-transactions' | 'student-certificates' | 'student-profile' | 'instructor' | 'instructor-courses' | 'instructor-students' | 'instructor-student-detail' | 'instructor-transactions' | 'instructor-checkout-confirm' | 'instructor-earnings' | 'instructor-profile' | 'instructor-tryouts' | 'instructor-leaderboard' | 'instructor-tryout-analysis' | 'instructor-tryout-student-detail' | 'instructor-attempt-ai'
-  programSlug?: string
-  authRedirect?: string
-  authTab?: string
-  checkoutProgramSlug?: string
-  checkoutConfirmOrderId?: string
-  codingProblemSlug?: string
-  courseSlug?: string
-  studentTryoutId?: string
-  studentPath?: string
-  instructorPath?: string
-  instructorTryoutId?: string
-  instructorStudentId?: string
-  instructorAttemptId?: string
+const LmsPublicRoutes = lazy(() => import('./LmsPublicRoutes'))
+const LmsStudentRoutes = lazy(() => import('./LmsStudentRoutes'))
+const LmsGuruRoutes = lazy(() => import('./LmsGuruRoutes'))
+
+const lmsSuspenseFallback = (
+  <div className="min-h-[40vh] flex items-center justify-center text-gray-500 text-sm">Memuat…</div>
+)
+
+function LmsRouteView({ route }: { route: LmsRoute }) {
+  if (isStudentLmsRoute(route.type)) return <LmsStudentRoutes route={route} />
+  if (isGuruLmsRoute(route.type)) return <LmsGuruRoutes route={route} />
+  return <LmsPublicRoutes route={route} />
 }
 
-export function parseLmsRoute(hashPath: string): LmsRoute | null {
-  const path = hashPath.startsWith('/') ? hashPath : `/${hashPath}`
-  const pathOnly = path.includes('?') ? path.slice(0, path.indexOf('?')) : path
-  const queryString = path.includes('?') ? path.slice(path.indexOf('?') + 1) : ''
-  const query = new URLSearchParams(queryString)
-
-  if (pathOnly === '/auth') {
-    return { type: 'auth', authRedirect: query.get('redirect') || '#/', authTab: query.get('tab') || 'login' }
-  }
-  if (pathOnly === '/catalog') return { type: 'catalog' }
-  // /program atau /program/ tanpa slug → katalog
-  if (pathOnly === '/program' || pathOnly === '/program/') return { type: 'catalog' }
-  const programMatch = pathOnly.match(/^\/program\/([^/]+)$/)
-  if (programMatch) return { type: 'program', programSlug: programMatch[1] }
-  if (pathOnly === '/checkout/success') return { type: 'checkout-success' }
-  if (pathOnly === '/checkout/confirm') return { type: 'checkout-confirm', checkoutConfirmOrderId: query.get('order') || undefined }
-  if (pathOnly === '/checkout') {
-    const slug = query.get('program') || query.get('course')
-    return { type: 'checkout', checkoutProgramSlug: slug || undefined }
-  }
-  if (pathOnly === '/student') return { type: 'student', studentPath: '/student' }
-  if (pathOnly === '/student/courses') return { type: 'student-courses', studentPath: '/student/courses' }
-  const studentCourseLearnMatch = pathOnly.match(/^\/student\/courses\/([^/]+)$/)
-  if (studentCourseLearnMatch) return { type: 'student-course-learn', courseSlug: studentCourseLearnMatch[1], studentPath: '/student/courses' }
-  if (pathOnly === '/student/tryout') return { type: 'student-tryout', studentPath: '/student/tryout' }
-  const studentTryoutDetailMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)$/)
-  if (studentTryoutDetailMatch) return { type: 'student-tryout-detail', studentTryoutId: studentTryoutDetailMatch[1], studentPath: '/student/tryout' }
-  const studentLeaderboardMatch = pathOnly.match(/^\/student\/leaderboard\/([^/]+)$/)
-  if (studentLeaderboardMatch) return { type: 'student-leaderboard', studentTryoutId: studentLeaderboardMatch[1], studentPath: '/student/tryout' }
-  if (pathOnly === '/student/coding') return { type: 'student-coding', studentPath: '/student/coding' }
-  const codingProblemMatch = pathOnly.match(/^\/student\/coding\/problem\/([^/]+)$/)
-  if (codingProblemMatch) return { type: 'student-coding-problem', codingProblemSlug: codingProblemMatch[1], studentPath: '/student/coding' }
-  if (pathOnly === '/student/transactions') return { type: 'student-transactions', studentPath: '/student/transactions' }
-  if (pathOnly === '/student/certificates') return { type: 'student-certificates', studentPath: '/student/certificates' }
-  if (pathOnly === '/student/profile') return { type: 'student-profile', studentPath: '/student/profile' }
-  if (pathOnly === '/instructor') return { type: 'instructor', instructorPath: '/instructor' }
-  if (pathOnly === '/instructor/courses') return { type: 'instructor-courses', instructorPath: '/instructor/courses' }
-  if (pathOnly === '/instructor/students') return { type: 'instructor-students', instructorPath: '/instructor/students' }
-  const instructorStudentDetailMatch = pathOnly.match(/^\/instructor\/students\/([^/]+)$/)
-  if (instructorStudentDetailMatch) {
-    return {
-      type: 'instructor-student-detail',
-      instructorStudentId: instructorStudentDetailMatch[1],
-      instructorPath: '/instructor/students',
-    }
-  }
-  if (pathOnly === '/instructor/transactions') return { type: 'instructor-transactions', instructorPath: '/instructor/transactions' }
-  if (pathOnly === '/instructor/transactions/confirm') {
-    return { type: 'instructor-checkout-confirm', checkoutConfirmOrderId: query.get('order') || undefined, instructorPath: '/instructor/transactions' }
-  }
-  if (pathOnly === '/instructor/earnings') return { type: 'instructor-earnings', instructorPath: '/instructor/earnings' }
-  if (pathOnly === '/instructor/profile') return { type: 'instructor-profile', instructorPath: '/instructor/profile' }
-  if (pathOnly === '/instructor/tryouts') return { type: 'instructor-students', instructorPath: '/instructor/students' }
-  const instructorLeaderboardMatch = pathOnly.match(/^\/instructor\/leaderboard\/([^/]+)$/)
-  if (instructorLeaderboardMatch) return { type: 'instructor-leaderboard', instructorTryoutId: instructorLeaderboardMatch[1], instructorPath: '/instructor/tryouts' }
-  const tryoutAnalysisMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/?$/)
-  if (tryoutAnalysisMatch) return { type: 'instructor-tryout-analysis', instructorTryoutId: tryoutAnalysisMatch[1], instructorPath: '/instructor/tryouts' }
-  const tryoutStudentDetailMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/students\/([^/]+)\/?$/)
-  if (tryoutStudentDetailMatch) {
-    return {
-      type: 'instructor-tryout-student-detail',
-      instructorTryoutId: tryoutStudentDetailMatch[1],
-      instructorStudentId: tryoutStudentDetailMatch[2],
-      instructorPath: '/instructor/tryouts',
-    }
-  }
-  const attemptAiMatch = pathOnly.match(/^\/instructor\/tryouts\/([^/]+)\/attempts\/([^/]+)\/ai-analysis\/?$/)
-  if (attemptAiMatch) return { type: 'instructor-attempt-ai', instructorTryoutId: attemptAiMatch[1], instructorAttemptId: attemptAiMatch[2], instructorPath: '/instructor/tryouts' }
-  return null
-}
-
+/**
+ * Shell LMS: lazy-load chunk publik / siswa / guru sesuai rute.
+ * Modul ini ringan; layout & dashboard berat tidak ikut bundle landing (lihat main + `lmsRoutes`).
+ */
 export default function LMSApp({ route }: { route: LmsRoute }) {
-  switch (route.type) {
-    case 'auth':
-      return <AuthPage redirect={route.authRedirect ?? '#/'} tab={route.authTab} />
-    case 'catalog':
-      return <CatalogPage />
-    case 'program':
-      return route.programSlug ? <ProgramDetailPage slug={route.programSlug} /> : null
-    case 'checkout':
-      return <CheckoutPage programSlug={route.checkoutProgramSlug ?? null} />
-    case 'checkout-confirm':
-      return <CheckoutConfirmPage orderId={route.checkoutConfirmOrderId ?? null} />
-    case 'checkout-success':
-      return <CheckoutSuccessPage />
-    case 'student':
-      return (
-        <StudentLayout currentPath="/student">
-          <StudentDashboardPage />
-        </StudentLayout>
-      )
-    case 'student-courses':
-      return (
-        <StudentLayout currentPath="/student/courses">
-          <StudentCoursesPage />
-        </StudentLayout>
-      )
-    case 'student-course-learn':
-      return (
-        <StudentLayout currentPath="/student/courses">
-          <StudentCourseLearnPage courseSlug={route.courseSlug ?? ''} />
-        </StudentLayout>
-      )
-    case 'student-tryout':
-      return (
-        <StudentLayout currentPath="/student/tryout">
-          <StudentTryoutPage />
-        </StudentLayout>
-      )
-    case 'student-tryout-detail':
-      return (
-        <StudentLayout currentPath="/student/tryout">
-          <StudentTryoutDetailPage tryoutId={route.studentTryoutId ?? ''} />
-        </StudentLayout>
-      )
-    case 'student-leaderboard':
-      return (
-        <StudentLayout currentPath="/student/tryout">
-          <TryoutLeaderboardPage tryoutId={route.studentTryoutId ?? ''} role="student" />
-        </StudentLayout>
-      )
-    case 'student-coding':
-      return (
-        <StudentLayout currentPath="/student/coding">
-          <StudentCodingPage />
-        </StudentLayout>
-      )
-    case 'student-coding-problem':
-      return (
-        <StudentLayout currentPath="/student/coding">
-          <StudentCodingProblemPage slug={route.codingProblemSlug ?? ''} />
-        </StudentLayout>
-      )
-    case 'student-transactions':
-      return (
-        <StudentLayout currentPath="/student/transactions">
-          <StudentTransactionsPage />
-        </StudentLayout>
-      )
-    case 'student-certificates':
-      return (
-        <StudentLayout currentPath="/student/certificates">
-          <StudentCertificatesPage />
-        </StudentLayout>
-      )
-    case 'student-profile':
-      return (
-        <StudentLayout currentPath="/student/profile">
-          <StudentProfilePage />
-        </StudentLayout>
-      )
-    case 'instructor':
-      return (
-        <InstructorLayout currentPath="/instructor">
-          <InstructorDashboardPage />
-        </InstructorLayout>
-      )
-    case 'instructor-courses':
-      return (
-        <InstructorLayout currentPath="/instructor/courses">
-          <InstructorCoursesPage />
-        </InstructorLayout>
-      )
-    case 'instructor-students':
-      return (
-        <InstructorLayout currentPath="/instructor/students">
-          <InstructorStudentsPage />
-        </InstructorLayout>
-      )
-    case 'instructor-student-detail':
-      return (
-        <InstructorLayout currentPath="/instructor/students">
-          <InstructorStudentDetailPage studentId={route.instructorStudentId ?? ''} />
-        </InstructorLayout>
-      )
-    case 'instructor-transactions':
-      return (
-        <InstructorLayout currentPath="/instructor/transactions">
-          <InstructorTransactionsPage />
-        </InstructorLayout>
-      )
-    case 'instructor-checkout-confirm':
-      return (
-        <InstructorLayout currentPath="/instructor/transactions">
-          <CheckoutConfirmPage orderId={route.checkoutConfirmOrderId ?? null} embedded scope="instructor" />
-        </InstructorLayout>
-      )
-    case 'instructor-earnings':
-      return (
-        <InstructorLayout currentPath="/instructor/earnings">
-          <InstructorEarningsPage />
-        </InstructorLayout>
-      )
-    case 'instructor-profile':
-      return (
-        <InstructorLayout currentPath="/instructor/profile">
-          <InstructorProfilePage />
-        </InstructorLayout>
-      )
-    case 'instructor-tryouts':
-      return (
-        <InstructorLayout currentPath="/instructor/tryouts">
-          <InstructorTryoutsPage />
-        </InstructorLayout>
-      )
-    case 'instructor-leaderboard':
-      return (
-        <InstructorLayout currentPath="/instructor/tryouts">
-          <TryoutLeaderboardPage tryoutId={route.instructorTryoutId ?? ''} role="instructor" />
-        </InstructorLayout>
-      )
-    case 'instructor-tryout-analysis':
-      return (
-        <InstructorLayout currentPath="/instructor/tryouts">
-          <InstructorTryoutAnalysisPage tryoutId={route.instructorTryoutId ?? ''} />
-        </InstructorLayout>
-      )
-    case 'instructor-tryout-student-detail':
-      return (
-        <InstructorLayout currentPath="/instructor/tryouts">
-          <InstructorTryoutStudentDetailPage
-            tryoutId={route.instructorTryoutId ?? ''}
-            studentId={route.instructorStudentId ?? ''}
-          />
-        </InstructorLayout>
-      )
-    case 'instructor-attempt-ai':
-      return (
-        <InstructorLayout currentPath="/instructor/tryouts">
-          <InstructorAttemptAIAnalysisPage
-            tryoutId={route.instructorTryoutId ?? ''}
-            attemptId={route.instructorAttemptId ?? ''}
-          />
-        </InstructorLayout>
-      )
-    default:
-      return null
-  }
+  return (
+    <Suspense fallback={lmsSuspenseFallback}>
+      <LmsRouteView route={route} />
+    </Suspense>
+  )
 }
+
+export type { LmsRoute } from './lmsRoutes'
+export { parseLmsRoute } from './lmsRoutes'

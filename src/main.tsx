@@ -6,9 +6,11 @@ import ArticleDetailPage from './pages/ArticleDetail.tsx'
 import TryoutListPage from './pages/TryoutListPage.tsx'
 import TryoutInfoPage from './pages/TryoutInfo.tsx'
 import TryoutLeaderboardPage from './pages/TryoutLeaderboard.tsx'
-import LMSApp, { parseLmsRoute } from './pages/lms/LMSApp.tsx'
+import LMSApp from './pages/lms/LMSApp.tsx'
+import { parseLmsRoute } from './pages/lms/lmsRoutes.ts'
 
-const LMS_PATHS = /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/(success|confirm))?|student(\/[^?]*)?|instructor(\/[^?]*)?)(\?|$)/
+const LMS_PATHS =
+  /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/(success|confirm))?|student(\/[^?]*)?|guru(\/[^?]*)?|instructor(\/[^?]*)?)(\?|$)/
 
 function parseHash(): { route: 'home' | 'article' | 'tryout' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
   const hash = window.location.hash.slice(1) || '/'

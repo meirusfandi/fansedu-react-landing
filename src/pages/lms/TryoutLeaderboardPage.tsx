@@ -3,7 +3,7 @@ import { ApiError, getTryoutLeaderboard, type TryoutLeaderboardEntry } from '../
 
 interface TryoutLeaderboardPageProps {
   tryoutId: string
-  role: 'student' | 'instructor'
+  role: 'student' | 'guru'
 }
 
 export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderboardPageProps) {
@@ -34,8 +34,8 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
     }
   }, [tryoutId])
 
-  const backHref = role === 'instructor'
-    ? `#/instructor/tryouts/${encodeURIComponent(tryoutId)}`
+  const backHref = role === 'guru'
+    ? `#/guru/tryouts/${encodeURIComponent(tryoutId)}`
     : `#/student/tryout/${encodeURIComponent(tryoutId)}`
 
   return (
@@ -48,7 +48,7 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Leaderboard Tryout</h1>
       <p className="text-gray-500 mb-6">
-        Halaman leaderboard khusus dashboard {role === 'instructor' ? 'guru' : 'siswa'}.
+        Halaman leaderboard khusus dashboard {role === 'guru' ? 'guru' : 'siswa'}.
       </p>
 
       <div className="rounded-2xl border bg-white overflow-hidden">
