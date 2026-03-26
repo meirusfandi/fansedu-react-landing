@@ -43,6 +43,9 @@ function waUrl(message: string): string {
 const WA_TEMPLATES = {
   navbar: 'Halo Fansedu, saya ingin bertanya tentang program pelatihan.',
   hero: 'Halo Fansedu, saya tertarik mendaftar program pelatihan OSN Informatika.',
+  heroSlot: 'Halo Fansedu, saya ingin amankan slot program OSN-K / Batch April.',
+  /** Setelah promo resmi berakhir — tanya penawaran yang masih berlaku */
+  promoBaru: 'Halo Fansedu, saya ingin menanyakan promo atau penawaran terbaru untuk program pelatihan OSN.',
   tanyaProgram: 'Halo Fansedu, saya ingin bertanya tentang program dan pendaftaran.',
   requestBidang: 'Halo Fansedu, saya ingin request program bidang lainnya.',
   contact: 'Halo Fansedu, saya ingin bertanya lebih lanjut tentang program dan pendaftaran.',
@@ -75,9 +78,17 @@ function getStoredAuthUser(): { name: string; role: string } | null {
 const URGENCY = {
   batch: 'Batch April 2026',
   quotaMax: 30,
-  /** Tenggat Early Bird: 10 hari dari sekarang. Countdown berkurang tiap hari (per hitungan hari). */
+  /** Slot tersisa (display marketing; sesuaikan dengan data real). */
+  slotsRemaining: 8,
+  /** Tenggat Early Bird / promo display (hitungan hari). */
   earlyBirdEnd: new Date('2026-03-17T23:59:59+07:00'),
-}
+  /** Akhir countdown promo di hero & pricing (WIB) — harus sama dengan narasi promoEndDisplay. */
+  promoEndsAt: new Date('2026-03-25T23:59:59+07:00'),
+  promoLabel: 'Promo THR',
+  /** Tanggal teks (selaras dengan promoEndsAt). */
+  promoEndDisplay: '25 Maret 2026',
+} as const
+
 function getEarlyBirdDaysLeft(): number {
   const now = new Date()
   const end = URGENCY.earlyBirdEnd
@@ -89,6 +100,41 @@ function getEarlyBirdDaysLeft(): number {
 function formatUrgencyDate(date: Date): string {
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 }
+
+/** Countdown ke URGENCY.promoEndsAt (re-render tiap detik). */
+function getPromoCountdownLabel(): {
+  headline: string
+  timer: string
+  ended: boolean
+  urgent24h: boolean
+  /** Teks penjelas jika promo sudah lewat; null jika masih berjalan */
+  endedBody: string | null
+} {
+  const ms = URGENCY.promoEndsAt.getTime() - Date.now()
+  if (ms <= 0) {
+    return {
+      headline: 'Promo periode ini sudah berakhir',
+      timer: '',
+      ended: true,
+      urgent24h: false,
+      endedBody: `${URGENCY.promoLabel} yang berlaku hingga ${URGENCY.promoEndDisplay} sudah tidak berlaku. Untuk mengetahui promo lain atau harga terbaru, silakan hubungi tim Fansedu.`,
+    }
+  }
+  const totalSec = Math.floor(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    headline: h < 24 ? 'Sisa waktu promo' : 'Hitung mundur berakhirnya promo',
+    timer: `${pad(h)}:${pad(m)}:${pad(s)}`,
+    ended: false,
+    urgent24h: h < 24,
+    endedBody: null,
+  }
+}
+
+const POPULAR_PROGRAM_SLUG = 'pelatihan-intensif-osn-k-2026'
 
 const MOCK_PACKAGES: LandingPackage[] = [
   {
@@ -217,6 +263,12 @@ function App() {
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
   const urgencyDateLabel = formatUrgencyDate(URGENCY.earlyBirdEnd)
+  const [, setCountdownTick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const promoCountdown = getPromoCountdownLabel()
   useEffect(() => {
     const onFocus = () => setAuthUser(getStoredAuthUser())
     window.addEventListener('focus', onFocus)
@@ -343,21 +395,21 @@ function App() {
             </a>
 
             <div className="hidden md:flex items-center gap-6">
-              <nav className="flex items-center gap-8">
+              <nav className="flex items-center gap-6 lg:gap-8">
+                <a href="#tryout" className="nav-link font-medium text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+                  Tryout Gratis
+                </a>
+                <a href="#packages" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#packages')}>
+                  Program &amp; Harga
+                </a>
                 <a href="#solusi" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#solusi')}>
-                  Tentang Kami
+                  Hasil
                 </a>
                 <a href="#features" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Fitur
                 </a>
-                <a href="#packages" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#packages')}>
-                  Program
-                </a>
                 <a href="#testimoni" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
                   Testimoni
-                </a>
-                <a href="#tryout" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#tryout')}>
-                  TryOut Gratis
                 </a>
                 <a href="#request" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#request')}>
                   Request Bidang
@@ -396,20 +448,20 @@ function App() {
       <div className={`mobile-menu fixed top-0 right-0 w-80 h-full bg-[var(--bg)] z-40 border-l border-[var(--border)] ${isMenuOpen ? 'active' : ''}`}>
         <div className="pt-24 px-6">
           <nav className="flex flex-col gap-4">
+            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+              Tryout Gratis
+            </a>
+            <a href="#packages" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#packages')}>
+              Program &amp; Harga
+            </a>
             <a href="#solusi" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#solusi')}>
-              Tentang Kami
+              Hasil
             </a>
             <a href="#features" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#features')}>
               Fitur
             </a>
-            <a href="#packages" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#packages')}>
-              Program
-            </a>
             <a href="#testimoni" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
               Testimoni
-            </a>
-            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
-              TryOut Gratis
             </a>
             <a href="#request" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#request')}>
               Request Bidang
@@ -439,54 +491,100 @@ function App() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-24 pb-16 w-full">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div className="order-2 lg:order-1">
-              <div className="reveal">
-                <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6">
-                  Program Persiapan OSN Informatika 2026
+              <div className="reveal flex flex-wrap items-center gap-2 mb-4">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
+                  <span aria-hidden>⚠️</span>
+                  Batch April hampir penuh
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold bg-[var(--card)] text-[var(--fg)] border-2 border-[var(--fg)]/15 shadow-sm">
+                  ~{URGENCY.slotsRemaining} slot tersisa
                 </span>
               </div>
 
               <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-6xl leading-tight mb-4 reveal reveal-delay-1">
-                Persiapan OSN Informatika 2026
+                Siap Lolos OSN-K Informatika 2026?
               </h1>
-              <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl leading-tight mb-6 text-[var(--accent)] reveal reveal-delay-1">
-                Mulai dari Dasar sampai Lolos OSN-K
-              </h2>
-
-              <p className="text-lg text-[var(--fg-muted)] mb-6 max-w-xl reveal reveal-delay-2">
-                Belajar algoritma, C++, dan strategi olimpiade melalui latihan soal, tryout nasional, dan pembahasan mendalam.
+              <p className="text-xl sm:text-2xl text-[var(--fg-muted)] font-medium mb-6 max-w-xl reveal reveal-delay-1">
+                Dari tidak tahu apa-apa → paham soal OSN → siap lolos seleksi
               </p>
 
-              <ul className="space-y-2 mb-8 reveal reveal-delay-2">
+              <ul className="space-y-2 mb-6 reveal reveal-delay-2">
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Mentor berpengalaman
+                  <span className="text-[var(--accent)] font-bold">✔</span> Latihan soal OSN real
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> 2x Tryout Nasional
+                  <span className="text-[var(--accent)] font-bold">✔</span> 2x tryout nasional
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Dashboard Ranking
+                  <span className="text-[var(--accent)] font-bold">✔</span> Ranking &amp; evaluasi kemampuan
                 </li>
               </ul>
 
-              <div className="flex flex-wrap items-center gap-3 mb-12 reveal reveal-delay-3">
+              <div
+                className={`mb-8 p-4 rounded-2xl border reveal reveal-delay-2 ${
+                  promoCountdown.ended
+                    ? 'border-[var(--border)] bg-[var(--card)]'
+                    : promoCountdown.urgent24h
+                      ? 'border-red-400/50 bg-red-500/10'
+                      : 'border-[var(--accent)]/30 bg-[var(--accent-light)] dark:bg-[var(--accent)]/10'
+                }`}
+              >
+                <p className="text-sm font-semibold text-[var(--fg)] mb-1">
+                  {promoCountdown.ended ? '📌' : '⏳'} {promoCountdown.headline}
+                </p>
+                {!promoCountdown.ended ? (
+                  <>
+                    <p className="font-display font-bold text-3xl sm:text-4xl text-[var(--accent)] tabular-nums tracking-tight">
+                      {promoCountdown.timer}
+                    </p>
+                    <p className="text-xs text-[var(--fg-muted)] mt-2">
+                      {URGENCY.promoLabel} · berlaku s.d. {URGENCY.promoEndDisplay}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {promoCountdown.endedBody && (
+                      <p className="text-sm text-[var(--fg-muted)] leading-relaxed mt-2">{promoCountdown.endedBody}</p>
+                    )}
+                    <a
+                      href={waUrl(WA_TEMPLATES.promoBaru)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex mt-4 text-sm font-semibold text-[var(--accent)] hover:underline"
+                      onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'hero_promo_ended' })}
+                    >
+                      Tanya promo atau penawaran terbaru di WhatsApp →
+                    </a>
+                  </>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mb-10 reveal reveal-delay-3">
                 <a
-                  href={REGISTER_URL}
-                  className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm text-center"
-                  onClick={() => trackConversionEvent('cta_register_click', { placement: 'hero' })}
-                >
-                  Daftar Sekarang
-                </a>
-                <a
-                  href={waUrl(WA_TEMPLATES.tanyaProgram)}
+                  href={waUrl(WA_TEMPLATES.heroSlot)}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm text-center"
-                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'hero' })}
+                  className="btn-primary px-6 py-3 rounded-full font-semibold text-sm text-center shadow-lg shadow-[var(--accent)]/25"
+                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'hero_slot' })}
                 >
-                  Tanya Program
+                  Amankan Slot Sekarang
                 </a>
-                <a href="#solusi" className="text-[var(--fg-muted)] hover:text-[var(--accent)] font-medium text-sm transition-colors" onClick={(event) => handleAnchorClick(event, '#solusi')}>
-                  Pelajari Lebih Lanjut →
+                <a
+                  href="#tryout"
+                  className="btn-secondary px-6 py-3 rounded-full font-semibold text-sm text-center border-2 border-[var(--accent)] text-[var(--accent)]"
+                  onClick={(event) => {
+                    handleAnchorClick(event, '#tryout')
+                    trackConversionEvent('cta_tryout_click', { placement: 'hero' })
+                  }}
+                >
+                  Coba Tryout Gratis Dulu
+                </a>
+                <a
+                  href={REGISTER_URL}
+                  className="text-center px-4 py-2 text-sm font-semibold text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors"
+                  onClick={() => trackConversionEvent('cta_register_click', { placement: 'hero_secondary' })}
+                >
+                  Atau daftar akun →
                 </a>
               </div>
 
@@ -560,6 +658,9 @@ function App() {
 
       <section id="social-proof" className="py-16 relative bg-[var(--card)] border-b border-[var(--border)]">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+          <p className="text-center text-sm font-semibold text-[var(--fg-muted)] uppercase tracking-wide mb-8 reveal">
+            Dipercaya peserta &amp; pembimbing dari berbagai sekolah
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
               { value: '20+', label: 'paket pembahasan soal' },
@@ -576,36 +677,127 @@ function App() {
         </div>
       </section>
 
-      <section id="masalah" className="py-24 relative bg-[var(--bg-secondary)]">
+      <section id="tryout" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Yang Sering Dihadapi</span>
-            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-              Masalah Siswa <span className="text-[var(--accent)]">Persiapan OSN</span>
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal reveal-delay-1">
+              Belum yakin? <span className="text-[var(--accent)]">Coba Tryout OSN Gratis</span> dulu
             </h2>
-            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
-              Banyak siswa dan guru pembimbing menghadapi kendala yang sama saat mempersiapkan OSN Informatika.
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-10">
+              Tanpa biaya — kamu langsung dapat gambaran nyata soal OSN dan posisimu di tingkat nasional.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-4 lg:gap-6 text-left reveal reveal-delay-2">
+              {[
+                {
+                  title: 'Tes level kemampuan',
+                  desc: 'Soal format OSN dengan pembatas waktu — lihat seberapa jauh fondasimu.',
+                },
+                {
+                  title: 'Ranking nasional',
+                  desc: 'Peringkat di leaderboard membandingkanmu dengan peserta dari berbagai daerah.',
+                },
+                {
+                  title: 'Analisis kelemahan',
+                  desc: 'Dari hasil tryout, kamu tahu bagian mana yang masih perlu dilatih lagi.',
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="feature-card rounded-2xl p-5 lg:p-6 flex gap-4 border border-[var(--border)]"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0" aria-hidden>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-display font-semibold text-[var(--fg)] mb-1.5 leading-snug">{item.title}</h3>
+                    <p className="text-sm text-[var(--fg-muted)] leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center max-w-3xl mx-auto mb-10 md:mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-4 reveal">Alur di platform</span>
+            <h3 className="font-display font-bold text-2xl sm:text-3xl lg:text-4xl text-[var(--fg)] mb-3 reveal reveal-delay-1">
+              Mulai dari sini — <span className="text-[var(--accent)]">4 langkah</span> sampai hasil tryout
+            </h3>
+            <p className="text-[var(--fg-muted)] text-base sm:text-lg reveal reveal-delay-2">
+              Daftar akun, ikut tryout format OSN, cek peringkat nasional, lalu pilih program yang cocok berdasarkan analisis hasilmu.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
-              { title: 'Bingung mulai dari mana', desc: 'Materi OSN luas, tidak tahu prioritas dan urutan belajar yang efektif.' },
-              { title: 'Materi tidak terstruktur', desc: 'Belajar dari banyak sumber tanpa kurikulum jelas dan pembahasan mendalam.' },
-              { title: 'Tidak ada simulasi nyata', desc: 'Belum pernah mengerjakan soal format OSN dengan batas waktu dan ranking.' },
-              { title: 'Kurang bimbingan ahli', desc: 'Sulit menemukan mentor yang benar-benar berpengalaman di jalur OSN.' },
-              { title: 'Tidak tahu posisi kemampuan', desc: 'Tidak ada alat ukur untuk bandingkan dengan peserta lain secara nasional.' },
-              { title: 'Waktu terbatas', desc: 'Perlu metode belajar yang efisien dan terarah agar siap tepat waktu.' },
+              { step: 1, title: 'Daftar akun', desc: 'Buat akun di platform Fansedu terlebih dahulu.' },
+              { step: 2, title: 'Tryout gratis', desc: 'Dari dashboard siswa, daftar dan ikuti TryOut OSN format resmi.' },
+              { step: 3, title: 'Lihat ranking', desc: 'Cek peringkatmu di leaderboard nasional.' },
+              { step: 4, title: 'Analisis & kelas', desc: 'Pahami hasil lalu pilih program yang sesuai kebutuhanmu.' },
             ].map((item, index) => (
-              <div key={item.title} className={`feature-card rounded-2xl p-6 reveal reveal-delay-${(index % 3) + 1}`}>
-                <div className="w-10 h-10 rounded-xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-center mb-4 text-[var(--fg-muted)]">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <div key={item.step} className="relative">
+                <div className={`feature-card rounded-2xl p-6 h-full reveal reveal-delay-${(index % 4) + 1}`}>
+                  <div className="w-10 h-10 rounded-xl bg-[var(--accent)] text-white font-display font-bold text-lg flex items-center justify-center mb-4">
+                    {item.step}
+                  </div>
+                  <h3 className="font-display font-semibold text-lg mb-2">{item.title}</h3>
+                  <p className="text-[var(--fg-muted)] text-sm">{item.desc}</p>
                 </div>
-                <h3 className="font-display font-semibold text-lg mb-2">{item.title}</h3>
-                <p className="text-[var(--fg-muted)] text-sm">{item.desc}</p>
+                {item.step < 4 && (
+                  <div className="hidden md:flex absolute top-1/2 -right-3 transform -translate-y-1/2 z-10 text-[var(--border)]">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          <div className="text-center reveal">
+            <a
+              href={REGISTER_URL}
+              className="btn-primary px-8 py-4 rounded-full font-semibold inline-block text-lg shadow-lg shadow-[var(--accent)]/20"
+              onClick={() => trackConversionEvent('cta_register_click', { placement: 'tryout' })}
+            >
+              Mulai Tryout Gratis
+            </a>
+            <p className="text-[var(--fg-muted)] text-sm mt-4">Sudah punya akun? <a href="#/auth" className="text-[var(--accent)] font-medium hover:underline">Masuk</a>, lalu buka menu Tryout di dashboard.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="masalah" className="py-24 relative bg-[var(--bg)] border-y border-[var(--border)]">
+        <div className="absolute inset-0 grid-bg opacity-30"></div>
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="inline-block px-4 py-2 rounded-full bg-red-500/10 border border-red-500/30 text-sm font-semibold text-red-700 dark:text-red-300 mb-6 reveal">Kenapa banyak siswa gagal OSN?</span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
+              Bukan karena tidak pintar — <span className="text-[var(--accent)]">tapi karena ini</span>
+            </h2>
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 max-w-2xl mx-auto">
+              Banyak siswa gagal OSN bukan karena tidak pintar, tapi karena:
+            </p>
+          </div>
+          <div className="max-w-3xl mx-auto space-y-4 mb-12">
+            {[
+              { t: 'Tidak tahu soal yang sering keluar', d: 'Belajar materi yang jarang muncul di seleksi — waktu habis sia-sia.' },
+              { t: 'Tidak pernah tryout real', d: 'Baru kerasa sulitnya saat hari-H; tidak ada simulasi tekanan waktu & format resmi.' },
+              { t: 'Belajar tanpa arah', d: 'Tanpa kurikulum dan feedback, sulit tahu apakah kamu sudah siap dibanding peserta lain.' },
+            ].map((item, index) => (
+              <div key={item.t} className={`feature-card rounded-2xl p-6 border-l-4 border-red-500/60 reveal reveal-delay-${(index % 3) + 1}`}>
+                <h3 className="font-display font-semibold text-lg mb-2 flex items-center gap-2">
+                  <span className="text-red-500 font-bold">❌</span> {item.t}
+                </h3>
+                <p className="text-[var(--fg-muted)] text-sm pl-7">{item.d}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-lg font-medium text-[var(--fg)] reveal">
+            👉 Ini yang bikin frustrasi — dan bisa dihindari dengan persiapan yang tepat.
+          </p>
         </div>
       </section>
 
@@ -615,136 +807,40 @@ function App() {
             <div className="reveal">
                 <div className="feature-card rounded-3xl p-8 lg:p-12 h-full flex flex-col items-center justify-center text-center">
                   <img src="/fansedu.png" alt="Fansedu logo" className="w-40 sm:w-48 rounded-2xl mb-6" />
-                  <h2 className="font-display font-bold text-2xl lg:text-3xl">Solusi FansEdu</h2>
+                  <h2 className="font-display font-bold text-2xl lg:text-3xl">Transformasi bersama Fansedu</h2>
+                  <p className="text-sm text-[var(--fg-muted)] mt-3">Dari belajar random → jalur terukur menuju OSN-K</p>
                 </div>
             </div>
 
             <div>
               <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">
-                Solusi Kami
+                Hasil yang kamu dapat
               </span>
 
               <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-                Dari <span className="text-[var(--accent)]">0</span> sampai Lolos OSN-K
+                Dengan Fansedu, <span className="text-[var(--accent)]">kamu akan</span>
               </h2>
 
-              <p className="text-[var(--fg-muted)] text-lg mb-6 reveal reveal-delay-2">
-                Fansedu hadir sebagai solusi bagi siswa SMA dan guru pembimbing yang ingin persiapan OSN Informatika terstruktur: kurikulum dari dasar sampai siap lomba, tryout nasional untuk simulasi nyata, dan pembahasan mendalam oleh mentor berpengalaman.
-              </p>
-
-              <p className="text-[var(--fg-muted)] mb-8 reveal reveal-delay-3">
-                Tim pengajar terdiri dari medalis dan pelatih OSN yang paham strategi lolos seleksi. Mereka berasal dari <strong className="text-[var(--fg)]">Ex-OSN Informatika</strong>, <strong className="text-[var(--fg)]">Ex-Tokopedia</strong>, dan saat ini bekerja sebagai Software engineer di <strong className="text-[var(--fg)]">Govtech Indonesia</strong>. Materi dan strategi sudah disesuaikan khusus untuk persiapan OSN.
-              </p>
-
-              <div className="grid grid-cols-2 gap-6 reveal reveal-delay-4">
-                {['Kurikulum terstruktur', 'Tryout nasional', 'Pembahasan mendalam', 'Mentor berpengalaman', 'Dashboard ranking', 'Rekaman & arsip lengkap'].map((item) => (
-                  <div className="flex items-center gap-3" key={item}>
-                    <div className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--border)] flex items-center justify-center">
-                      <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                      </svg>
-                    </div>
-                    <span className="font-medium">{item}</span>
-                  </div>
+              <ul className="space-y-3 mb-8 reveal reveal-delay-2">
+                {[
+                  'Paham pola soal OSN',
+                  'Terbiasa dengan soal real & tekanan tryout',
+                  'Tahu posisi kemampuanmu (ranking nasional)',
+                  'Siap menghadapi seleksi OSN-K',
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-3 text-[var(--fg)] text-lg">
+                    <span className="text-[var(--accent)] font-bold shrink-0">✔</span>
+                    <span>{item}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
+
+              <p className="text-[var(--fg-muted)] mb-2 reveal reveal-delay-3 text-sm">
+                Tim pengajar: <strong className="text-[var(--fg)]">Ex-OSN Informatika</strong>, praktisi dari <strong className="text-[var(--fg)]">Tokopedia</strong> &amp; <strong className="text-[var(--fg)]">Govtech Indonesia</strong> — materi disetel khusus persiapan OSN.
+              </p>
             </div>
           </div>
 
-          {/* Visual proof: screenshot leaderboard, dashboard, soal */}
-          <div className="mt-20 pt-16 border-t border-[var(--border)]">
-            <h3 className="text-center font-display font-bold text-2xl sm:text-3xl text-[var(--fg)] mb-10 reveal">Lihat Sendiri Pengalaman Belajar</h3>
-            <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
-              <div className="reveal">
-                <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/leaderboard-to.png', alt: 'Screenshot leaderboard ranking nasional Fansedu' })}>
-                    <img
-                      src="/leaderboard-to.png"
-                      alt="Screenshot leaderboard ranking nasional Fansedu"
-                      className="w-full h-full object-cover object-top pointer-events-none"
-                      onError={(e) => {
-                        const t = e.currentTarget
-                        if (!t.src.includes('placehold.co')) {
-                          t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Leaderboard+Nasional'
-                        }
-                      }}
-                    />
-                  </button>
-                  <div className="p-4 text-center">
-                    <p className="font-semibold text-[var(--fg)]">Leaderboard Nasional</p>
-                    <p className="text-sm text-[var(--fg-muted)]">Peringkat tryout antar peserta</p>
-                  </div>
-                </div>
-              </div>
-              <div className="reveal reveal-delay-1">
-                <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/dashboard-siswa.png', alt: 'Screenshot dashboard peserta Fansedu' })}>
-                    <img
-                      src="/dashboard-siswa.png"
-                      alt="Screenshot dashboard peserta Fansedu"
-                      className="w-full h-full object-cover object-top pointer-events-none"
-                      onError={(e) => {
-                        const t = e.currentTarget
-                        if (!t.src.includes('placehold.co')) {
-                          t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Dashboard+Peserta'
-                        }
-                      }}
-                    />
-                  </button>
-                  <div className="p-4 text-center">
-                    <p className="font-semibold text-[var(--fg)]">Dashboard Peserta</p>
-                    <p className="text-sm text-[var(--fg-muted)]">Progress dan akses materi</p>
-                  </div>
-                </div>
-              </div>
-              <div className="reveal reveal-delay-2">
-                <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
-                  <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/kelas-osn.png', alt: 'Screenshot kelas dan materi OSN Fansedu' })}>
-                    <img
-                      src="/kelas-osn.png"
-                      alt="Screenshot kelas dan materi OSN Fansedu"
-                      className="w-full h-full object-cover object-top pointer-events-none"
-                      onError={(e) => {
-                        const t = e.currentTarget
-                        if (!t.src.includes('placehold.co')) {
-                          t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Kelas+OSN'
-                        }
-                      }}
-                    />
-                  </button>
-                  <div className="p-4 text-center">
-                    <p className="font-semibold text-[var(--fg)]">Kelas</p>
-                    <p className="text-sm text-[var(--fg-muted)]">Sesi belajar dan materi OSN</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Lightbox: zoom image, back to landing */}
-          {lightboxImage && (
-            <div
-              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Tampilan gambar diperbesar"
-              onClick={() => setLightboxImage(null)}
-            >
-              <button type="button" className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setLightboxImage(null)} aria-label="Tutup">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-              <img
-                src={lightboxImage.src}
-                alt={lightboxImage.alt}
-                className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-                onError={(e) => {
-                  const t = e.currentTarget
-                  if (!t.src.includes('placehold.co')) t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Gambar'
-                }}
-              />
-            </div>
-          )}
         </div>
       </section>
 
@@ -752,10 +848,11 @@ function App() {
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Fitur Program</span>
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Apa yang kamu dapat</span>
             <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-              Fitur Program <span className="text-[var(--accent)]">FansEdu</span>
+              Program kelas — <span className="text-[var(--accent)]">bukan sekadar video</span>
             </h2>
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">Fasilitas yang mendukung kamu dari latihan sampai evaluasi nasional.</p>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-8">
@@ -787,13 +884,42 @@ function App() {
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">Program</span>
-            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-              Program <span className="text-[var(--accent)]">yang Sedang Dibuka</span>
-            </h2>
-            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-2">
-              Pilih program yang sesuai dengan kebutuhan persiapan OSN Informatika Anda.
-            </p>
+            {promoCountdown.ended ? (
+              <>
+                <span className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-[var(--fg)] bg-[var(--card)] border-2 border-[var(--border)] shadow-sm mb-4 reveal">
+                  <span aria-hidden>📌</span>
+                  <span>{URGENCY.promoLabel} sudah berakhir</span>
+                </span>
+                <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
+                  Pilih program — <span className="text-[var(--accent)]">harga &amp; paket</span>
+                </h2>
+                <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-2">
+                  Harga di bawah (normal vs harga tertera) tetap bisa jadi acuan. Untuk <strong className="text-[var(--fg)]">diskon atau promo terbaru</strong>, hubungi tim Fansedu.
+                </p>
+                <a
+                  href={waUrl(WA_TEMPLATES.promoBaru)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--accent)] font-semibold text-sm hover:underline reveal reveal-delay-2 inline-block mb-2"
+                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'packages_promo_ended' })}
+                >
+                  Tanya promo terbaru di WhatsApp →
+                </a>
+              </>
+            ) : (
+              <>
+                <span className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 shadow-md ring-1 ring-black/15 dark:ring-white/25 mb-4 reveal">
+                  <span className="text-base leading-none" aria-hidden>⏳</span>
+                  <span>{URGENCY.promoLabel} · slot terbatas</span>
+                </span>
+                <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
+                  Pilih program — <span className="text-[var(--accent)]">harga promo aktif</span>
+                </h2>
+                <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-2">
+                  Harga normal dicoret di bawah. Promo berlaku hingga <strong className="text-[var(--fg)]">{URGENCY.promoEndDisplay}</strong> atau sampai batch penuh.
+                </p>
+              </>
+            )}
             <a href="#/catalog" className="text-[var(--accent)] font-medium text-sm hover:underline reveal reveal-delay-2">
               Lihat semua di Katalog →
             </a>
@@ -802,13 +928,19 @@ function App() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(packages.length > 0 ? packages : MOCK_PACKAGES).filter((p) => p.isOpen).map((pkg, index) => {
               const isBundle = pkg.isBundle === true
+              const isPopular = pkg.slug === POPULAR_PROGRAM_SLUG
               const normalNum = isBundle && pkg.priceNormal ? pkg.priceNormal : 0
               const earlyNum = isBundle && pkg.priceEarlyBird ? pkg.priceEarlyBird : 0
               const hematRupiah = normalNum > 0 && earlyNum > 0 && normalNum > earlyNum
                 ? formatRupiah(normalNum - earlyNum)
                 : null
               return (
-              <div key={pkg.id} className={`feature-card rounded-2xl p-8 flex flex-col reveal reveal-delay-${(index % 3) + 1} ${isBundle ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''}`}>
+              <div key={pkg.id} className={`feature-card rounded-2xl p-8 flex flex-col reveal reveal-delay-${(index % 3) + 1} relative ${isBundle ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''} ${isPopular ? 'ring-2 ring-amber-400/60 shadow-lg shadow-amber-500/10' : ''}`}>
+                {isPopular && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 z-[1] whitespace-nowrap px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold shadow-md">
+                    Paling banyak dipilih
+                  </span>
+                )}
                 {isBundle ? (
                   <>
                     <div className="mb-4">
@@ -886,28 +1018,48 @@ function App() {
                     <div className="mb-4">
                       {isBundle ? (
                         <>
-                          <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-1">Harga</p>
+                          <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-2">Harga paket</p>
                           {pkg.priceNormal != null && (
-                            <p className="text-sm text-[var(--fg-muted)] line-through mb-0.5">Normal: {formatRupiah(pkg.priceNormal)}</p>
+                            <p className="text-lg text-[var(--fg-muted)] line-through decoration-2 mb-1">{formatRupiah(pkg.priceNormal)}</p>
                           )}
                           {pkg.priceEarlyBird != null && (
-                            <p className="text-lg font-bold text-[var(--accent)]">Early Bird: {formatRupiah(pkg.priceEarlyBird)}</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-[var(--accent)]">
+                              {formatRupiah(pkg.priceEarlyBird)}
+                              <span className="block sm:inline sm:ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                                {promoCountdown.ended ? '(harga tertera)' : `(${URGENCY.promoLabel})`}
+                              </span>
+                            </p>
                           )}
                           {hematRupiah && (
                             <p className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">Hemat {hematRupiah}</p>
                           )}
+                          {!promoCountdown.ended ? (
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Berlaku s.d. {URGENCY.promoEndDisplay}</p>
+                          ) : (
+                            <p className="text-xs text-[var(--fg-muted)] mt-2">Promo periode ini sudah berakhir. Tanya WhatsApp untuk penawaran terbaru.</p>
+                          )}
                         </>
                       ) : (
                         <>
-                          <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-1">Harga</p>
-                          {pkg.priceEarlyBird != null && (
-                            <p className="text-sm text-[var(--fg-muted)]">Early Bird: <span className="font-semibold text-[var(--accent)]">{formatRupiah(pkg.priceEarlyBird)}</span></p>
-                          )}
+                          <p className="font-semibold text-[var(--fg)] text-xs uppercase tracking-wide mb-2">Investasi</p>
                           {pkg.priceNormal != null && (
-                            <p className="text-sm text-[var(--fg-muted)]">Harga Normal: <span className="line-through">{formatRupiah(pkg.priceNormal)}</span></p>
+                            <p className="text-lg text-[var(--fg-muted)] line-through decoration-2 mb-1">{formatRupiah(pkg.priceNormal)}</p>
+                          )}
+                          {pkg.priceEarlyBird != null && (
+                            <p className="text-2xl sm:text-3xl font-bold text-[var(--accent)] leading-tight">
+                              {formatRupiah(pkg.priceEarlyBird)}
+                              <span className="block sm:inline sm:ml-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                                {promoCountdown.ended ? '(harga tertera)' : `(${URGENCY.promoLabel})`}
+                              </span>
+                            </p>
+                          )}
+                          {!promoCountdown.ended ? (
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Berlaku s.d. {URGENCY.promoEndDisplay}</p>
+                          ) : (
+                            <p className="text-xs text-[var(--fg-muted)] mt-2">Promo periode ini sudah berakhir. Tanya WhatsApp untuk penawaran terbaru.</p>
                           )}
                           {!pkg.priceEarlyBird && !pkg.priceNormal && pkg.price > 0 && (
-                            <p className="font-semibold text-[var(--accent)]">{formatRupiah(pkg.price)}</p>
+                            <p className="font-semibold text-[var(--accent)] text-2xl">{formatRupiah(pkg.price)}</p>
                           )}
                         </>
                       )}
@@ -945,6 +1097,97 @@ function App() {
         </div>
       </section>
 
+      <section id="loss" className="py-20 relative bg-[var(--card)] border-y border-[var(--border)]">
+        <div className="max-w-[720px] mx-auto px-4 sm:px-6 text-center">
+          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-4 reveal">
+            Jika tidak mulai sekarang, kamu akan:
+          </h2>
+          <ul className="text-left max-w-md mx-auto space-y-3 text-[var(--fg)] reveal">
+            <li className="flex gap-3 items-start"><span className="text-red-500 font-bold shrink-0">❌</span> Ketinggalan batch — kuota kelas terbatas.</li>
+            <li className="flex gap-3 items-start"><span className="text-red-500 font-bold shrink-0">❌</span> Kehilangan harga promo &amp; early bird.</li>
+            <li className="flex gap-3 items-start"><span className="text-red-500 font-bold shrink-0">❌</span> Masuk seleksi OSN tanpa persiapan &amp; tryout real.</li>
+          </ul>
+          <p className="mt-8 text-[var(--fg-muted)] text-sm reveal">Satu langkah sekarang = arah jelas untuk OSN-K 2026.</p>
+        </div>
+      </section>
+
+      <section id="bukti" className="py-24 relative bg-[var(--bg-secondary)]">
+        <div className="absolute inset-0 grid-bg opacity-50"></div>
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-4 reveal">Bukti nyata di platform</span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl text-[var(--fg)] reveal reveal-delay-1">
+              Ranking, tryout, &amp; <span className="text-[var(--accent)]">progress siswa</span> di platform
+            </h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+            <div className="reveal">
+              <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
+                <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/leaderboard-to.png', alt: 'Screenshot leaderboard ranking nasional Fansedu' })}>
+                  <img
+                    src="/leaderboard-to.png"
+                    alt="Screenshot leaderboard ranking nasional Fansedu"
+                    className="w-full h-full object-cover object-top pointer-events-none"
+                    onError={(e) => {
+                      const t = e.currentTarget
+                      if (!t.src.includes('placehold.co')) {
+                        t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Leaderboard+Nasional'
+                      }
+                    }}
+                  />
+                </button>
+                <div className="p-4 text-center">
+                  <p className="font-semibold text-[var(--fg)]">Hasil tryout &amp; ranking</p>
+                  <p className="text-sm text-[var(--fg-muted)]">Peringkat nasional antar peserta</p>
+                </div>
+              </div>
+            </div>
+            <div className="reveal reveal-delay-1">
+              <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
+                <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/dashboard-siswa.png', alt: 'Screenshot dashboard peserta Fansedu' })}>
+                  <img
+                    src="/dashboard-siswa.png"
+                    alt="Screenshot dashboard peserta Fansedu"
+                    className="w-full h-full object-cover object-top pointer-events-none"
+                    onError={(e) => {
+                      const t = e.currentTarget
+                      if (!t.src.includes('placehold.co')) {
+                        t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Dashboard+Peserta'
+                      }
+                    }}
+                  />
+                </button>
+                <div className="p-4 text-center">
+                  <p className="font-semibold text-[var(--fg)]">Progress siswa</p>
+                  <p className="text-sm text-[var(--fg-muted)]">Akses materi &amp; aktivitas</p>
+                </div>
+              </div>
+            </div>
+            <div className="reveal reveal-delay-2">
+              <div className="feature-card rounded-2xl overflow-hidden border-2 border-[var(--border)] hover:border-[var(--accent)]/40 transition-colors">
+                <button type="button" className="w-full aspect-video bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 rounded-t-2xl" onClick={() => setLightboxImage({ src: '/kelas-osn.png', alt: 'Screenshot kelas dan materi OSN Fansedu' })}>
+                  <img
+                    src="/kelas-osn.png"
+                    alt="Screenshot kelas dan materi OSN Fansedu"
+                    className="w-full h-full object-cover object-top pointer-events-none"
+                    onError={(e) => {
+                      const t = e.currentTarget
+                      if (!t.src.includes('placehold.co')) {
+                        t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Kelas+OSN'
+                      }
+                    }}
+                  />
+                </button>
+                <div className="p-4 text-center">
+                  <p className="font-semibold text-[var(--fg)]">Kelas &amp; materi OSN</p>
+                  <p className="text-sm text-[var(--fg-muted)]">Sesi belajar terstruktur</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="testimoni" className="py-24 relative">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="text-center max-w-3xl mx-auto mb-16">
@@ -953,20 +1196,38 @@ function App() {
               Apa Kata <span className="text-[var(--accent)]">Mereka?</span>
             </h2>
             <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
-              Pengalaman peserta dan guru pembimbing yang telah bergabung dengan program FansEdu.
+              Kata mereka setelah ikut tryout &amp; kelas — plus cuplikan tampilan platform.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { quote: 'Materi terstruktur dari dasar, jadi tidak bingung lagi mau mulai dari mana. Tryout-nya juga bikin saya tahu posisi saya di antara peserta lain.', author: 'Siswa SMA', role: 'Peserta Foundation' },
-              { quote: 'Pembahasan soalnya mendalam dan mentor responsif. Saya rekomendasikan untuk yang serius mau persiapan OSN.', author: 'Guru Pembimbing', role: 'OSN Informatika' },
-              { quote: 'Dari tidak bisa C++ sama sekali sampai bisa ikut tryout dan lihat ranking. Program ini worth it.', author: 'Siswa SMA', role: 'Peserta OSN-K' },
+              { quote: 'Materi terstruktur dari dasar, jadi tidak bingung lagi mau mulai dari mana. Tryout-nya juga bikin saya tahu posisi saya di antara peserta lain.', author: 'Siswa SMA', role: 'Peserta Foundation', thumb: '/dashboard-siswa.png' },
+              { quote: 'Pembahasan soalnya mendalam dan mentor responsif. Saya rekomendasikan untuk yang serius mau persiapan OSN.', author: 'Guru Pembimbing', role: 'OSN Informatika', thumb: '/kelas-osn.png' },
+              { quote: 'Dari tidak bisa C++ sama sekali sampai bisa ikut tryout dan lihat ranking. Program ini worth it.', author: 'Siswa SMA', role: 'Peserta OSN-K', thumb: '/leaderboard-to.png' },
             ].map((item, index) => (
-              <div key={index} className={`feature-card rounded-2xl p-6 reveal reveal-delay-${(index % 3) + 1}`}>
-                <p className="text-[var(--fg)] mb-6 italic">&ldquo;{item.quote}&rdquo;</p>
-                <div>
-                  <div className="font-semibold text-[var(--fg)]">{item.author}</div>
-                  <div className="text-sm text-[var(--fg-muted)]">{item.role}</div>
+              <div key={index} className={`feature-card rounded-2xl overflow-hidden reveal reveal-delay-${(index % 3) + 1}`}>
+                <button
+                  type="button"
+                  className="w-full h-28 sm:h-32 bg-[var(--bg-secondary)] relative block cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
+                  onClick={() => setLightboxImage({ src: item.thumb, alt: `Cuplikan platform — ${item.role}` })}
+                >
+                  <img
+                    src={item.thumb}
+                    alt={`Cuplikan platform Fansedu — ${item.role}`}
+                    className="w-full h-full object-cover object-top opacity-90 pointer-events-none"
+                    onError={(e) => {
+                      const t = e.currentTarget
+                      if (!t.src.includes('placehold.co')) t.src = 'https://placehold.co/400x200/1e293b/c9fd02?text=Fansedu'
+                    }}
+                  />
+                  <span className="absolute bottom-2 left-2 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded bg-black/50 text-white">Cuplikan platform</span>
+                </button>
+                <div className="p-6">
+                  <p className="text-[var(--fg)] mb-4 italic text-sm sm:text-base leading-relaxed">&ldquo;{item.quote}&rdquo;</p>
+                  <div>
+                    <div className="font-semibold text-[var(--fg)]">{item.author}</div>
+                    <div className="text-sm text-[var(--fg-muted)]">{item.role}</div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -974,97 +1235,84 @@ function App() {
         </div>
       </section>
 
-      <section id="tryout" className="py-24 relative bg-[var(--bg-secondary)]">
-        <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-sm font-semibold text-[var(--accent)] mb-6 reveal">Free Tryout</span>
-            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
-              Coba <span className="text-[var(--accent)]">TryOut OSN Gratis</span>
-            </h2>
-            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
-              Semua proses tryout—lihat jadwal, daftar tryout, ikut ujian, dan lihat ranking—dilakukan setelah Anda mendaftar dan membuat akun di platform. Daftar akun dulu, lalu akses menu Tryout dari dashboard siswa.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-            {[
-              { step: 1, title: 'Daftar akun', desc: 'Buat akun di platform Fansedu terlebih dahulu.' },
-              { step: 2, title: 'Tryout gratis', desc: 'Dari dashboard siswa, daftar dan ikuti TryOut OSN format resmi.' },
-              { step: 3, title: 'Lihat ranking', desc: 'Cek peringkatmu di leaderboard nasional.' },
-              { step: 4, title: 'Analisis & kelas', desc: 'Pahami hasil lalu pilih program yang sesuai kebutuhanmu.' },
-            ].map((item, index) => (
-              <div key={item.step} className="relative">
-                <div className={`feature-card rounded-2xl p-6 h-full reveal reveal-delay-${(index % 4) + 1}`}>
-                  <div className="w-10 h-10 rounded-xl bg-[var(--accent)] text-white font-display font-bold text-lg flex items-center justify-center mb-4">
-                    {item.step}
-                  </div>
-                  <h3 className="font-display font-semibold text-lg mb-2">{item.title}</h3>
-                  <p className="text-[var(--fg-muted)] text-sm">{item.desc}</p>
-                </div>
-                {item.step < 4 && (
-                  <div className="hidden md:flex absolute top-1/2 -right-3 transform -translate-y-1/2 z-10 text-[var(--border)]">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center reveal">
-            <a
-              href={REGISTER_URL}
-              className="btn-primary px-8 py-4 rounded-full font-semibold inline-block"
-              onClick={() => trackConversionEvent('cta_register_click', { placement: 'tryout' })}
-            >
-              Daftar akun untuk ikut TryOut
-            </a>
-            <p className="text-[var(--fg-muted)] text-sm mt-3">Sudah punya akun? <a href="#/auth" className="text-[var(--accent)] font-medium hover:underline">Masuk</a>, lalu buka menu Tryout di dashboard.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="cta" className="py-20 relative bg-[var(--card)] border-b border-[var(--border)]">
+      <section id="cta" className="py-24 relative bg-gradient-to-b from-[var(--card)] to-[var(--bg-secondary)] border-b border-[var(--border)]">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 text-center">
-          <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal">
-            Siap Lolos <span className="text-[var(--accent)]">OSN-K 2026?</span>
-          </h2>
-          <p className="text-[var(--fg-muted)] text-lg mb-6 reveal">
-            Daftar program sekarang dan dapatkan bimbingan dari mentor berpengalaman, tryout nasional, dan dashboard ranking.
-          </p>
+          {promoCountdown.ended ? (
+            <>
+              <p className="text-[var(--fg-muted)] font-bold text-sm uppercase tracking-wide mb-3 reveal">Langkah berikutnya</p>
+              <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal">
+                Promo sudah berakhir — <span className="text-[var(--accent)]">kamu masih bisa daftar</span>
+              </h2>
+              <p className="text-[var(--fg-muted)] text-base mb-3 max-w-xl mx-auto reveal leading-relaxed">
+                {URGENCY.promoLabel} yang berlaku hingga {URGENCY.promoEndDisplay} sudah tidak berlaku. Untuk mengetahui{' '}
+                <strong className="text-[var(--fg)]">promo lain atau harga terkini</strong>, hubungi tim Fansedu.
+              </p>
+              <p className="text-[var(--fg-muted)] text-sm mb-8 max-w-lg mx-auto reveal">
+                Kuota {URGENCY.batch} tetap terbatas — sekitar {URGENCY.slotsRemaining} slot tersisa. Amankan seat lewat WhatsApp atau daftar di web.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-amber-700 dark:text-amber-300 font-bold text-sm uppercase tracking-wide mb-3 reveal">⚠️ Batch hampir penuh</p>
+              <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal">
+                Promo &amp; slot <span className="text-[var(--accent)]">tidak nunggu</span>
+              </h2>
+              <p className="text-red-600 dark:text-red-400 font-semibold text-lg mb-2 reveal">🔥 Promo akan segera berakhir — jangan sampai ketinggalan.</p>
+              <p className="text-[var(--fg-muted)] text-base mb-8 max-w-xl mx-auto reveal">
+                Amankan slot {URGENCY.batch}. Hanya ~{URGENCY.slotsRemaining} kursi tersisa untuk gelombang ini.
+              </p>
+            </>
+          )}
 
-          <div className="flex flex-wrap justify-center gap-3 mb-8 reveal">
-            <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
+          <div className="flex flex-wrap justify-center gap-3 mb-10 reveal">
+            <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
               📅 {URGENCY.batch}
             </span>
-            <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
-              👥 Kuota hanya {URGENCY.quotaMax} siswa per kelas
+            <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
+              👥 Kuota {URGENCY.quotaMax} siswa per kelas
             </span>
+            {!promoCountdown.ended && (
+              <span className="inline-flex items-center px-4 py-2 rounded-full bg-red-500/15 border border-red-500/40 text-sm font-bold text-red-700 dark:text-red-300 tabular-nums">
+                ⏳ {promoCountdown.timer}
+              </span>
+            )}
             {getEarlyBirdDaysLeft() > 0 && (
               <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/40 text-sm font-semibold text-[var(--accent)]">
-                ⏰ Early bird hingga {urgencyDateLabel}
+                Early bird hingga {urgencyDateLabel}
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap justify-center gap-3 reveal">
+          <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 reveal">
             <a
-              href={authUser ? `${LMS_BASE}/catalog` : REGISTER_URL}
-              className="btn-primary px-6 py-2.5 rounded-full font-semibold text-sm inline-block"
-              onClick={() => trackConversionEvent('cta_register_click', { placement: 'cta_bottom' })}
-            >
-              Daftar Sekarang
-            </a>
-            <a
-              href={waUrl(WA_TEMPLATES.tanyaProgram)}
+              href={waUrl(promoCountdown.ended ? WA_TEMPLATES.promoBaru : WA_TEMPLATES.heroSlot)}
               target="_blank"
               rel="noreferrer"
-              className="btn-secondary px-6 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--border)] hover:border-[var(--accent)]"
-              onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'cta_bottom' })}
+              className="btn-primary px-8 py-3 rounded-full font-semibold text-sm inline-block shadow-lg shadow-[var(--accent)]/25"
+              onClick={() =>
+                trackConversionEvent('cta_whatsapp_click', {
+                  placement: promoCountdown.ended ? 'cta_bottom_promo_baru' : 'cta_bottom_slot',
+                })
+              }
             >
-              Tanya Program
+              {promoCountdown.ended ? 'Tanya promo terbaru (WhatsApp)' : 'Amankan Slot Sekarang'}
+            </a>
+            <a
+              href="#tryout"
+              className="btn-secondary px-8 py-3 rounded-full font-semibold text-sm inline-block border-2 border-[var(--accent)] text-[var(--accent)]"
+              onClick={(e) => {
+                handleAnchorClick(e, '#tryout')
+                trackConversionEvent('cta_tryout_click', { placement: 'cta_bottom' })
+              }}
+            >
+              Ikut Tryout Gratis
+            </a>
+            <a
+              href={authUser ? `${LMS_BASE}/catalog` : REGISTER_URL}
+              className="px-8 py-3 rounded-full font-semibold text-sm inline-block text-[var(--fg-muted)] hover:text-[var(--accent)]"
+              onClick={() => trackConversionEvent('cta_register_click', { placement: 'cta_bottom' })}
+            >
+              Daftar lewat web →
             </a>
           </div>
         </div>
@@ -1234,20 +1482,23 @@ function App() {
             <div>
               <h4 className="font-display font-semibold mb-4">Navigasi</h4>
               <nav className="flex flex-col gap-2">
+                <a href="#tryout" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+                  Tryout Gratis
+                </a>
+                <a href="#packages" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#packages')}>
+                  Program &amp; Harga
+                </a>
                 <a href="#solusi" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#solusi')}>
-                  Tentang Kami
+                  Hasil
                 </a>
                 <a href="#features" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#features')}>
                   Fitur
                 </a>
-                <a href="#packages" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#packages')}>
-                  Program
+                <a href="#bukti" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#bukti')}>
+                  Bukti Nyata
                 </a>
                 <a href="#testimoni" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
                   Testimoni
-                </a>
-                <a href="#tryout" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#tryout')}>
-                  TryOut Gratis
                 </a>
                 <a href="#request" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#request')}>
                   Request Bidang
@@ -1281,6 +1532,30 @@ function App() {
         </div>
       </footer>
 
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tampilan gambar diperbesar"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button type="button" className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setLightboxImage(null)} aria-label="Tutup">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+          <img
+            src={lightboxImage.src}
+            alt={lightboxImage.alt}
+            className="max-w-full max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            onError={(e) => {
+              const t = e.currentTarget
+              if (!t.src.includes('placehold.co')) t.src = 'https://placehold.co/800x450/1e293b/c9fd02?text=Gambar'
+            }}
+          />
+        </div>
+      )}
+
       <a
         href={waUrl(WA_TEMPLATES.float)}
         target="_blank"
@@ -1294,13 +1569,25 @@ function App() {
         </svg>
       </a>
 
-      <div className="sticky-cta-mobile fixed bottom-0 left-0 right-0 z-[900] md:hidden safe-area-pb">
+      <div className="sticky-cta-mobile fixed bottom-0 left-0 right-0 z-[900] md:hidden safe-area-pb flex shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
         <a
-          href={REGISTER_URL}
-          className="block w-full py-4 px-6 text-center font-semibold text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-colors shadow-[0_-4px_20px_rgba(0,0,0,0.15)]"
-          onClick={() => trackConversionEvent('cta_register_click', { placement: 'sticky_mobile' })}
+          href="#tryout"
+          className="flex-1 py-3.5 px-3 text-center font-semibold text-sm bg-[var(--card)] text-[var(--accent)] border-t border-[var(--border)]"
+          onClick={(e) => {
+            handleAnchorClick(e, '#tryout')
+            trackConversionEvent('cta_tryout_click', { placement: 'sticky_mobile' })
+          }}
         >
-          Daftar Sekarang
+          Tryout gratis
+        </a>
+        <a
+          href={waUrl(WA_TEMPLATES.heroSlot)}
+          target="_blank"
+          rel="noreferrer"
+          className="flex-[1.4] py-3.5 px-3 text-center font-semibold text-sm text-white bg-[var(--accent)] hover:bg-[var(--accent-hover)] transition-colors"
+          onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'sticky_mobile_slot' })}
+        >
+          Amankan slot
         </a>
       </div>
     </div>
