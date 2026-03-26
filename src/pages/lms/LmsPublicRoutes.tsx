@@ -11,11 +11,7 @@ export default function LmsPublicRoutes({ route }: { route: LmsRoute }) {
   switch (route.type) {
     case 'auth':
       return (
-        <AuthPage
-          redirect={route.authRedirect ?? '#/'}
-          tab={route.authTab}
-          programSlug={route.authProgramSlug}
-        />
+        <AuthPage redirect={route.authRedirect ?? ''} tab={route.authTab} />
       )
     case 'catalog':
       return <CatalogPage />

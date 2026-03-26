@@ -34,7 +34,6 @@ export interface LmsRoute {
   programSlug?: string
   authRedirect?: string
   authTab?: string
-  authProgramSlug?: string
   checkoutProgramSlug?: string
   checkoutConfirmOrderId?: string
   codingProblemSlug?: string
@@ -56,9 +55,9 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (pathOnly === '/auth') {
     return {
       type: 'auth',
-      authRedirect: query.get('redirect') || '#/',
+      /** Kosong = setelah auth pakai dashboard role (bukan landing `#/`) */
+      authRedirect: query.get('redirect') || '',
       authTab: query.get('tab') || 'login',
-      authProgramSlug: query.get('slug') || query.get('program') || undefined,
     }
   }
   if (pathOnly === '/catalog') return { type: 'catalog' }

@@ -172,7 +172,6 @@ export default function GuruProfilePage() {
         phone: phone.trim(),
         whatsapp: whatsapp.trim(),
         schoolId: schoolId || undefined,
-        school_id: schoolId || undefined,
         school: selectedSchool?.name ?? undefined,
         city: city.trim(),
         province: province.trim(),

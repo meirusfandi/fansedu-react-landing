@@ -3,6 +3,8 @@ import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { authUserFromApiResponse, type UserRole } from '../../types/auth'
 import { apiLogin, apiRegister, ApiError } from '../../lib/api'
+import { resolvePostAuthHash } from '../../lib/post-auth-redirect'
+import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 
 type Tab = 'login' | 'register'
 
@@ -36,14 +38,11 @@ function PasswordToggleButton({
 }
 
 export default function AuthPage({
-  redirect = '#/',
+  redirect = '',
   tab: tabParam = 'login',
-  programSlug,
 }: {
   redirect?: string
   tab?: string
-  /** Dari query `slug` / `program` — diisi otomatis di form daftar. */
-  programSlug?: string
 }) {
   const [tab, setTab] = useState<Tab>(tabParam === 'register' ? 'register' : 'login')
 
@@ -76,11 +75,7 @@ export default function AuthPage({
             {tab === 'login' ? (
               <LoginSection redirect={redirect} onSwitch={() => setTab('register')} />
             ) : (
-              <RegisterSection
-                redirect={redirect}
-                onSwitch={() => setTab('login')}
-                initialProgramSlug={programSlug ?? ''}
-              />
+              <RegisterSection redirect={redirect} onSwitch={() => setTab('login')} />
             )}
           </div>
           <p className="mt-6 text-center text-sm text-gray-500">
@@ -100,10 +95,12 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const login = useAuthStore((s) => s.login)
+  const attempt = useSubmitAttemptLimit()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    if (attempt.blocked) return
     if (!email.trim() || !password.trim()) {
       setError('Email dan kata sandi wajib diisi.')
       return
@@ -112,9 +109,11 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
     try {
       const res = await apiLogin({ email: email.trim(), password })
       const authUser = authUserFromApiResponse(res.user, res.token)
+      attempt.onSuccess()
       login(authUser, res.token, rememberMe)
-      window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
+      window.location.hash = resolvePostAuthHash(redirect, authUser.role)
     } catch (err) {
+      attempt.onFailure()
       if (err instanceof ApiError && err.status === 401) {
         setError('email/password salah, silahkan coba lagi')
       } else {
@@ -167,9 +166,35 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
           />
           Ingat saya
         </label>
-        <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50">
+        <button
+          type="submit"
+          disabled={loading || attempt.blocked}
+          className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
+        >
           {loading ? 'Memproses...' : 'Masuk'}
         </button>
+        {attempt.blocked && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="mb-2">
+              Sudah {MAX_SUBMIT_ATTEMPTS} kali gagal. Kirim ulang dinonaktifkan agar tidak membebani server.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                attempt.resetLimit()
+                setError('')
+              }}
+              className="w-full py-2.5 rounded-lg border border-amber-300 bg-white font-medium text-amber-900 hover:bg-amber-100"
+            >
+              Coba lagi
+            </button>
+          </div>
+        )}
+        {attempt.failCount > 0 && !attempt.blocked && (
+          <p className="text-xs text-gray-500 text-center">
+            Percobaan gagal {attempt.failCount}/{MAX_SUBMIT_ATTEMPTS}
+          </p>
+        )}
       </form>
       <p className="mt-4 text-center text-sm text-gray-600">
         Belum punya akun?{' '}
@@ -181,45 +206,35 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
   )
 }
 
-function RegisterSection({
-  redirect,
-  onSwitch,
-  initialProgramSlug,
-}: {
-  redirect: string
-  onSwitch: () => void
-  initialProgramSlug: string
-}) {
+function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [role, setRole] = useState<UserRole>('student')
-  const [programSlug, setProgramSlug] = useState(initialProgramSlug.trim())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const login = useAuthStore((s) => s.login)
-
-  useEffect(() => {
-    setProgramSlug(initialProgramSlug.trim())
-  }, [initialProgramSlug])
+  const attempt = useSubmitAttemptLimit()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccessMessage('')
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('Nama, email, dan kata sandi wajib diisi.')
+    if (attempt.blocked) return
+    if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+      setError('Nama, email, kata sandi, dan konfirmasi kata sandi wajib diisi.')
       return
     }
     if (password.length < 6) {
       setError('Kata sandi minimal 6 karakter.')
       return
     }
-    const slugTrim = programSlug.trim()
-    if (!slugTrim) {
-      setError('Slug program wajib (pakai link dari halaman program atau isi manual).')
+    if (password !== confirmPassword) {
+      setError('Konfirmasi kata sandi tidak sama.')
       return
     }
     setLoading(true)
@@ -229,13 +244,14 @@ function RegisterSection({
         email: email.trim(),
         password,
         role,
-        slug: slugTrim,
       })
       const authUser = authUserFromApiResponse(res.user, res.token)
+      attempt.onSuccess()
       login(authUser, res.token)
       setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
-      window.location.hash = redirect.startsWith('#') ? redirect : `#${redirect}`
+      window.location.hash = resolvePostAuthHash(redirect, authUser.role)
     } catch (err) {
+      attempt.onFailure()
       setError(err instanceof ApiError ? err.message : 'Gagal daftar. Coba lagi.')
     } finally {
       setLoading(false)
@@ -291,19 +307,24 @@ function RegisterSection({
           </div>
         </div>
         <div>
-          <label htmlFor="reg-program-slug" className="block text-sm font-medium text-gray-700 mb-1">
-            Slug program
+          <label htmlFor="reg-password-confirm" className="block text-sm font-medium text-gray-700 mb-1">
+            Konfirmasi kata sandi
           </label>
-          <input
-            id="reg-program-slug"
-            type="text"
-            value={programSlug}
-            onChange={(e) => setProgramSlug(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            placeholder="contoh: algorithm-programming-foundation"
-            autoComplete="off"
-          />
-          <p className="mt-1 text-xs text-gray-500">Sama dengan slug di URL katalog /checkout (wajib untuk pendaftaran).</p>
+          <div className="relative">
+            <input
+              id="reg-password-confirm"
+              type={showConfirmPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-2.5 pr-11 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              placeholder="Ulangi kata sandi"
+              autoComplete="new-password"
+            />
+            <PasswordToggleButton
+              visible={showConfirmPassword}
+              onToggle={() => setShowConfirmPassword((v) => !v)}
+            />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Daftar sebagai</label>
@@ -318,9 +339,35 @@ function RegisterSection({
             </label>
           </div>
         </div>
-        <button type="submit" disabled={loading} className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50">
+        <button
+          type="submit"
+          disabled={loading || attempt.blocked}
+          className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
+        >
           {loading ? 'Memproses...' : 'Daftar'}
         </button>
+        {attempt.blocked && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="mb-2">
+              Sudah {MAX_SUBMIT_ATTEMPTS} kali gagal. Kirim ulang dinonaktifkan agar tidak membebani server.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                attempt.resetLimit()
+                setError('')
+              }}
+              className="w-full py-2.5 rounded-lg border border-amber-300 bg-white font-medium text-amber-900 hover:bg-amber-100"
+            >
+              Coba lagi
+            </button>
+          </div>
+        )}
+        {attempt.failCount > 0 && !attempt.blocked && (
+          <p className="text-xs text-gray-500 text-center">
+            Percobaan gagal {attempt.failCount}/{MAX_SUBMIT_ATTEMPTS}
+          </p>
+        )}
       </form>
       <p className="mt-4 text-center text-sm text-gray-600">
         Sudah punya akun?{' '}

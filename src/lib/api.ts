@@ -5,6 +5,7 @@
  */
 
 import { clearAuthOnUnauthorized } from './auth-clear'
+import { recordApiClientFailure, recordHttpApiFailure } from './api-error-log'
 import { API_BASE, PACKAGES_API_URL } from './api-config'
 import type { Course } from '../types/course'
 import { decodeJwtPayload, normalizeAuthFields } from '../types/auth'
@@ -30,6 +31,31 @@ function authHeaders(): HeadersInit {
   }
 }
 
+/** fetch + log error jaringan sebelum rethrow */
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toString().toUpperCase()
+  const urlStr =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : typeof Request !== 'undefined' && input instanceof Request
+          ? input.url
+          : String(input)
+  try {
+    return await globalThis.fetch(input, init)
+  } catch (err) {
+    recordApiClientFailure({
+      kind: 'network',
+      url: urlStr,
+      method,
+      message: err instanceof Error ? err.message : String(err),
+      errorName: err instanceof Error ? err.name : 'Error',
+    })
+    throw err
+  }
+}
+
 export class ApiError extends Error {
   status: number
   data?: { error?: string; message?: string }
@@ -49,12 +75,16 @@ export class ApiError extends Error {
 /** Cek /auth/me: jangan biarkan UI menggantung jika server tidak jawab */
 const AUTH_ME_TIMEOUT_MS = 6000
 
-async function handleResponse<T>(res: Response): Promise<T> {
+async function handleResponse<T>(res: Response, meta?: { method?: string }): Promise<T> {
+  const data = (await res.json().catch(() => ({}))) as T & Record<string, unknown>
+  const method = meta?.method
+
   if (res.status === 401) {
+    recordHttpApiFailure(res, data, { method, message: 'Tidak terotorisasi (401)' })
     clearAuthOnUnauthorized()
     throw new ApiError(401, 'Sesi berakhir. Silakan masuk kembali.', {})
   }
-  const data = await res.json().catch(() => ({}))
+
   if (
     res.status === 403 &&
     typeof window !== 'undefined' &&
@@ -80,8 +110,13 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const target = role === 'guru' ? '#/guru/profile' : '#/student/profile'
     window.location.hash = `${target}?password_setup_required=1&redirect=${encodeURIComponent(current)}`
   }
+
   if (!res.ok) {
-    throw new ApiError(res.status, (data as { message?: string }).message || res.statusText, data as { error?: string; message?: string })
+    const errBody = data as unknown as { message?: string; error?: string }
+    const msg =
+      typeof errBody.message === 'string' ? errBody.message : res.statusText
+    recordHttpApiFailure(res, data, { method, message: msg })
+    throw new ApiError(res.status, msg, errBody)
   }
   return data as T
 }
@@ -97,12 +132,146 @@ export interface RegisterRequest {
   name: string
   email: string
   password: string
-  /** Default student jika tidak dikirim — gunakan `guru` untuk akun guru */
+  /** Default student jika tidak dikirim — gunakan `guru` untuk akun guru (dipetakan ke slug dari GET /roles). */
   role?: 'student' | 'guru'
-  /** Slug program/paket (wajib untuk alur daftar terikat program). */
+  /** Slug role persis dari GET /api/v1/roles; jika diisi, mengalahkan `role`. */
+  roleSlug?: string
+  /** Slug program/paket — opsional; kirim jika daftar terkait program tertentu. */
   slug?: string
-  /** Alias snake_case jika backend mengharapkan field ini. */
+  /** Alias lama untuk `slug` (nilai yang sama dikirim sebagai `programSlug` ke API). */
   program_slug?: string
+}
+
+export interface RoleListItem {
+  slug: string
+  name?: string
+  code?: string
+  id?: string
+}
+
+function parseRolesResponse(raw: unknown): RoleListItem[] {
+  if (raw == null) return []
+  const root = raw as Record<string, unknown>
+  const nested = root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+    ? (root.data as Record<string, unknown>)
+    : null
+  const arr: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(root.data)
+      ? root.data
+      : nested && Array.isArray(nested.items)
+        ? nested.items
+        : Array.isArray(root.roles)
+          ? root.roles
+          : Array.isArray(root.items)
+            ? root.items
+            : []
+  const out: RoleListItem[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const slugRaw = o.slug ?? o.role_slug ?? o.code
+    if (typeof slugRaw !== 'string' || !slugRaw.trim()) continue
+    out.push({
+      slug: slugRaw.trim(),
+      id: typeof o.id === 'string' ? o.id : undefined,
+      name: typeof o.name === 'string' ? o.name : typeof o.label === 'string' ? o.label : undefined,
+      code: typeof o.code === 'string' ? o.code : undefined,
+    })
+  }
+  return out
+}
+
+const ROLES_CACHE_MS = 5 * 60_000
+let rolesMemoryCache: { items: RoleListItem[]; fetchedAt: number } | null = null
+let rolesInFlight: Promise<RoleListItem[]> | null = null
+
+/**
+ * Daftar role dari backend (slug untuk POST /auth/register).
+ * Tanpa header Authorization agar bisa dipakai sebelum login.
+ */
+export async function apiGetRoles(options?: { force?: boolean }): Promise<RoleListItem[]> {
+  const force = options?.force === true
+  if (!force && rolesMemoryCache && Date.now() - rolesMemoryCache.fetchedAt < ROLES_CACHE_MS) {
+    return rolesMemoryCache.items
+  }
+  if (!force && rolesInFlight) return rolesInFlight
+
+  rolesInFlight = (async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/roles`, {
+        headers: { 'Content-Type': 'application/json' },
+      })
+      /** Jangan pakai handleResponse: 401 di sini tidak boleh memicu clear sesi (daftar sebagai guest). */
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        recordHttpApiFailure(res, data, { method: 'GET' })
+        throw new ApiError(
+          res.status,
+          (data as { message?: string }).message || res.statusText,
+          data as { error?: string; message?: string },
+        )
+      }
+      const raw = await res.json().catch(() => null)
+      const items = parseRolesResponse(raw)
+      rolesMemoryCache = { items, fetchedAt: Date.now() }
+      return items
+    } finally {
+      rolesInFlight = null
+    }
+  })()
+
+  return rolesInFlight
+}
+
+export function invalidateRolesCache(): void {
+  rolesMemoryCache = null
+  rolesInFlight = null
+}
+
+function resolveRoleSlugForRegister(uiRole: 'student' | 'guru', roles: RoleListItem[]): string {
+  if (roles.length === 0) {
+    return uiRole === 'guru' ? 'guru' : 'student'
+  }
+  const norm = (s: string) => s.trim().toLowerCase().replace(/-/g, '_')
+  const slugMatches = (raw: string, target: 'student' | 'guru'): boolean => {
+    const s = norm(raw)
+    if (target === 'student') {
+      return (
+        s === 'student' ||
+        s === 'siswa' ||
+        s === 'learner' ||
+        s === 'peserta' ||
+        s.endsWith('_student')
+      )
+    }
+    return (
+      s === 'guru' ||
+      s === 'instructor' ||
+      s === 'teacher' ||
+      s === 'trainer' ||
+      s === 'pengajar' ||
+      s.endsWith('_guru') ||
+      s.endsWith('_instructor')
+    )
+  }
+  for (const r of roles) {
+    if (slugMatches(r.slug, uiRole)) return r.slug
+  }
+  for (const r of roles) {
+    const c = r.code ?? ''
+    if (c && slugMatches(c, uiRole)) return r.slug
+  }
+  for (const r of roles) {
+    const n = norm(r.name ?? '')
+    if (uiRole === 'student' && (n.includes('siswa') || n.includes('student') || n.includes('peserta')))
+      return r.slug
+    if (uiRole === 'guru' && (n.includes('guru') || n.includes('instructor') || n.includes('pengajar')))
+      return r.slug
+  }
+  const exact = roles.find((r) => norm(r.slug) === uiRole)
+  if (exact) return exact.slug
+  return uiRole === 'guru' ? 'guru' : 'student'
 }
 
 export interface AuthResponseUser {
@@ -129,7 +298,7 @@ export interface MeResponse {
 }
 
 export async function apiLogin(body: LoginRequest): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await apiFetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -144,12 +313,18 @@ export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> 
     email: body.email,
     password: body.password,
   }
-  if (body.role) payload.role = body.role
+  const explicitRoleSlug = body.roleSlug?.trim()
+  if (explicitRoleSlug) {
+    payload.role = explicitRoleSlug
+  } else if (body.role) {
+    const roles = await apiGetRoles()
+    payload.role = resolveRoleSlugForRegister(body.role, roles)
+  }
   if (slugVal) {
     payload.slug = slugVal
-    payload.program_slug = slugVal
+    payload.programSlug = slugVal
   }
-  const res = await fetch(`${API_BASE}/auth/register`, {
+  const res = await apiFetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -158,19 +333,22 @@ export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> 
 }
 
 export async function apiLogout(): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/logout`, {
+  const res = await apiFetch(`${API_BASE}/auth/logout`, {
     method: 'POST',
     headers: authHeaders(),
   })
   if (res.status === 401) return
-  if (!res.ok) await res.json().catch(() => { })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    recordHttpApiFailure(res, data, { method: 'POST' })
+  }
 }
 
 export async function apiGetMe(): Promise<MeResponse> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), AUTH_ME_TIMEOUT_MS)
   try {
-    const res = await fetch(`${API_BASE}/auth/me`, {
+    const res = await apiFetch(`${API_BASE}/auth/me`, {
       headers: authHeaders(),
       signal: controller.signal,
     })
@@ -303,10 +481,14 @@ export async function getPackages(options?: { force?: boolean }): Promise<Packag
 
   packagesInFlight = (async () => {
     try {
-      const res = await fetch(PACKAGES_API_URL, {
+      const res = await apiFetch(PACKAGES_API_URL, {
         cache: 'no-store',
       })
-      if (!res.ok) throw new ApiError(res.status, res.statusText)
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        recordHttpApiFailure(res, errBody, { method: 'GET' })
+        throw new ApiError(res.status, res.statusText)
+      }
       const data = await res.json().catch(() => null)
       const list = parsePackagesResponse(data)
       packagesMemoryCache = { list, fetchedAt: Date.now() }
@@ -393,12 +575,12 @@ export async function getPrograms(params?: {
   if (params?.search) q.set('search', params.search)
   if (params?.page != null) q.set('page', String(params.page))
   if (params?.limit != null) q.set('limit', String(params.limit))
-  const res = await fetch(`${API_BASE}/programs?${q.toString()}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/programs?${q.toString()}`, { headers: authHeaders() })
   return handleResponse<ProgramsResponse>(res)
 }
 
 export async function getProgramBySlug(slug: string): Promise<ProgramDetailResponse | null> {
-  const res = await fetch(`${API_BASE}/programs/${encodeURIComponent(slug)}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/programs/${encodeURIComponent(slug)}`, { headers: authHeaders() })
   if (res.status === 404) return null
   return handleResponse<ProgramDetailResponse>(res)
 }
@@ -471,41 +653,19 @@ export interface PaymentSessionResponse {
 export async function initiateCheckout(payload: CheckoutInitiateRequest): Promise<CheckoutInitiateResponse> {
   const body: Record<string, unknown> = {
     programSlug: payload.programSlug,
-    program_slug: payload.programSlug,
     programId: payload.programId,
-    program_id: payload.programId,
     name: payload.name,
     email: payload.email,
     promoCode: payload.promoCode ?? '',
-    promo_code: payload.promoCode ?? '',
   }
-  console.log('[initiateCheckout][1] base payload received', payload)
-  console.log('[initiateCheckout][2] set body.programSlug', body.programSlug)
-  console.log('[initiateCheckout][3] set body.program_slug', body.program_slug)
-  console.log('[initiateCheckout][4] set body.programId', body.programId)
-  console.log('[initiateCheckout][5] set body.program_id', body.program_id)
-  console.log('[initiateCheckout][6] set body.name', body.name)
-  console.log('[initiateCheckout][7] set body.email', body.email)
-  console.log('[initiateCheckout][8] set body.promoCode', body.promoCode)
-  console.log('[initiateCheckout][9] set body.promo_code', body.promo_code)
 
-  if (payload.buyerRole) {
-    body.buyerRole = payload.buyerRole
-    body.buyer_role = payload.buyerRole
-    console.log('[initiateCheckout][9a] set buyer role', payload.buyerRole)
-  }
-  if (payload.roleHint) {
-    body.roleHint = payload.roleHint
-    body.role_hint = payload.roleHint
-    console.log('[initiateCheckout][9a-2] set role hint', payload.roleHint)
-  }
+  if (payload.buyerRole) body.buyerRole = payload.buyerRole
+  if (payload.roleHint) body.roleHint = payload.roleHint
 
   if (payload.quantity != null && payload.quantity > 0) {
     const qty = Math.max(1, Math.trunc(payload.quantity))
     body.quantity = qty
     body.itemCount = qty
-    body.item_count = qty
-    console.log('[initiateCheckout][9b] set quantity/item_count', qty)
   }
 
   if (Array.isArray(payload.students) && payload.students.length > 0) {
@@ -513,130 +673,59 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
       .map((student) => ({
         name: String(student.name ?? '').trim(),
         email: String(student.email ?? '').trim(),
-        user_id: student.userId ? String(student.userId).trim() : undefined,
+        userId: student.userId ? String(student.userId).trim() : undefined,
       }))
       .filter((student) => student.name && student.email)
-    if (normalizedStudents.length > 0) {
-      body.students = normalizedStudents
-      body.student_items = normalizedStudents
-      console.log('[initiateCheckout][9c] set students payload count', normalizedStudents.length)
-    }
+    if (normalizedStudents.length > 0) body.students = normalizedStudents
   }
 
-  if (payload.userId) {
-    body.userId = payload.userId
-    console.log('[initiateCheckout][10] set body.userId', body.userId)
-    body.user_id = payload.userId
-    console.log('[initiateCheckout][11] set body.user_id', body.user_id)
-  } else {
-    console.log('[initiateCheckout][10-11] skip userId mapping because payload.userId is empty')
-  }
+  if (payload.userId) body.userId = payload.userId
 
-  // Kirim harga rupiah
   const totalRupiah = payload.expectedTotal != null && payload.expectedTotal > 0 ? payload.expectedTotal : 0
-  console.log('[initiateCheckout][12] resolved totalRupiah', totalRupiah)
   if (totalRupiah > 0) {
     body.expectedTotal = totalRupiah
-    console.log('[initiateCheckout][13] set body.expectedTotal', body.expectedTotal)
-    body.expected_total = totalRupiah
-    console.log('[initiateCheckout][14] set body.expected_total', body.expected_total)
     body.total = totalRupiah
-    console.log('[initiateCheckout][15] set body.total', body.total)
-    body.total_amount = totalRupiah
-    console.log('[initiateCheckout][16] set body.total_amount', body.total_amount)
     body.amount = totalRupiah
-    console.log('[initiateCheckout][17] set body.amount', body.amount)
     body.price = totalRupiah
-    console.log('[initiateCheckout][18] set body.price', body.price)
-    body.final_price = totalRupiah
-    console.log('[initiateCheckout][19] set body.final_price', body.final_price)
     body.finalPrice = totalRupiah
-    console.log('[initiateCheckout][20] set body.finalPrice', body.finalPrice)
-  } else {
-    console.log('[initiateCheckout][13-20] skip expectedTotal mappings because totalRupiah <= 0')
   }
 
   if (payload.normalPrice != null && payload.normalPrice > 0) {
     body.normalPrice = payload.normalPrice
-    console.log('[initiateCheckout][21] set body.normalPrice', body.normalPrice)
-    body.normal_price = payload.normalPrice
-    console.log('[initiateCheckout][22] set body.normal_price', body.normal_price)
-  } else {
-    console.log('[initiateCheckout][21-22] skip normalPrice mappings because payload.normalPrice <= 0')
   }
 
-  console.log('[initiateCheckout][23] final request body before API call', body)
-  console.log('[initiateCheckout][24] API_BASE', API_BASE)
-  console.log('[initiateCheckout][25] API_BASE/checkout/initiate', `${API_BASE}/checkout/initiate`)
-  console.log('[initiateCheckout][26] authHeaders()', authHeaders())
-  console.log('[initiateCheckout][27] JSON.stringify(body)', JSON.stringify(body))
-  // const shouldSkipApiCall = true
-  // if (shouldSkipApiCall) {
-  //   console.log('[initiateCheckout][24] API call intentionally skipped for debugging')
-  //   throw new ApiError(400, 'Debug mode: payload logged; pemanggilan API di-skip sementara.')
-  // }
-
-  const res = await fetch(`${API_BASE}/checkout/initiate`, {
+  const res = await apiFetch(`${API_BASE}/checkout/initiate`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
-  console.log('[initiateCheckout][28] fetch completed', {
-    ok: res.ok,
-    status: res.status,
-    statusText: res.statusText,
-  })
   const data = await handleResponse<CheckoutInitiateResponse & { confirmation_code?: string | number }>(res)
-  console.log('[initiateCheckout][29] handleResponse data', data)
 
   // Parse confirmation code (bisa string atau number dari backend) -> paksa integer
   const rawConfCode = data.confirmationCode ?? (data as { confirmation_code?: string | number }).confirmation_code
-  console.log('[initiateCheckout][30] rawConfCode', rawConfCode)
   const confAsNumber = rawConfCode != null ? Number(rawConfCode) : NaN
-  console.log('[initiateCheckout][31] confAsNumber', confAsNumber)
   const confirmationCode = Number.isFinite(confAsNumber) ? Math.trunc(confAsNumber) : undefined
-  console.log('[initiateCheckout][32] confirmationCode', confirmationCode)
 
   // Parse total — backend bisa mengembalikan 0, override dengan expectedTotal
   let totalNum = typeof data.total === 'number' && !Number.isNaN(data.total) ? data.total : 0
-  console.log('[initiateCheckout][33] totalNum parsed', totalNum)
   const finalPriceRaw = (data as { finalPrice?: number }).finalPrice
-  console.log('[initiateCheckout][34] finalPriceRaw', finalPriceRaw)
   let finalPriceNum = typeof finalPriceRaw === 'number' && finalPriceRaw > 0 ? finalPriceRaw : totalNum
-  console.log('[initiateCheckout][35] finalPriceNum resolved', finalPriceNum)
   const normalPriceRaw = (data as { normalPrice?: number }).normalPrice
-  console.log('[initiateCheckout][36] normalPriceRaw', normalPriceRaw)
   let normalPriceOut = typeof normalPriceRaw === 'number' && normalPriceRaw > 0 ? normalPriceRaw : undefined
-  console.log('[initiateCheckout][37] normalPriceOut initial', normalPriceOut)
   let priceDisplayOut = data.priceDisplay ?? data.program?.priceDisplay
-  console.log('[initiateCheckout][38] priceDisplayOut initial', priceDisplayOut)
 
-  // Override: jika backend mengembalikan total 0, gunakan expectedTotal
   const backendReturnedZero = totalNum === 0 || Number.isNaN(totalNum)
-  console.log('[initiateCheckout][39] backendReturnedZero', backendReturnedZero)
   if (backendReturnedZero && payload.expectedTotal != null && payload.expectedTotal > 0) {
-    console.log('[initiateCheckout][40] apply expectedTotal override', payload.expectedTotal)
     totalNum = payload.expectedTotal
     finalPriceNum = payload.expectedTotal
     priceDisplayOut = `Rp${payload.expectedTotal.toLocaleString('id-ID')}`
-    console.log('[initiateCheckout][41] after expectedTotal override', {
-      totalNum,
-      finalPriceNum,
-      priceDisplayOut,
-    })
-  } else {
-    console.log('[initiateCheckout][40-41] skip expectedTotal override')
   }
 
   if ((normalPriceOut == null || normalPriceOut === 0) && payload.normalPrice != null && payload.normalPrice > 0) {
-    console.log('[initiateCheckout][42] apply normalPrice fallback', payload.normalPrice)
     normalPriceOut = payload.normalPrice
-    console.log('[initiateCheckout][43] normalPriceOut after fallback', normalPriceOut)
-  } else {
-    console.log('[initiateCheckout][42-43] skip normalPrice fallback')
   }
 
-  const responseOut = {
+  return {
     ...data,
     total: Number.isNaN(totalNum) ? 0 : totalNum,
     finalPrice: Number.isNaN(finalPriceNum) ? 0 : finalPriceNum,
@@ -647,35 +736,24 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
       : data.program,
     confirmationCode: (confirmationCode != null && !Number.isNaN(confirmationCode)) ? confirmationCode : undefined,
   }
-  console.log('[initiateCheckout][44] final responseOut', responseOut)
-  return responseOut
 }
 
 export async function createPaymentSession(payload: PaymentSessionRequest): Promise<PaymentSessionResponse> {
   const body: Record<string, unknown> = {
     orderId: payload.orderId,
-    order_id: payload.orderId,
     paymentMethod: payload.paymentMethod,
-    payment_method: payload.paymentMethod,
     promoCode: payload.promoCode ?? '',
-    promo_code: payload.promoCode ?? '',
   }
-  // Juga kirim checkoutId jika tersedia (backward compat)
-  if (payload.checkoutId) {
-    body.checkoutId = payload.checkoutId
-    body.checkout_id = payload.checkoutId
-  }
+  if (payload.checkoutId) body.checkoutId = payload.checkoutId
   if (payload.uniqueCode != null && payload.uniqueCode >= 100 && payload.uniqueCode <= 999) {
     body.uniqueCode = payload.uniqueCode
-    body.unique_code = payload.uniqueCode
   }
   const amountNum = payload.amount != null && !Number.isNaN(Number(payload.amount)) ? Number(payload.amount) : 0
   if (amountNum > 0) {
     body.amount = amountNum
     body.total = amountNum
-    body.total_amount = amountNum
   }
-  const res = await fetch(`${API_BASE}/checkout/payment-session`, {
+  const res = await apiFetch(`${API_BASE}/checkout/payment-session`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -688,13 +766,14 @@ export async function createPaymentSession(payload: PaymentSessionRequest): Prom
 export async function submitPaymentProof(orderId: string, form: FormData): Promise<void> {
   const h = authHeaders() as Record<string, string>
   const { 'Content-Type': _ct, ...rest } = h
-  const res = await fetch(`${API_BASE}/checkout/orders/${encodeURIComponent(orderId)}/payment-proof`, {
+  const res = await apiFetch(`${API_BASE}/checkout/orders/${encodeURIComponent(orderId)}/payment-proof`, {
     method: 'POST',
     headers: { ...rest, Accept: 'application/json' },
     body: form,
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
+    recordHttpApiFailure(res, data, { method: 'POST' })
     throw new ApiError(res.status, (data as { message?: string }).message || res.statusText, data as { error?: string; message?: string })
   }
 }
@@ -709,7 +788,7 @@ export interface RegisterWithInviteRequest {
 }
 
 export async function registerWithInvite(body: RegisterWithInviteRequest): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/auth/register-with-invite`, {
+  const res = await apiFetch(`${API_BASE}/auth/register-with-invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -882,14 +961,14 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
 
 /** GET /tryouts?status=open — daftar tryout dari database/backend */
 export async function getOpenTryouts(): Promise<OpenTryoutItem[]> {
-  const res = await fetch(`${API_BASE}/tryouts?status=open`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/tryouts?status=open`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseOpenTryoutsResponse(data)
 }
 
 /** POST /student/tryouts/:id/register */
 export async function registerStudentTryout(tryoutId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/register`, {
+  const res = await apiFetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/register`, {
     method: 'POST',
     headers: authHeaders(),
   })
@@ -898,7 +977,7 @@ export async function registerStudentTryout(tryoutId: string): Promise<void> {
 
 /** POST /student/tryouts/:id/start */
 export async function startStudentTryout(tryoutId: string): Promise<TryoutStartResponse> {
-  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/start`, {
+  const res = await apiFetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/start`, {
     method: 'POST',
     headers: authHeaders(),
   })
@@ -914,7 +993,7 @@ export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentT
   if (typeof window !== 'undefined' && sessionStorage.getItem(disabledKey) === '1') {
     return null
   }
-  const res = await fetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/status`, {
+  const res = await apiFetch(`${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/status`, {
     headers: authHeaders(),
   })
   if (res.status === 404) {
@@ -967,7 +1046,7 @@ export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentT
 }
 
 export async function getTryoutLeaderboard(tryoutId: string): Promise<TryoutLeaderboardEntry[]> {
-  const res = await fetch(`${API_BASE}/tryouts/${encodeURIComponent(tryoutId)}/leaderboard`, {
+  const res = await apiFetch(`${API_BASE}/tryouts/${encodeURIComponent(tryoutId)}/leaderboard`, {
     headers: authHeaders(),
   })
   const data = await handleResponse<unknown>(res)
@@ -1204,7 +1283,7 @@ export interface StudentCertificatesResponse {
 }
 
 export async function getStudentDashboard(): Promise<StudentDashboardResponse> {
-  const res = await fetch(`${API_BASE}/student/dashboard`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/dashboard`, { headers: authHeaders() })
   return handleResponse<StudentDashboardResponse>(res)
 }
 
@@ -1215,7 +1294,7 @@ export async function getMyCourses(params?: StudentCoursesQuery): Promise<Studen
   if (params?.search) qs.set('search', params.search)
   if (params?.progressStatus && params.progressStatus !== 'all') qs.set('progressStatus', params.progressStatus)
   const q = qs.toString()
-  const res = await fetch(`${API_BASE}/student/courses${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/courses${q ? `?${q}` : ''}`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   if (Array.isArray(data)) return { data: data as MyCourseItem[] }
   if (data && typeof data === 'object') {
@@ -1240,13 +1319,13 @@ export async function getTransactions(params?: StudentTransactionsQuery): Promis
   if (params?.search) qs.set('search', params.search)
   if (params?.status && params.status !== 'all') qs.set('status', params.status)
   const q = qs.toString()
-  const res = await fetch(`${API_BASE}/student/transactions${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/transactions${q ? `?${q}` : ''}`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseTransactionsResponse(data)
 }
 
 export async function getStudentTryoutHistory(): Promise<StudentTryoutHistoryResponse> {
-  const res = await fetch(`${API_BASE}/student/tryouts/history`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/tryouts/history`, { headers: authHeaders() })
   if (res.status === 404) return { data: [] }
   const data = await handleResponse<unknown>(res)
   const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : {}
@@ -1266,7 +1345,7 @@ export async function getStudentTryoutHistory(): Promise<StudentTryoutHistoryRes
 }
 
 export async function getStudentNextActions(): Promise<StudentNextActionsResponse> {
-  const res = await fetch(`${API_BASE}/student/next-actions`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/next-actions`, { headers: authHeaders() })
   if (res.status === 404) return { data: [] }
   const data = await handleResponse<unknown>(res)
   const payload = (data && typeof data === 'object') ? (data as Record<string, unknown>) : {}
@@ -1290,7 +1369,7 @@ export async function getClasses(): Promise<ClassesResponse> {
   let lastStatus = 404
 
   for (const endpoint of endpoints) {
-    const res = await fetch(endpoint, { headers: authHeaders() })
+    const res = await apiFetch(endpoint, { headers: authHeaders() })
     if (res.status === 404) {
       lastStatus = res.status
       continue
@@ -1328,7 +1407,7 @@ export async function getClasses(): Promise<ClassesResponse> {
 }
 
 export async function getSchools(): Promise<SchoolsResponse> {
-  const res = await fetch(`${API_BASE}/schools`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/schools`, { headers: authHeaders() })
   const raw = await handleResponse<unknown>(res)
   const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
   const listRaw = Array.isArray(payload.data)
@@ -1349,7 +1428,7 @@ export async function getSchools(): Promise<SchoolsResponse> {
 }
 
 export async function getSchoolById(schoolId: string): Promise<SchoolDetailResponse> {
-  const res = await fetch(`${API_BASE}/schools/${encodeURIComponent(schoolId)}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/schools/${encodeURIComponent(schoolId)}`, { headers: authHeaders() })
   const raw = await handleResponse<unknown>(res)
   const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
   return {
@@ -1368,9 +1447,9 @@ export async function createSchool(body: CreateSchoolRequest): Promise<SchoolDet
     slug: body.slug ?? undefined,
     description: body.description ?? undefined,
     address: body.address ?? undefined,
-    logo_url: body.logoUrl ?? undefined,
+    logoUrl: body.logoUrl ?? undefined,
   }
-  const res = await fetch(`${API_BASE}/schools`, {
+  const res = await apiFetch(`${API_BASE}/schools`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(payload),
@@ -1388,7 +1467,7 @@ export async function createSchool(body: CreateSchoolRequest): Promise<SchoolDet
 }
 
 export async function getCertificates(): Promise<StudentCertificatesResponse> {
-  const res = await fetch(`${API_BASE}/student/certificates`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/certificates`, { headers: authHeaders() })
   return handleResponse<StudentCertificatesResponse>(res)
 }
 
@@ -1398,6 +1477,8 @@ export interface StudentProfileResponse {
   phone?: string
   whatsapp?: string
   school?: string
+  schoolId?: string
+  school_id?: string
   classLevel?: string
   city?: string
   province?: string
@@ -1416,15 +1497,14 @@ export interface UpdateStudentProfileRequest {
   phone?: string
   whatsapp?: string
   school?: string
+  schoolId?: string
   classLevel?: string
   city?: string
   province?: string
   gender?: string
   birthDate?: string
-  bio?: string
   parentName?: string
   parentPhone?: string
-  instagram?: string
 }
 
 export interface UpdateStudentPasswordRequest {
@@ -1434,12 +1514,12 @@ export interface UpdateStudentPasswordRequest {
 }
 
 export async function getStudentProfile(): Promise<StudentProfileResponse> {
-  const res = await fetch(`${API_BASE}/student/profile`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/student/profile`, { headers: authHeaders() })
   return handleResponse<StudentProfileResponse>(res)
 }
 
 export async function updateStudentProfile(body: UpdateStudentProfileRequest): Promise<void> {
-  const res = await fetch(`${API_BASE}/student/profile`, {
+  const res = await apiFetch(`${API_BASE}/student/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -1460,7 +1540,7 @@ export async function updateStudentPassword(body: UpdateStudentPasswordRequest):
     confirmPassword: body.confirmPassword ?? body.newPassword,
   }
 
-  const primary = await fetch(`${API_BASE}/student/profile/password`, {
+  const primary = await apiFetch(`${API_BASE}/student/profile/password`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(payload),
@@ -1470,7 +1550,7 @@ export async function updateStudentPassword(body: UpdateStudentPasswordRequest):
     return handleResponse<void>(primary)
   }
 
-  const fallback = await fetch(`${API_BASE}/auth/change-password`, {
+  const fallback = await apiFetch(`${API_BASE}/auth/change-password`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(payload),
@@ -1525,12 +1605,12 @@ export interface InstructorEarningsResponse {
 }
 
 export async function getInstructorCourses(): Promise<InstructorCoursesResponse> {
-  const res = await fetch(`${API_BASE}/guru/courses`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/courses`, { headers: authHeaders() })
   return handleResponse<InstructorCoursesResponse>(res)
 }
 
 export async function getInstructorStudents(): Promise<InstructorStudentsResponse> {
-  const res = await fetch(`${API_BASE}/guru/students`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/students`, { headers: authHeaders() })
   return handleResponse<InstructorStudentsResponse>(res)
 }
 
@@ -1569,7 +1649,7 @@ export async function getStudentsBySchool(schoolId: string): Promise<SchoolStude
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      return await fetch(url, { headers: authHeaders(), signal: controller.signal })
+      return await apiFetch(url, { headers: authHeaders(), signal: controller.signal })
     } finally {
       clearTimeout(timer)
     }
@@ -1597,7 +1677,7 @@ export async function getStudentsBySchool(schoolId: string): Promise<SchoolStude
 }
 
 export async function getInstructorEarnings(): Promise<InstructorEarningsResponse> {
-  const res = await fetch(`${API_BASE}/guru/earnings`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/earnings`, { headers: authHeaders() })
   return handleResponse<InstructorEarningsResponse>(res)
 }
 
@@ -1628,7 +1708,6 @@ export interface UpdateInstructorProfileRequest {
   whatsapp?: string
   school?: string
   schoolId?: string
-  school_id?: string
   classLevel?: string
   city?: string
   province?: string
@@ -1647,12 +1726,12 @@ export interface UpdateInstructorPasswordRequest {
 }
 
 export async function getInstructorProfile(): Promise<InstructorProfileResponse> {
-  const res = await fetch(`${API_BASE}/guru/profile`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/profile`, { headers: authHeaders() })
   return handleResponse<InstructorProfileResponse>(res)
 }
 
 export async function updateInstructorProfile(body: UpdateInstructorProfileRequest): Promise<void> {
-  const res = await fetch(`${API_BASE}/guru/profile`, {
+  const res = await apiFetch(`${API_BASE}/guru/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -1668,14 +1747,14 @@ export async function updateInstructorPassword(body: UpdateInstructorPasswordReq
     confirmPassword: body.confirmPassword ?? body.newPassword,
   }
 
-  const primary = await fetch(`${API_BASE}/guru/profile/password`, {
+  const primary = await apiFetch(`${API_BASE}/guru/profile/password`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(payload),
   })
   if (primary.status !== 404) return handleResponse<void>(primary)
 
-  const fallback = await fetch(`${API_BASE}/auth/change-password`, {
+  const fallback = await apiFetch(`${API_BASE}/auth/change-password`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(payload),
@@ -1726,12 +1805,12 @@ export interface InstructorAttemptAIAnalysisResponse {
 }
 
 export async function getInstructorTryoutAnalysis(tryoutId: string): Promise<InstructorTryoutAnalysisResponse> {
-  const res = await fetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/analysis`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/analysis`, { headers: authHeaders() })
   return handleResponse<InstructorTryoutAnalysisResponse>(res)
 }
 
 export async function getInstructorTryoutStudents(tryoutId: string): Promise<InstructorTryoutStudentItem[]> {
-  const res = await fetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/students`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/students`, { headers: authHeaders() })
   return handleResponse<InstructorTryoutStudentItem[]>(res)
 }
 
@@ -1739,7 +1818,7 @@ export async function getInstructorAttemptAIAnalysis(
   tryoutId: string,
   attemptId: string
 ): Promise<InstructorAttemptAIAnalysisResponse> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attemptId)}/ai-analysis`,
     { headers: authHeaders() }
   )
@@ -1780,12 +1859,21 @@ export function trackPageview(payload?: Partial<PageviewPayload>): void {
     language: payload?.language ?? navigator.language,
   }
 
-  fetch(`${API_BASE}/analytics/pageview`, {
+  void apiFetch(`${API_BASE}/analytics/pageview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     keepalive: true,
-  }).catch(() => {})
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        recordHttpApiFailure(res, data, { method: 'POST', message: `Analytics pageview HTTP ${res.status}` })
+      }
+    })
+    .catch(() => {
+      /* jaringan sudah dicatat di apiFetch */
+    })
 }
 
 /**
@@ -1801,12 +1889,21 @@ export function trackAnalyticsEvent(payload: AnalyticsEventPayload): void {
     programSlug: payload.programSlug,
     metadata: payload.metadata,
   }
-  fetch(`${API_BASE}/analytics/events`, {
+  void apiFetch(`${API_BASE}/analytics/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     keepalive: true,
-  }).catch(() => {})
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        recordHttpApiFailure(res, data, { method: 'POST', message: `Analytics events HTTP ${res.status}` })
+      }
+    })
+    .catch(() => {
+      /* jaringan sudah dicatat di apiFetch */
+    })
 }
 
 // --- Admin Analytics ---
@@ -1870,7 +1967,7 @@ export async function getAnalyticsSummary(params?: {
   if (params?.endDate) qs.set('endDate', params.endDate)
   if (params?.groupBy) qs.set('groupBy', params.groupBy)
   const q = qs.toString()
-  const res = await fetch(`${API_BASE}/admin/analytics/summary${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/admin/analytics/summary${q ? `?${q}` : ''}`, { headers: authHeaders() })
   return handleResponse<AnalyticsSummaryResponse>(res)
 }
 
@@ -1886,12 +1983,12 @@ export async function getAnalyticsVisitors(params?: {
   if (params?.startDate) qs.set('startDate', params.startDate)
   if (params?.endDate) qs.set('endDate', params.endDate)
   const q = qs.toString()
-  const res = await fetch(`${API_BASE}/admin/analytics/visitors${q ? `?${q}` : ''}`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/admin/analytics/visitors${q ? `?${q}` : ''}`, { headers: authHeaders() })
   return handleResponse<AnalyticsVisitorsResponse>(res)
 }
 
 export async function getMyNotifications(): Promise<UserNotificationsResponse> {
-  const res = await fetch(`${API_BASE}/notifications`, { headers: authHeaders() })
+  const res = await apiFetch(`${API_BASE}/notifications`, { headers: authHeaders() })
   const raw = await handleResponse<unknown>(res)
   const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
   const listRaw = Array.isArray(payload.data)
@@ -1910,3 +2007,5 @@ export async function getMyNotifications(): Promise<UserNotificationsResponse> {
 
   return { data }
 }
+
+export { clearApiErrorLog, getApiErrorLog } from './api-error-log'

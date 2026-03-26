@@ -15,7 +15,8 @@ export function AuthGuard({ children, role, currentPath, onRedirect }: AuthGuard
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      const toAuth = `#/auth?redirect=${encodeURIComponent('#/' + (currentPath || '').replace(/^\//, ''))}`
+      const returnPath = `#/${(currentPath || '').replace(/^\//, '')}`
+      const toAuth = `#/auth?redirect=${encodeURIComponent(returnPath)}`
       onRedirect(toAuth)
       return
     }

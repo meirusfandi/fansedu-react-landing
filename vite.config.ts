@@ -5,6 +5,20 @@ import https from 'node:https'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const rawMode = String(
+    env.VITE_MODE || env.MODE || process.env.VITE_MODE || process.env.MODE || '',
+  )
+    .trim()
+    .toLowerCase()
+  const appApiMode: 'development' | 'production' =
+    rawMode === 'production'
+      ? 'production'
+      : rawMode === 'development'
+        ? 'development'
+        : mode === 'production'
+          ? 'production'
+          : 'development'
+
   const pickProxyTarget = (): string => {
     if (env.VITE_API_PROXY_TARGET) return env.VITE_API_PROXY_TARGET
     const base = env.VITE_API_BASE_URL || env.VITE_API_URL
@@ -15,6 +29,7 @@ export default defineConfig(({ mode }) => {
         // ignore invalid URL and fallback below
       }
     }
+    if (appApiMode === 'production') return 'https://api.fansedu.web.id'
     return 'http://localhost:8080'
   }
   const proxyTarget = pickProxyTarget()
@@ -26,6 +41,10 @@ export default defineConfig(({ mode }) => {
     : undefined
 
   return {
+    define: {
+      /** Sinkron dengan `MODE` / `VITE_MODE` di .env (Vite tidak mengekspos `MODE` ke klien). */
+      'import.meta.env.VITE_MODE': JSON.stringify(appApiMode),
+    },
     plugins: [react()],
     server: {
       proxy: {

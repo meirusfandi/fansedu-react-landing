@@ -1,8 +1,20 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../../store/auth'
-import { useNotificationsStore } from '../../store/notifications'
-import { apiLogout, apiGetMe, getMyNotifications } from '../../lib/api'
+import { useNotificationsStore, type AppNotification } from '../../store/notifications'
+import { apiLogout, apiGetMe, getMyNotifications, type UserNotificationsResponse } from '../../lib/api'
 import { authUserFromApiResponse } from '../../types/auth'
+
+function mapNotificationsFromApi(res: UserNotificationsResponse, defaultHref: string): AppNotification[] {
+  return (res.data || []).map((item) => ({
+    id: item.id,
+    title: item.title,
+    message: item.body,
+    href: item.href || defaultHref,
+    read: Boolean(item.read),
+    level: item.type === 'progress_update' ? 'success' : 'info',
+    createdAt: item.createdAt || new Date().toISOString(),
+  }))
+}
 
 export function LmsHeader() {
   const user = useAuthStore((s) => s.user)
@@ -30,39 +42,47 @@ export function LmsHeader() {
       .catch(() => {})
   }, [token, setUser, logout])
 
+  const defaultNotifHref = user?.role === 'guru' ? '#/guru' : '#/student'
+
+  const applyNotificationsFromApi = useCallback(
+    (res: UserNotificationsResponse) => {
+      setNotifications(mapNotificationsFromApi(res, defaultNotifHref))
+    },
+    [setNotifications, defaultNotifHref]
+  )
+
+  /** Sekali saat ada token: sinkron badge dengan API (tanpa interval/polling). */
   useEffect(() => {
     if (!token) {
       setNotifications([])
       return
     }
-
     let cancelled = false
-    const loadNotifications = () => {
-      getMyNotifications()
-        .then((res) => {
-          if (cancelled) return
-          setNotifications(
-            (res.data || []).map((item) => ({
-              id: item.id,
-              title: item.title,
-              message: item.body,
-              href: item.href || (user?.role === 'guru' ? '#/guru' : '#/student'),
-              read: Boolean(item.read),
-              level: item.type === 'progress_update' ? 'success' : 'info',
-              createdAt: item.createdAt || new Date().toISOString(),
-            }))
-          )
-        })
-        .catch(() => {})
-    }
-
-    loadNotifications()
-    const id = window.setInterval(loadNotifications, 30000)
+    getMyNotifications()
+      .then((res) => {
+        if (cancelled) return
+        applyNotificationsFromApi(res)
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
-      window.clearInterval(id)
     }
-  }, [token, setNotifications, user?.role])
+  }, [token, setNotifications, applyNotificationsFromApi])
+
+  /** Refresh dari API saat panel daftar notifikasi dibuka. */
+  useEffect(() => {
+    if (!token || !openNotifications) return
+    let cancelled = false
+    getMyNotifications()
+      .then((res) => {
+        if (cancelled) return
+        applyNotificationsFromApi(res)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token, openNotifications, applyNotificationsFromApi])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

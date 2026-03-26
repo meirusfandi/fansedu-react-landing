@@ -166,10 +166,10 @@ export default function ProgramDetailPage({ slug }: { slug: string }) {
                   Daftar Program
                 </a>
                 <a
-                  href={`#/auth?tab=register&slug=${encodeURIComponent(program.slug)}&redirect=${encodeURIComponent(`#/checkout?program=${encodeURIComponent(program.slug)}`)}`}
+                  href={`#/auth?tab=register&redirect=${encodeURIComponent(`#/checkout?program=${encodeURIComponent(program.slug)}`)}`}
                   className="mt-3 block w-full text-center text-sm text-primary font-medium hover:underline"
                 >
-                  Buat akun dulu (slug terisi otomatis)
+                  Buat akun dulu
                 </a>
                 <p className="mt-4 text-center text-xs text-gray-500">Pembayaran aman • Akses seumur hidup</p>
               </div>

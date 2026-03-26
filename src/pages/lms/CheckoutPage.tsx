@@ -16,6 +16,7 @@ import {
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
 import { authUserFromApiResponse } from '../../types/auth'
+import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
@@ -120,6 +121,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loadingSetPassword, setLoadingSetPassword] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
+  const registerAttempt = useSubmitAttemptLimit()
   const [isCollectivePurchase, setIsCollectivePurchase] = useState(false)
   const [collectiveStudents, setCollectiveStudents] = useState<CollectiveStudentItem[]>([
     { id: crypto.randomUUID(), name: '', email: '' },
@@ -491,6 +493,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     e.preventDefault()
     const currentInfo = useCheckoutStore.getState().userInfo
 
+    if (registerAttempt.blocked) return
     if (!currentInfo.name.trim() || !currentInfo.email.trim()) {
       setSetPasswordError('Nama dan email harus diisi sebelum mengatur password.')
       return
@@ -514,14 +517,25 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         role: 'student',
         slug: slug ?? undefined,
       })
+      registerAttempt.onSuccess()
       login(authUserFromApiResponse(res.user, res.token), res.token)
       setStep('instructions')
     } catch (err) {
+      registerAttempt.onFailure()
       setSetPasswordError(err instanceof ApiError ? err.message : 'Gagal menyimpan password.')
     } finally {
       setLoadingSetPassword(false)
     }
-  }, [newPassword, confirmPassword, login, setStep, slug])
+  }, [
+    newPassword,
+    confirmPassword,
+    login,
+    setStep,
+    slug,
+    registerAttempt.blocked,
+    registerAttempt.onSuccess,
+    registerAttempt.onFailure,
+  ])
 
   const onLeaveTransfer = () => {
     window.location.hash = user?.role === 'guru' ? '#/guru' : '#/student'
@@ -685,11 +699,33 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 </div>
                 <button
                   type="submit"
-                  disabled={loadingSetPassword}
+                  disabled={loadingSetPassword || registerAttempt.blocked}
                   className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
                 >
                   {loadingSetPassword ? 'Menyimpan...' : 'Simpan Password & Lanjut Upload Bukti'}
                 </button>
+                {registerAttempt.blocked && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="mb-2">
+                      Sudah {MAX_SUBMIT_ATTEMPTS} kali gagal. Kirim ulang dinonaktifkan agar tidak membebani server.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        registerAttempt.resetLimit()
+                        setSetPasswordError(null)
+                      }}
+                      className="w-full py-2.5 rounded-lg border border-amber-300 bg-white font-medium text-amber-900 hover:bg-amber-100"
+                    >
+                      Coba lagi
+                    </button>
+                  </div>
+                )}
+                {registerAttempt.failCount > 0 && !registerAttempt.blocked && (
+                  <p className="text-xs text-gray-500 text-center">
+                    Percobaan gagal {registerAttempt.failCount}/{MAX_SUBMIT_ATTEMPTS}
+                  </p>
+                )}
               </form>
             </section>
           </div>
