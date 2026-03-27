@@ -134,22 +134,14 @@ export default function TryoutLeaderboardPage({ tryoutId = null }: TryoutLeaderb
                   </button>
                 </div>
               ) : (
-                <div className="max-h-[min(70vh,36rem)] overflow-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
-                    <thead>
+                    <thead className="bg-[var(--bg-secondary)] border-b border-[var(--border)]">
                       <tr>
-                        <th className="sticky top-0 z-20 bg-[var(--bg-secondary)] text-left py-3 px-4 text-[var(--fg-muted)] font-medium shadow-[inset_0_-1px_0_0_var(--border)]">
-                          Peringkat
-                        </th>
-                        <th className="sticky top-0 z-20 bg-[var(--bg-secondary)] text-left py-3 px-4 text-[var(--fg-muted)] font-medium shadow-[inset_0_-1px_0_0_var(--border)]">
-                          Nama
-                        </th>
-                        <th className="sticky top-0 z-20 bg-[var(--bg-secondary)] text-left py-3 px-4 text-[var(--fg-muted)] font-medium shadow-[inset_0_-1px_0_0_var(--border)]">
-                          Asal Sekolah
-                        </th>
-                        <th className="sticky top-0 z-20 bg-[var(--bg-secondary)] text-center py-3 px-4 text-[var(--fg-muted)] font-medium shadow-[inset_0_-1px_0_0_var(--border)]">
-                          Sudah Mengerjakan
-                        </th>
+                        <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Peringkat</th>
+                        <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Nama</th>
+                        <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Asal Sekolah</th>
+                        <th className="text-center py-3 px-4 text-[var(--fg-muted)] font-medium">Sudah Mengerjakan</th>
                       </tr>
                     </thead>
                     <tbody className="text-[var(--fg-muted)]">

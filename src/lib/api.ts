@@ -1129,30 +1129,59 @@ export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentT
   }
 }
 
+function extractTryoutLeaderboardRows(raw: unknown): Record<string, unknown>[] {
+  if (raw == null) return []
+  if (Array.isArray(raw)) return raw as Record<string, unknown>[]
+  if (typeof raw !== 'object') return []
+  const o = raw as Record<string, unknown>
+  const pick = (v: unknown): Record<string, unknown>[] | null =>
+    Array.isArray(v) ? (v as Record<string, unknown>[]) : null
+  let rows = pick(o.leaderboard)
+  if (rows) return rows
+  rows = pick(o.entries) ?? pick(o.items) ?? pick(o.results)
+  if (rows) return rows
+  const d = o.data
+  if (Array.isArray(d)) return d as Record<string, unknown>[]
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const inner = d as Record<string, unknown>
+    rows =
+      pick(inner.leaderboard) ??
+      pick(inner.entries) ??
+      pick(inner.items) ??
+      pick(inner.results) ??
+      pick(inner.data)
+    if (rows) return rows
+  }
+  return []
+}
+
+function parseLeaderboardRowScore(row: Record<string, unknown>): number | undefined {
+  const raw =
+    row.bestScore ??
+    row.best_score ??
+    row.score ??
+    row.totalScore ??
+    row.total_score ??
+    row.points ??
+    row.nilai ??
+    row.highestScore ??
+    row.highest_score
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
+  if (typeof raw === 'string' && raw.trim()) {
+    const n = Number(raw)
+    if (Number.isFinite(n)) return Math.trunc(n)
+  }
+  return undefined
+}
+
 export async function getTryoutLeaderboard(tryoutId: string): Promise<TryoutLeaderboardEntry[]> {
   const res = await apiFetch(`${API_BASE}/tryouts/${encodeURIComponent(tryoutId)}/leaderboard`, {
     headers: authHeaders(),
   })
   const data = await handleResponse<unknown>(res)
-  const rowsRaw = Array.isArray(data)
-    ? data
-    : (data && typeof data === 'object' && 'leaderboard' in data && Array.isArray((data as { leaderboard?: unknown }).leaderboard)
-      ? (data as { leaderboard: unknown[] }).leaderboard
-      : (data && typeof data === 'object' && 'data' in data && Array.isArray((data as { data?: unknown }).data)
-        ? (data as { data: unknown[] }).data
-        : []))
+  const rowsRaw = extractTryoutLeaderboardRows(data)
 
-  const parseBestScore = (row: Record<string, unknown>): number | undefined => {
-    const raw = row.bestScore ?? row.best_score ?? row.score
-    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
-    if (typeof raw === 'string' && raw.trim()) {
-      const n = Number(raw)
-      if (Number.isFinite(n)) return Math.trunc(n)
-    }
-    return undefined
-  }
-
-  return (rowsRaw as Record<string, unknown>[]).map((row, index) => {
+  return rowsRaw.map((row, index) => {
     const rankRaw = row.rank
     const rankNum = typeof rankRaw === 'number'
       ? Math.trunc(rankRaw)
@@ -1163,8 +1192,8 @@ export async function getTryoutLeaderboard(tryoutId: string): Promise<TryoutLead
         row.has_attempted ??
         row.hasAttempted,
     )
-    const best = parseBestScore(row)
-    const score = hasAttempt ? (best ?? 0) : 0
+    const parsed = parseLeaderboardRowScore(row)
+    const score = parsed !== undefined ? parsed : 0
 
     return {
       rank: Number.isFinite(rankNum) ? rankNum : index + 1,

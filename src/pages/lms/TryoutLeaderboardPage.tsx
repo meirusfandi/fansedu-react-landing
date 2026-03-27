@@ -69,25 +69,15 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
             </button>
           </div>
         ) : (
-          <div className="max-h-[min(70vh,36rem)] overflow-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
-              <thead>
+              <thead className="bg-slate-50 border-b border-gray-200">
                 <tr>
-                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
-                    Rank
-                  </th>
-                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
-                    Nama
-                  </th>
-                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
-                    Sekolah
-                  </th>
-                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
-                    Skor
-                  </th>
-                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
-                    Sudah Mengerjakan
-                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Rank</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Nama</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Sekolah</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Skor</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Sudah Mengerjakan</th>
                 </tr>
               </thead>
               <tbody>
@@ -108,7 +98,9 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
                         <td className={`py-3 px-4 text-primary ${isMe ? 'font-bold' : 'font-semibold'}`}>{row.rank}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'font-medium'}`}>{row.userName}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.schoolName}</td>
-                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.score}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>
+                          {Number.isFinite(row.score) ? row.score : 0}
+                        </td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.hasAttempt ? 'Ya' : 'Tidak'}</td>
                       </tr>
                     )
