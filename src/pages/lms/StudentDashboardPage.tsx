@@ -11,6 +11,7 @@ import {
   type StudentDashboardResponse,
 } from '../../lib/api'
 import { useNotificationsStore } from '../../store/notifications'
+import { filterStudentVisibleTryouts } from '../../utils/tryoutStudent'
 
 interface TryoutProgressSummary {
   attemptedCount: number
@@ -172,7 +173,9 @@ export default function StudentDashboardPage() {
         const myCourses =
           myCoursesRes.status === 'fulfilled' ? myCoursesRes.value.data ?? [] : []
         const openTryouts =
-          openTryoutsRes.status === 'fulfilled' ? openTryoutsRes.value ?? [] : []
+          openTryoutsRes.status === 'fulfilled'
+            ? filterStudentVisibleTryouts(openTryoutsRes.value ?? [])
+            : []
         const pendingTx =
           transactionsRes.status === 'fulfilled'
             ? (transactionsRes.value.data ?? []).filter((tx) => tx.status.toLowerCase() === 'pending').length

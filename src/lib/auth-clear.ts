@@ -6,6 +6,11 @@ import { useAuthStore } from '../store/auth'
 
 const LANDING_HASH = '#/'
 
+/** Hanya hapus token di store — tanpa mengubah hash (untuk 401 dari login/daftar). */
+export function clearStoredAuthOnly() {
+  useAuthStore.getState().logout()
+}
+
 export function clearAuthOnUnauthorized() {
   if (typeof window !== 'undefined') {
     const h = window.location.hash || ''
@@ -14,5 +19,5 @@ export function clearAuthOnUnauthorized() {
       window.location.hash = LANDING_HASH
     }
   }
-  useAuthStore.getState().logout()
+  clearStoredAuthOnly()
 }

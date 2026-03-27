@@ -2,6 +2,7 @@ import '../App.css'
 import { useEffect, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
 import { getTryoutScheduleText } from '../data/tryoutList'
+import { filterStudentVisibleTryouts } from '../utils/tryoutStudent'
 
 /**
  * Halaman daftar tryout (public). Dari sini masing-masing item mengarah ke halaman detail tryout (#/tryout-info).
@@ -15,7 +16,7 @@ export default function TryoutListPage() {
   useEffect(() => {
     getOpenTryouts()
       .then((list) => {
-        setTryouts(list)
+        setTryouts(filterStudentVisibleTryouts(list))
         setError(null)
       })
       .catch((err) => {

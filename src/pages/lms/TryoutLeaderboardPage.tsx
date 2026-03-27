@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getTryoutLeaderboard, type TryoutLeaderboardEntry } from '../../lib/api'
+import { useAuthStore } from '../../store/auth'
+import { isLeaderboardRowCurrentUser } from '../../utils/leaderboardUser'
 
 interface TryoutLeaderboardPageProps {
   tryoutId: string
@@ -7,6 +9,7 @@ interface TryoutLeaderboardPageProps {
 }
 
 export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderboardPageProps) {
+  const myUserId = useAuthStore((s) => s.user?.id)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<TryoutLeaderboardEntry[]>([])
@@ -66,15 +69,25 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b">
+          <div className="max-h-[min(70vh,36rem)] overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
                 <tr>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Rank</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Nama</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Sekolah</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Skor</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Sudah Mengerjakan</th>
+                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
+                    Rank
+                  </th>
+                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
+                    Nama
+                  </th>
+                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
+                    Sekolah
+                  </th>
+                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
+                    Skor
+                  </th>
+                  <th className="sticky top-0 z-20 bg-slate-50 text-left py-3 px-4 font-semibold text-gray-900 shadow-[inset_0_-1px_0_0_#e5e7eb]">
+                    Sudah Mengerjakan
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -85,15 +98,21 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
                     </td>
                   </tr>
                 ) : (
-                  entries.map((row) => (
-                    <tr key={row.userId || `${row.rank}-${row.userName}`} className="border-b last:border-0">
-                      <td className="py-3 px-4 font-semibold text-primary">{row.rank}</td>
-                      <td className="py-3 px-4 font-medium">{row.userName}</td>
-                      <td className="py-3 px-4 text-gray-600">{row.schoolName}</td>
-                      <td className="py-3 px-4">{typeof row.score === 'number' ? row.score : '-'}</td>
-                      <td className="py-3 px-4">{row.hasAttempt ? 'Ya' : 'Tidak'}</td>
-                    </tr>
-                  ))
+                  entries.map((row) => {
+                    const isMe = isLeaderboardRowCurrentUser(row.userId, myUserId)
+                    return (
+                      <tr
+                        key={row.userId || `${row.rank}-${row.userName}`}
+                        className={`border-b last:border-0 ${isMe ? 'bg-primary/5' : ''}`}
+                      >
+                        <td className={`py-3 px-4 text-primary ${isMe ? 'font-bold' : 'font-semibold'}`}>{row.rank}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'font-medium'}`}>{row.userName}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.schoolName}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{typeof row.score === 'number' ? row.score : '-'}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.hasAttempt ? 'Ya' : 'Tidak'}</td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

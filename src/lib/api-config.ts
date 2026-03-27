@@ -83,6 +83,13 @@ const PROD_API = 'https://api.fansedu.web.id/api/v1'
 const fallbackApi = appMode === 'production' ? PROD_API : LOCAL_API
 const effectiveRawApi = effectiveApiEnvUrl(rawFromEnv)
 const configuredApi = ensureUrlProtocol(effectiveRawApi || fallbackApi)
+/**
+ * Dev + API lokal: pakai path relatif `/api/v1` supaya request ke origin Vite (`localhost:5173`),
+ * lalu `vite.config` server.proxy mem-forward `/api` → `http://localhost:8080` (hindari CORS).
+ * Di Network tab URL tetap tampil 5173 — itu normal; backend tetap menerima di :8080.
+ * Agar browser memanggil langsung `http://localhost:8080/...`, set `VITE_USE_DEV_PROXY=false`
+ * (backend harus mengizinkan CORS untuk origin dev).
+ */
 const useDevProxy =
   import.meta.env.DEV && appMode === 'development' && ENV.VITE_USE_DEV_PROXY !== 'false'
 const RAW = useDevProxy && isLocalApiUrl(configuredApi) ? '/api/v1' : configuredApi

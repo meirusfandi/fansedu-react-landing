@@ -1,5 +1,4 @@
 import '../App.css'
-import { isLeaderboardVisible } from '../utils/tryoutDates'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
 import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
@@ -257,17 +256,15 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
                 <li>Leaderboard dapat menyertakan filter: tampil semua, atau hanya peserta tanpa bantuan AI (untuk perbandingan kemampuan murni).</li>
               </ul>
             </div>
-            {isLeaderboardVisible() && (
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <p className="text-[var(--fg-muted)] text-sm">
-                  Leaderboard lengkap TryOut (setelah 5 Maret 2026) dapat dilihat di halaman khusus leaderboard berikut. Peringkat disusun berdasarkan total
-                  skor, dengan penanda penggunaan AI sesuai deklarasi peserta.
-                </p>
-                <a href={leaderboardHref} className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
-                  Lihat Leaderboard
-                </a>
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <p className="text-[var(--fg-muted)] text-sm">
+                Peserta yang sudah mengerjakan tryout dapat melihat peringkat di halaman leaderboard. Peringkat disusun berdasarkan skor; penanda penggunaan AI
+                mengikuti kebijakan transparansi di atas.
+              </p>
+              <a href={leaderboardHref} className="btn-secondary px-6 py-3 rounded-full font-semibold text-center whitespace-nowrap">
+                Lihat Leaderboard
+              </a>
+            </div>
           </div>
         </section>
 

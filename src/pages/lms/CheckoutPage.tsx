@@ -241,7 +241,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     getInstructorProfile()
       .then((profile) => {
         if (cancelled) return
-        const schoolId = String(profile.schoolId ?? profile.school_id ?? '').trim()
+        const schoolId = String(profile.schoolId ?? '').trim()
         setInstructorSchoolId(schoolId)
       })
       .catch(() => {

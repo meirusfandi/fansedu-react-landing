@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
+import { filterStudentVisibleTryouts } from '../../utils/tryoutStudent'
 
 export default function StudentTryoutPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
@@ -10,7 +11,7 @@ export default function StudentTryoutPage() {
   useEffect(() => {
     getOpenTryouts()
       .then((list) => {
-        setTryouts(list)
+        setTryouts(filterStudentVisibleTryouts(list))
         setError(null)
       })
       .catch((err) => {
@@ -24,7 +25,7 @@ export default function StudentTryoutPage() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Tryout</h1>
       <p className="text-gray-500 mb-8">
-        Setelah punya akun, Anda bisa mendaftar tryout dari sini. Pilih tryout di bawah untuk melihat detail dan jadwal, lalu daftar untuk ikut ujian.
+        Tryout yang tampil adalah yang sedang dibuka dan belum melewati tanggal tutup. Buka detail untuk mendaftar; setelah terdaftar Anda bisa mulai ujian kapan saja selama periode masih berjalan. Setelah mengerjakan, Anda dapat melihat leaderboard.
       </p>
 
       {loading ? (

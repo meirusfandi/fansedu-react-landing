@@ -4,7 +4,7 @@
  * Auth: Bearer token dari store (persist fansedu-auth)
  */
 
-import { clearAuthOnUnauthorized } from './auth-clear'
+import { clearAuthOnUnauthorized, clearStoredAuthOnly } from './auth-clear'
 import { recordApiClientFailure, recordHttpApiFailure } from './api-error-log'
 import { API_BASE, PACKAGES_API_URL } from './api-config'
 import type { Course } from '../types/course'
@@ -75,12 +75,26 @@ export class ApiError extends Error {
 /** Cek /auth/me: jangan biarkan UI menggantung jika server tidak jawab */
 const AUTH_ME_TIMEOUT_MS = 6000
 
-async function handleResponse<T>(res: Response, meta?: { method?: string }): Promise<T> {
+async function handleResponse<T>(
+  res: Response,
+  meta?: { method?: string; on401?: 'session-expired' | 'credentials' },
+): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & Record<string, unknown>
   const method = meta?.method
 
   if (res.status === 401) {
     recordHttpApiFailure(res, data, { method, message: 'Tidak terotorisasi (401)' })
+    const errBody = data as { message?: string; error?: string }
+    const fromServer =
+      (typeof errBody.message === 'string' && errBody.message.trim()) ||
+      (typeof errBody.error === 'string' && errBody.error.trim()) ||
+      ''
+
+    if (meta?.on401 === 'credentials') {
+      clearStoredAuthOnly()
+      throw new ApiError(401, fromServer || 'Email atau kata sandi tidak valid.', errBody)
+    }
+
     clearAuthOnUnauthorized()
     throw new ApiError(401, 'Sesi berakhir. Silakan masuk kembali.', {})
   }
@@ -303,7 +317,7 @@ export async function apiLogin(body: LoginRequest): Promise<AuthResponse> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return handleResponse<AuthResponse>(res)
+  return handleResponse<AuthResponse>(res, { on401: 'credentials' })
 }
 
 export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> {
@@ -329,7 +343,7 @@ export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  return handleResponse<AuthResponse>(res)
+  return handleResponse<AuthResponse>(res, { on401: 'credentials' })
 }
 
 export async function apiLogout(): Promise<void> {
@@ -793,7 +807,7 @@ export async function registerWithInvite(body: RegisterWithInviteRequest): Promi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return handleResponse<AuthResponse>(res)
+  return handleResponse<AuthResponse>(res, { on401: 'credentials' })
 }
 
 // --- Student ---
@@ -851,7 +865,10 @@ export interface OpenTryoutItem {
   description?: string
   startAt: string
   intervalDays: number
+  /** Batas pendaftaran (ISO), opsional */
   registrationDeadlineAt?: string
+  /** Akhir periode tryout di sisi siswa (ISO) — setelah ini tidak bisa daftar/mulai; leaderboard tetap untuk yang sudah attempt */
+  closeAt?: string
   badge?: string
   isRegistered?: boolean
   hasAttempted?: boolean
@@ -892,36 +909,100 @@ function toIntSafe(v: unknown, fallback = 14): number {
   return fallback
 }
 
-function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
-  const payload = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
-  const listRaw = Array.isArray(payload.data)
-    ? payload.data
-    : (Array.isArray(payload.tryouts)
-      ? payload.tryouts
-      : (Array.isArray(raw) ? raw : []))
+function extractTryoutListArray(raw: unknown): Record<string, unknown>[] {
+  if (raw == null) return []
+  if (Array.isArray(raw)) return raw as Record<string, unknown>[]
+  if (typeof raw !== 'object') return []
+  const root = raw as Record<string, unknown>
+  const nestedData =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : null
+  const candidates: unknown[] = [
+    root.data,
+    root.tryouts,
+    root.items,
+    root.results,
+    root.content,
+    root.rows,
+    nestedData?.tryouts,
+    nestedData?.items,
+    nestedData?.data,
+    nestedData?.rows,
+  ]
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c as Record<string, unknown>[]
+  }
+  return []
+}
 
-  return (listRaw as Record<string, unknown>[])
+function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
+  const listRaw = extractTryoutListArray(raw)
+
+  return listRaw
     .filter((item) => (item.is_open ?? item.isOpen ?? true) !== false)
     .map((item) => {
-      const id = String(item.id ?? item.tryout_id ?? '')
+      const id = String(
+        item.id ??
+          item.tryout_id ??
+          item.tryoutId ??
+          item.uuid ??
+          item.slug ??
+          '',
+      ).trim()
       const title = String(item.title ?? item.name ?? 'Tryout')
       const shortTitleRaw = item.shortTitle ?? item.short_title
       const descriptionRaw = item.description ?? item.desc
       const startAt = String(
         item.startAt ??
         item.start_at ??
+        item.startsAt ??
+        item.starts_at ??
+        item.startDate ??
+        item.start_date ??
         item.schedule_at ??
+        item.scheduledAt ??
+        item.scheduled_at ??
         item.opens_at ??
+        item.opensAt ??
         item.open_at ??
+        item.openAt ??
+        item.begin_at ??
+        item.beginAt ??
+        item.window_start ??
+        item.windowStart ??
         ''
-      )
+      ).trim()
       const intervalDays = toIntSafe(item.intervalDays ?? item.interval_days, 14)
       const registrationDeadlineAtRaw =
         item.registrationDeadlineAt ??
         item.registration_deadline_at ??
-        item.deadline_at ??
+        item.register_until ??
+        item.registration_ends_at ??
+        item.deadline_at
+
+      const closeAtRaw =
+        item.closeAt ??
+        item.close_at ??
         item.closes_at ??
-        item.close_at
+        item.closesAt ??
+        item.end_at ??
+        item.ends_at ??
+        item.endAt ??
+        item.exam_end_at ??
+        item.tryout_end_at ??
+        item.window_end ??
+        item.windowEnd
+
+      const badgeRaw = item.badge ?? item.label ?? item.tag
+      const badgeStr =
+        typeof badgeRaw === 'string' && badgeRaw.trim()
+          ? badgeRaw.trim()
+          : badgeRaw === true
+            ? 'Gratis'
+            : typeof badgeRaw === 'number'
+              ? String(badgeRaw)
+              : 'Gratis'
 
       return {
         id,
@@ -931,7 +1012,8 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
         startAt,
         intervalDays,
         registrationDeadlineAt: registrationDeadlineAtRaw ? String(registrationDeadlineAtRaw) : undefined,
-        badge: String(item.badge ?? 'Gratis'),
+        closeAt: closeAtRaw ? String(closeAtRaw).trim() : undefined,
+        badge: badgeStr,
         isRegistered: Boolean(
           item.isRegistered ??
           item.is_registered ??
@@ -956,7 +1038,8 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
         detailPath: `#/tryout-info/${encodeURIComponent(id)}`,
       } satisfies OpenTryoutItem
     })
-    .filter((item) => item.id && item.startAt)
+    /** Cukup id yang valid; startAt opsional dari sisi API — jadwal ditangani di UI */
+    .filter((item) => Boolean(item.id))
 }
 
 /** GET /tryouts?status=open — daftar tryout dari database/backend */
@@ -1471,18 +1554,36 @@ export async function getCertificates(): Promise<StudentCertificatesResponse> {
   return handleResponse<StudentCertificatesResponse>(res)
 }
 
-export interface StudentProfileResponse {
+/** Objek sekolah dari GET profile (camelCase). */
+export interface ProfileSchoolRef {
+  id: string
+  name: string
+}
+
+/**
+ * Bentuk GET /student/profile & GET /guru/profile (camelCase).
+ * Normalizer memetakan `data: {...}`, snake_case, dan `school: { id, name }` ke field datar.
+ */
+export interface UserProfileResponse {
+  id?: string
   name: string
   email: string
+  emailVerified?: boolean
+  mustSetPassword?: boolean
   phone?: string
   whatsapp?: string
-  school?: string
-  schoolId?: string
-  school_id?: string
-  classLevel?: string
   city?: string
   province?: string
   gender?: string
+  role?: string
+  roleCode?: string
+  roleSlug?: string
+  schoolId?: string
+  schoolName?: string
+  /** Nama sekolah untuk form/tampilan (dari string API atau school.name) */
+  school?: string
+  subjectId?: string
+  classLevel?: string
   birthDate?: string
   bio?: string
   parentName?: string
@@ -1490,6 +1591,8 @@ export interface StudentProfileResponse {
   instagram?: string
   [key: string]: unknown
 }
+
+export type StudentProfileResponse = UserProfileResponse
 
 export interface UpdateStudentProfileRequest {
   name: string
@@ -1513,9 +1616,88 @@ export interface UpdateStudentPasswordRequest {
   confirmPassword?: string
 }
 
+function unwrapProfilePayload(raw: unknown): Record<string, unknown> {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const root = raw as Record<string, unknown>
+  const nested = root.data
+  if (nested != null && typeof nested === 'object' && !Array.isArray(nested)) {
+    return nested as Record<string, unknown>
+  }
+  return root
+}
+
+function firstProfileStr(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim()) return v.trim()
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  }
+  return undefined
+}
+
+function profileBoolOrUndef(v: unknown): boolean | undefined {
+  if (v === true || v === 1 || v === '1' || v === 'true') return true
+  if (v === false || v === 0 || v === '0' || v === 'false') return false
+  return undefined
+}
+
+/** Samakan respons profile API (nested school, data wrapper, snake_case) ke `UserProfileResponse`. */
+export function normalizeUserProfile(raw: unknown): UserProfileResponse {
+  const inner = unwrapProfilePayload(raw)
+
+  const schoolRaw = inner.school
+  let nestedSchoolId: string | undefined
+  let nestedSchoolName: string | undefined
+  if (schoolRaw != null && typeof schoolRaw === 'object' && !Array.isArray(schoolRaw)) {
+    const s = schoolRaw as Record<string, unknown>
+    nestedSchoolId = s.id != null ? String(s.id) : undefined
+    nestedSchoolName = s.name != null ? String(s.name) : undefined
+  }
+
+  const schoolId =
+    firstProfileStr(inner.schoolId, inner.school_id) ?? nestedSchoolId
+  const schoolName =
+    firstProfileStr(inner.schoolName, inner.school_name) ?? nestedSchoolName
+  const schoolDisplay =
+    typeof schoolRaw === 'string' && schoolRaw.trim()
+      ? schoolRaw.trim()
+      : (schoolName ?? firstProfileStr(inner.school))
+
+  const emailVerified = profileBoolOrUndef(inner.emailVerified ?? inner.email_verified)
+  const mustSetPassword = profileBoolOrUndef(inner.mustSetPassword ?? inner.must_set_password)
+
+  const base: UserProfileResponse = {
+    id: inner.id != null ? String(inner.id) : undefined,
+    name: firstProfileStr(inner.name) ?? '',
+    email: firstProfileStr(inner.email) ?? '',
+    phone: firstProfileStr(inner.phone, inner.phoneNumber, inner.phone_number),
+    whatsapp: firstProfileStr(inner.whatsapp, inner.whatsappNumber, inner.whatsapp_number),
+    city: firstProfileStr(inner.city),
+    province: firstProfileStr(inner.province),
+    gender: firstProfileStr(inner.gender),
+    role: firstProfileStr(inner.role),
+    roleCode: firstProfileStr(inner.roleCode, inner.role_code),
+    roleSlug: firstProfileStr(inner.roleSlug, inner.role_slug),
+    schoolId,
+    schoolName,
+    school: schoolDisplay,
+    subjectId: firstProfileStr(inner.subjectId, inner.subject_id),
+    classLevel: firstProfileStr(inner.classLevel, inner.class_level, inner.class, inner.grade),
+    birthDate: firstProfileStr(inner.birthDate, inner.birth_date),
+    bio: firstProfileStr(inner.bio),
+    parentName: firstProfileStr(inner.parentName, inner.parent_name),
+    parentPhone: firstProfileStr(inner.parentPhone, inner.parent_phone),
+    instagram: firstProfileStr(inner.instagram),
+  }
+  if (emailVerified !== undefined) base.emailVerified = emailVerified
+  if (mustSetPassword !== undefined) base.mustSetPassword = mustSetPassword
+
+  return base
+}
+
 export async function getStudentProfile(): Promise<StudentProfileResponse> {
   const res = await apiFetch(`${API_BASE}/student/profile`, { headers: authHeaders() })
-  return handleResponse<StudentProfileResponse>(res)
+  const raw = await handleResponse<unknown>(res)
+  return normalizeUserProfile(raw)
 }
 
 export async function updateStudentProfile(body: UpdateStudentProfileRequest): Promise<void> {
@@ -1681,25 +1863,7 @@ export async function getInstructorEarnings(): Promise<InstructorEarningsRespons
   return handleResponse<InstructorEarningsResponse>(res)
 }
 
-export interface InstructorProfileResponse {
-  name: string
-  email: string
-  phone?: string
-  whatsapp?: string
-  school?: string
-  schoolId?: string
-  school_id?: string
-  classLevel?: string
-  city?: string
-  province?: string
-  gender?: string
-  birthDate?: string
-  bio?: string
-  parentName?: string
-  parentPhone?: string
-  instagram?: string
-  [key: string]: unknown
-}
+export type InstructorProfileResponse = UserProfileResponse
 
 export interface UpdateInstructorProfileRequest {
   name: string
@@ -1708,6 +1872,7 @@ export interface UpdateInstructorProfileRequest {
   whatsapp?: string
   school?: string
   schoolId?: string
+  subjectId?: string
   classLevel?: string
   city?: string
   province?: string
@@ -1727,7 +1892,8 @@ export interface UpdateInstructorPasswordRequest {
 
 export async function getInstructorProfile(): Promise<InstructorProfileResponse> {
   const res = await apiFetch(`${API_BASE}/guru/profile`, { headers: authHeaders() })
-  return handleResponse<InstructorProfileResponse>(res)
+  const raw = await handleResponse<unknown>(res)
+  return normalizeUserProfile(raw)
 }
 
 export async function updateInstructorProfile(body: UpdateInstructorProfileRequest): Promise<void> {
