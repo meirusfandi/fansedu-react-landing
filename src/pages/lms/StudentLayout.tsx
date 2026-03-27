@@ -6,7 +6,6 @@ const MENU = [
   { href: '#/student/courses', label: 'My Courses' },
   { href: '#/student/tryout', label: 'Tryout' },
   { href: '#/student/transactions', label: 'Transactions' },
-  { href: '#/student/certificates', label: 'Certificates' },
   { href: '#/student/profile', label: 'Profile' },
 ]
 

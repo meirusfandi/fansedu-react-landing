@@ -2,7 +2,9 @@ import '../App.css'
 import { useEffect, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
 import { getTryoutScheduleText } from '../data/tryoutList'
+import { useAuthStore } from '../store/auth'
 import { filterStudentVisibleTryouts } from '../utils/tryoutStudent'
+import { lmsDashboardHash } from '../utils/lmsDashboard'
 
 /**
  * Halaman daftar tryout (public). Dari sini masing-masing item mengarah ke halaman detail tryout (#/tryout-info).
@@ -12,6 +14,10 @@ export default function TryoutListPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const user = useAuthStore((s) => s.user)
+  const token = useAuthStore((s) => s.token)
+  const loggedIn = !!(user && token)
+  const dashboardHref = lmsDashboardHash(user)
 
   useEffect(() => {
     getOpenTryouts()
@@ -39,9 +45,15 @@ export default function TryoutListPage() {
           <a href="#/" className="nav-link font-medium text-sm">
             ← Beranda
           </a>
-          <a href="#/auth" className="nav-link font-medium text-sm ml-2">
-            Masuk
-          </a>
+          {loggedIn ? (
+            <a href={dashboardHref} className="nav-link font-medium text-sm ml-2">
+              Dashboard
+            </a>
+          ) : (
+            <a href="#/auth" className="nav-link font-medium text-sm ml-2">
+              Masuk
+            </a>
+          )}
           <a href="#/auth?tab=register" className="btn-primary px-4 py-2 rounded-full font-semibold text-sm inline-block ml-2">
             Daftar akun
           </a>
@@ -114,7 +126,12 @@ export default function TryoutListPage() {
           <a href="#/auth?tab=register" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
             Daftar akun untuk ikut tryout
           </a>
-          <a href="#/auth" className="text-[var(--accent)] hover:underline">Sudah punya akun? Masuk</a>
+          <a
+            href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
+            className="text-[var(--accent)] hover:underline"
+          >
+            {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
+          </a>
           <a href="#/" className="text-[var(--fg-muted)] hover:underline">← Kembali ke beranda</a>
         </div>
       </main>

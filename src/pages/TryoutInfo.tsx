@@ -2,6 +2,8 @@ import '../App.css'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
 import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
+import { useAuthStore } from '../store/auth'
+import { lmsDashboardHash } from '../utils/lmsDashboard'
 
 interface TryoutInfoPageProps {
   tryoutId?: string | null
@@ -11,6 +13,10 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const user = useAuthStore((s) => s.user)
+  const token = useAuthStore((s) => s.token)
+  const loggedIn = !!(user && token)
+  const dashboardHref = lmsDashboardHash(user)
 
   useEffect(() => {
     getOpenTryouts()
@@ -74,6 +80,15 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           <a href="#/" className="nav-link font-medium text-sm">
             ← Beranda
           </a>
+          {loggedIn ? (
+            <a href={dashboardHref} className="nav-link font-medium text-sm ml-2">
+              Dashboard
+            </a>
+          ) : (
+            <a href="#/auth" className="nav-link font-medium text-sm ml-2">
+              Masuk
+            </a>
+          )}
           <a href="#/tryout" className="nav-link font-medium text-sm ml-2">
             Daftar tryout
           </a>
@@ -136,8 +151,11 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
                 <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
                   Daftar akun
                 </a>
-                <a href="#/auth?redirect=%23%2Fstudent%2Ftryout" className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]">
-                  Sudah punya akun? Masuk
+                <a
+                  href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
+                  className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]"
+                >
+                  {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
                 </a>
               </div>
             </div>
@@ -190,33 +208,42 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
             <p className="text-[var(--fg-muted)]">
-              Cara penilaian TryOut ini mengacu pada <strong className="text-[var(--fg)]">sistem penilaian OSN tingkat Kabupaten/Kota (OSN-K)</strong> Bidang Informatika yang berlaku saat ini.
+              Cara penilaian TryOut ini mengacu pada spirit{' '}
+              <strong className="text-[var(--fg)]">penilaian OSN tingkat Kabupaten/Kota (OSN-K)</strong> Bidang
+              Informatika (hanya jawaban benar yang mendapat poin, tanpa pengurangan). Untuk simulasi di
+              platform ini, <strong className="text-[var(--fg)]">bobot per soal diseragamkan</strong> agar total
+              nilai jelas.
             </p>
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Bentuk Soal & Poin</h3>
               <p className="text-[var(--fg-muted)] mb-4">
-                Soal dapat berupa <strong className="text-[var(--fg)]">pilihan ganda</strong>, <strong className="text-[var(--fg)]">isian singkat</strong>, atau <strong className="text-[var(--fg)]">benar/salah</strong>. Tidak ada soal esai. Poin per jawaban benar:
+                Soal dapat berupa <strong className="text-[var(--fg)]">pilihan ganda</strong>,{' '}
+                <strong className="text-[var(--fg)]">isian singkat</strong>, atau{' '}
+                <strong className="text-[var(--fg)]">benar/salah</strong>. Tidak ada soal esai. Terdapat{' '}
+                <strong className="text-[var(--fg)]">20 soal</strong>;{' '}
+                <strong className="text-[var(--fg)]">setiap jawaban benar bernilai 5 poin</strong> untuk semua
+                jenis soal, sehingga <strong className="text-[var(--fg)]">nilai maksimal = 100</strong> (20 × 5).
               </p>
               <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-[var(--bg-secondary)] border-b border-[var(--border)]">
-                      <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Jenis Soal</th>
-                      <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Poin per Jawaban Benar</th>
+                      <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Keterangan</th>
+                      <th className="text-left py-3 px-4 text-[var(--fg-muted)] font-medium">Nilai</th>
                     </tr>
                   </thead>
                   <tbody className="text-[var(--fg-muted)]">
                     <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4">Pilihan ganda</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">1 poin</td>
+                      <td className="py-3 px-4">Jumlah soal</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">20</td>
                     </tr>
                     <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4">Benar / Salah</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">1 poin</td>
+                      <td className="py-3 px-4">Poin per jawaban benar (semua jenis)</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">5 poin</td>
                     </tr>
                     <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4">Isian singkat</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">2 poin</td>
+                      <td className="py-3 px-4">Nilai maksimal</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">100</td>
                     </tr>
                   </tbody>
                 </table>
@@ -225,7 +252,8 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Tidak Ada Pengurangan Nilai</h3>
               <p className="text-[var(--fg-muted)]">
-                <strong className="text-[var(--fg)]">Jawaban salah atau kosong tidak mengurangi skor.</strong> Hanya jawaban benar yang diberi poin. Total skor peserta = jumlah poin dari semua jawaban benar.
+                <strong className="text-[var(--fg)]">Jawaban salah atau kosong tidak mengurangi skor.</strong> Hanya
+                jawaban benar yang menambah poin. Skor akhir = jumlah poin dari jawaban benar, paling tinggi 100.
               </p>
             </div>
             <div>
@@ -272,8 +300,11 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-8 py-4 rounded-full font-semibold text-center">
             Daftar akun
           </a>
-          <a href="#/auth?redirect=%23%2Fstudent%2Ftryout" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
-            Sudah punya akun? Masuk
+          <a
+            href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
+            className="btn-secondary px-8 py-4 rounded-full font-semibold text-center"
+          >
+            {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
           </a>
           <a href="#/" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
             ← Kembali ke Beranda

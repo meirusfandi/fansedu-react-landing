@@ -67,7 +67,14 @@ function getStoredAuthUser(): { name: string; role: string } | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY) ?? sessionStorage.getItem(AUTH_STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as { state?: { user?: { name?: string; role?: string; roleCode?: string } } }
+    const parsed = JSON.parse(raw) as {
+      state?: {
+        user?: { name?: string; role?: string; roleCode?: string }
+        token?: string | null
+      }
+    }
+    const token = parsed?.state?.token
+    if (typeof token !== 'string' || !token.trim()) return null
     const user = parsed?.state?.user
     if (!user || (!user.name && !user.role)) return null
     return { name: user.name ?? '', role: normalizeAuthFields(user.role, user.roleCode, null) }
@@ -767,7 +774,30 @@ function App() {
             >
               Mulai Tryout Gratis
             </a>
-            <p className="text-[var(--fg-muted)] text-sm mt-4">Sudah punya akun? <a href="#/auth" className="text-[var(--accent)] font-medium hover:underline">Masuk</a>, lalu buka menu Tryout di dashboard.</p>
+            <p className="text-[var(--fg-muted)] text-sm mt-4">
+              {authUser ? (
+                <>
+                  Sudah login?{' '}
+                  <a
+                    href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
+                    className="text-[var(--accent)] font-medium hover:underline"
+                  >
+                    Buka dashboard
+                  </a>
+                  {authUser.role === 'guru'
+                    ? ' untuk mengakses fitur guru (termasuk tryout jika tersedia).'
+                    : ' lalu buka menu Tryout dari sana.'}
+                </>
+              ) : (
+                <>
+                  Sudah punya akun?{' '}
+                  <a href={`${LMS_BASE}/auth`} className="text-[var(--accent)] font-medium hover:underline">
+                    Masuk
+                  </a>
+                  , lalu buka menu Tryout di dashboard.
+                </>
+              )}
+            </p>
           </div>
         </div>
       </section>

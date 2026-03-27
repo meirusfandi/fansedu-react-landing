@@ -244,9 +244,13 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
       <div className="rounded-2xl border bg-white p-6">
         <h2 className="font-semibold text-gray-900 mb-3">Aturan Penilaian Singkat</h2>
         <ul className="list-disc list-inside text-sm text-gray-600 space-y-1.5">
-          <li>Pilihan ganda / benar-salah: 1 poin untuk jawaban benar.</li>
-          <li>Isian singkat: 2 poin untuk jawaban benar.</li>
-          <li>Jawaban salah atau kosong tidak mengurangi nilai.</li>
+          <li>
+            <span className="font-medium text-gray-800">20 soal</span> — setiap jawaban benar{' '}
+            <span className="font-medium text-gray-800">5 poin</span> (pilihan ganda, isian singkat, dan
+            benar/salah sama bobotnya). Total nilai maksimal{' '}
+            <span className="font-medium text-gray-800">100</span> (20 × 5).
+          </li>
+          <li>Jawaban salah atau kosong tidak mengurangi nilai; hanya jawaban benar yang menambah poin.</li>
         </ul>
       </div>
     </div>

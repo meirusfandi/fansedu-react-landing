@@ -478,10 +478,6 @@ export default function StudentDashboardPage() {
           <h2 className="font-semibold text-gray-900 mb-1">Transactions</h2>
           <p className="text-sm text-gray-500">Riwayat pembayaran</p>
         </a>
-        <a href="#/student/certificates" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
-          <h2 className="font-semibold text-gray-900 mb-1">Certificates</h2>
-          <p className="text-sm text-gray-500">Sertifikat kelulusan</p>
-        </a>
       </div>
     </div>
   )
