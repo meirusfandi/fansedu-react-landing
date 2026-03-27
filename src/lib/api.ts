@@ -897,7 +897,8 @@ export interface TryoutLeaderboardEntry {
   userName: string
   schoolName: string
   hasAttempt: boolean
-  score?: number
+  /** Skor terbaik dari API (`bestScore` / `best_score` / `score`); 0 jika belum mengerjakan. */
+  score: number
 }
 
 function toIntSafe(v: unknown, fallback = 14): number {
@@ -1141,23 +1142,37 @@ export async function getTryoutLeaderboard(tryoutId: string): Promise<TryoutLead
         ? (data as { data: unknown[] }).data
         : []))
 
+  const parseBestScore = (row: Record<string, unknown>): number | undefined => {
+    const raw = row.bestScore ?? row.best_score ?? row.score
+    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
+    if (typeof raw === 'string' && raw.trim()) {
+      const n = Number(raw)
+      if (Number.isFinite(n)) return Math.trunc(n)
+    }
+    return undefined
+  }
+
   return (rowsRaw as Record<string, unknown>[]).map((row, index) => {
     const rankRaw = row.rank
     const rankNum = typeof rankRaw === 'number'
       ? Math.trunc(rankRaw)
       : (typeof rankRaw === 'string' && rankRaw.trim() ? Math.trunc(Number(rankRaw)) : index + 1)
-    const scoreRaw = row.score
-    const scoreNum = typeof scoreRaw === 'number'
-      ? Math.trunc(scoreRaw)
-      : (typeof scoreRaw === 'string' && scoreRaw.trim() ? Math.trunc(Number(scoreRaw)) : undefined)
+    const hasAttempt = Boolean(
+      row.has_attempt ??
+        row.hasAttempt ??
+        row.has_attempted ??
+        row.hasAttempted,
+    )
+    const best = parseBestScore(row)
+    const score = hasAttempt ? (best ?? 0) : 0
 
     return {
       rank: Number.isFinite(rankNum) ? rankNum : index + 1,
       userId: String(row.user_id ?? row.userId ?? ''),
       userName: String(row.user_name ?? row.userName ?? '—'),
       schoolName: String(row.school_name ?? row.schoolName ?? '—'),
-      hasAttempt: Boolean(row.has_attempt ?? row.hasAttempt),
-      score: Number.isFinite(scoreNum as number) ? (scoreNum as number) : undefined,
+      hasAttempt,
+      score,
     } satisfies TryoutLeaderboardEntry
   })
 }

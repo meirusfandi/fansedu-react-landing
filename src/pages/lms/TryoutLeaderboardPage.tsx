@@ -108,7 +108,7 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
                         <td className={`py-3 px-4 text-primary ${isMe ? 'font-bold' : 'font-semibold'}`}>{row.rank}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'font-medium'}`}>{row.userName}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.schoolName}</td>
-                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{typeof row.score === 'number' ? row.score : '-'}</td>
+                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.score}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.hasAttempt ? 'Ya' : 'Tidak'}</td>
                       </tr>
                     )
