@@ -950,6 +950,17 @@ export interface TryoutAttemptSubmitResult {
   gradingStatus?: string
 }
 
+/** Satu baris pembahasan pasca-submit (GET …/review — opsional di backend). */
+export interface TryoutAttemptReviewRow {
+  questionId: string
+  order?: number
+  prompt?: string
+  yourAnswer?: string
+  correctAnswer?: string
+  explanation?: string
+  isCorrect?: boolean
+}
+
 /** Body PUT /attempts/:attemptId/answers/:questionId */
 export interface PutAttemptAnswerBody {
   answerText?: string
@@ -1818,6 +1829,95 @@ export async function submitTryoutAttempt(attemptId: string): Promise<TryoutAtte
   })
   const data = await handleResponse<Record<string, unknown>>(res)
   return parseTryoutSubmitResultPayload(data)
+}
+
+function parseAttemptReviewRowsFromPayload(raw: unknown): TryoutAttemptReviewRow[] {
+  const pickArray = (o: Record<string, unknown>): unknown[] | null => {
+    const keys = ['items', 'questions', 'breakdown', 'results', 'rows', 'review']
+    for (const k of keys) {
+      const v = o[k]
+      if (Array.isArray(v) && v.length > 0) return v
+    }
+    return null
+  }
+  let arr: unknown[] = []
+  if (Array.isArray(raw)) arr = raw
+  else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const root = raw as Record<string, unknown>
+    const nested =
+      root.data != null && typeof root.data === 'object' && !Array.isArray(root.data)
+        ? (root.data as Record<string, unknown>)
+        : null
+    const fromNested = nested ? pickArray(nested) : null
+    const fromRoot = pickArray(root)
+    arr = fromNested ?? fromRoot ?? []
+  }
+  const out: TryoutAttemptReviewRow[] = []
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i]
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, unknown>
+    const questionId = String(o.questionId ?? o.question_id ?? o.id ?? `row-${i}`)
+    const orderRaw = o.order ?? o.number ?? o.question_number ?? o.questionNumber
+    const order =
+      typeof orderRaw === 'number' && Number.isFinite(orderRaw)
+        ? Math.trunc(orderRaw)
+        : (typeof orderRaw === 'string' && orderRaw.trim() ? Math.trunc(Number(orderRaw)) : undefined)
+    const prompt =
+      typeof o.prompt === 'string'
+        ? o.prompt
+        : (typeof o.stem === 'string' ? o.stem : (typeof o.text === 'string' ? o.text : undefined))
+    const yourAnswer = String(
+      o.yourAnswer ?? o.your_answer ?? o.userAnswer ?? o.user_answer ?? o.selectedAnswer ?? '',
+    ).trim()
+    const correctAnswer = String(
+      o.correctAnswer ?? o.correct_answer ?? o.answerKey ?? o.answer_key ?? '',
+    ).trim()
+    const explanation = String(o.explanation ?? o.pembahasan ?? o.rationale ?? '').trim()
+    const ic = o.isCorrect ?? o.is_correct
+    const isCorrect =
+      typeof ic === 'boolean'
+        ? ic
+        : ic === 1 || ic === '1' || ic === 'true'
+          ? true
+          : ic === 0 || ic === '0' || ic === 'false'
+            ? false
+            : undefined
+    out.push({
+      questionId,
+      ...(order != null && Number.isFinite(order) ? { order } : {}),
+      ...(prompt ? { prompt } : {}),
+      ...(yourAnswer ? { yourAnswer } : {}),
+      ...(correctAnswer ? { correctAnswer } : {}),
+      ...(explanation ? { explanation } : {}),
+      ...(isCorrect !== undefined ? { isCorrect } : {}),
+    })
+  }
+  return out
+}
+
+/**
+ * Pembahasan / kunci per soal setelah submit. Mencoba beberapa path; `null` jika tidak ada data.
+ */
+export async function fetchTryoutAttemptReview(attemptId: string): Promise<TryoutAttemptReviewRow[] | null> {
+  if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') return null
+  const urls = [
+    `${API_BASE}/attempts/${encodeURIComponent(attemptId)}/review`,
+    `${API_BASE}/attempts/${encodeURIComponent(attemptId)}/breakdown`,
+    `${API_BASE}/student/attempts/${encodeURIComponent(attemptId)}/review`,
+  ]
+  for (const url of urls) {
+    try {
+      const res = await apiFetch(url, { headers: authHeaders() })
+      if (res.status === 404) continue
+      const data = await handleResponse<unknown>(res)
+      const rows = parseAttemptReviewRowsFromPayload(data)
+      if (rows.length > 0) return rows
+    } catch {
+      continue
+    }
+  }
+  return null
 }
 
 /**

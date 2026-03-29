@@ -1,32 +1,62 @@
 import { useState, useEffect } from 'react'
 import {
-  getInstructorTryoutStudents,
   ApiError,
+  getInstructorTryoutAnalysis,
+  getInstructorTryoutStudents,
+  getOpenTryouts,
+  type InstructorTryoutAnalysisResponse,
   type InstructorTryoutStudentItem,
+  type OpenTryoutItem,
 } from '../../lib/api'
-import { getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
 
 export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string }) {
   const [students, setStudents] = useState<InstructorTryoutStudentItem[]>([])
   const [tryout, setTryout] = useState<OpenTryoutItem | null>(null)
+  const [aggregate, setAggregate] = useState<InstructorTryoutAnalysisResponse | null>(null)
+  const [aggregateNote, setAggregateNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([getOpenTryouts(), getInstructorTryoutStudents(tryoutId)])
-      .then(([tryouts, s]) => {
+    setAggregate(null)
+    setAggregateNote(null)
+    Promise.all([
+      getOpenTryouts(),
+      getInstructorTryoutStudents(tryoutId),
+      getInstructorTryoutAnalysis(tryoutId).catch((err) => {
+        if (!cancelled) {
+          setAggregateNote(
+            err instanceof ApiError
+              ? err.message
+              : 'Endpoint GET /guru/tryouts/:id/analysis belum tersedia atau gagal.',
+          )
+        }
+        return null
+      }),
+    ])
+      .then(([tryouts, s, analysis]) => {
+        if (cancelled) return
         const matchedTryout = (tryouts || []).find((item) => item.id === tryoutId) ?? null
         setTryout(matchedTryout)
         setStudents(Array.isArray(s) ? s : [])
+        if (analysis) setAggregate(analysis)
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat data.')
-        setTryout(null)
-        setStudents([])
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Gagal memuat data.')
+          setTryout(null)
+          setStudents([])
+        }
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [tryoutId])
 
   if (loading) return <div className="py-8 text-gray-500">Memuat analisis...</div>
@@ -56,11 +86,62 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
           {tryout?.shortTitle || tryout?.title || 'Analisis Siswa Tryout'}
         </h1>
         <p className="text-gray-500 text-sm">
-          ID: {tryoutId} · Total siswa: {students.length}
+          ID: {tryoutId} · Total siswa (tabel): {students.length}
+          {aggregate ? (
+            <span> · Peserta tercatat analisis: {aggregate.participants_count}</span>
+          ) : null}
         </p>
       </div>
 
+      {aggregate && aggregate.questions.length > 0 ? (
+        <div className="rounded-2xl border bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b bg-slate-50">
+            <h2 className="font-semibold text-gray-900">Analisis per soal</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Agregat dari API — distribusi jawaban & persentase benar/salah per nomor.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">No</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">ID soal</th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-900">Tipe</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-900">Menjawab</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-900">Benar %</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-900">Salah %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aggregate.questions.map((q) => (
+                  <tr key={q.question_id} className="border-b last:border-0">
+                    <td className="py-3 px-4 font-medium">{q.question_number}</td>
+                    <td className="py-3 px-4 text-gray-600 font-mono text-xs">{q.question_id}</td>
+                    <td className="py-3 px-4 text-gray-600">{q.question_type}</td>
+                    <td className="py-3 px-4 text-right">{q.answered_count}</td>
+                    <td className="py-3 px-4 text-right text-emerald-700">{q.correct_percent.toFixed(1)}</td>
+                    <td className="py-3 px-4 text-right text-rose-700">{q.wrong_percent.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : aggregate && aggregate.questions.length === 0 ? (
+        <div className="rounded-2xl border border-dashed bg-slate-50 px-4 py-6 text-sm text-gray-600">
+          API analisis merespons tanpa daftar soal.
+        </div>
+      ) : aggregateNote ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {aggregateNote}
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b bg-white">
+          <h2 className="font-semibold text-gray-900">Daftar peserta</h2>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">

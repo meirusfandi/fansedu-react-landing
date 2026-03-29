@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "description": "Sample lembar tryout dari demo VITE_TRYOUT_EXAM_MOCK — impor ke admin/backend. Field correctOption hanya untuk bank soal/admin (jangan kirim ke client siswa).",
+  "title": "Tryout demo (sample export)",
+  "durationMinutes": 60,
+  "gradingNotes": "Format OSN-K: hanya jawaban benar yang menambah poin; salah/kosong tidak mengurangi. Bobot per soal bisa disesuaikan di admin.",
+  "questions": [
+    {
+      "id": "mock-1",
+      "order": 1,
+      "questionType": "multiple_choice",
+      "prompt": "Bilangan bulat positif terkecil yang habis dibagi 12 dan 18 sekaligus adalah …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "36" },
+        { "key": "B", "label": "72" },
+        { "key": "C", "label": "6" },
+        { "key": "D", "label": "24" }
+      ],
+      "correctOption": "A",
+      "tags": ["matematika", "kpk"]
+    },
+    {
+      "id": "mock-2",
+      "order": 2,
+      "questionType": "multiple_choice",
+      "prompt": "Jika 2^x = 32, maka nilai x adalah …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "4" },
+        { "key": "B", "label": "5" },
+        { "key": "C", "label": "6" },
+        { "key": "D", "label": "3" }
+      ],
+      "correctOption": "B",
+      "tags": ["matematika", "eksponen"]
+    },
+    {
+      "id": "mock-3",
+      "order": 3,
+      "questionType": "multiple_choice",
+      "prompt": "Kompleksitas waktu terbaik untuk pencarian biner pada array terurut berukuran n adalah …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "O(n)" },
+        { "key": "B", "label": "O(log n)" },
+        { "key": "C", "label": "O(n log n)" },
+        { "key": "D", "label": "O(1)" }
+      ],
+      "correctOption": "B",
+      "tags": ["algoritma", "kompleksitas"]
+    },
+    {
+      "id": "mock-4",
+      "order": 4,
+      "questionType": "multiple_choice",
+      "prompt": "Struktur data FIFO (first-in-first-out) yang umum dipakai untuk BFS pada graf adalah …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "Stack" },
+        { "key": "B", "label": "Queue" },
+        { "key": "C", "label": "Heap" },
+        { "key": "D", "label": "Hash map" }
+      ],
+      "correctOption": "B",
+      "tags": ["struktur-data", "graf"]
+    },
+    {
+      "id": "mock-5",
+      "order": 5,
+      "questionType": "multiple_choice",
+      "prompt": "Pada bahasa C++, deklarasi pointer ke integer yang benar adalah …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "int p*;" },
+        { "key": "B", "label": "int* p;" },
+        { "key": "C", "label": "pointer int p;" },
+        { "key": "D", "label": "*int p;" }
+      ],
+      "correctOption": "B",
+      "tags": ["cpp", "pointer"]
+    },
+    {
+      "id": "mock-6",
+      "order": 6,
+      "questionType": "multiple_choice",
+      "prompt": "Jumlah deret aritmetika 1 + 2 + … + 10 sama dengan …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "45" },
+        { "key": "B", "label": "55" },
+        { "key": "C", "label": "50" },
+        { "key": "D", "label": "100" }
+      ],
+      "correctOption": "B",
+      "tags": ["matematika", "deret"]
+    },
+    {
+      "id": "mock-7",
+      "order": 7,
+      "questionType": "multiple_choice",
+      "prompt": "Prinsip induksi matematika dipakai untuk membuktikan pernyataan yang berlaku untuk …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "Hanya satu bilangan bulat" },
+        { "key": "B", "label": "Semua bilangan bulat tak negatif (atau subset terkait)" },
+        { "key": "C", "label": "Hanya bilangan prima" },
+        { "key": "D", "label": "Hanya bilangan real" }
+      ],
+      "correctOption": "B",
+      "tags": ["matematika", "induksi"]
+    },
+    {
+      "id": "mock-8",
+      "order": 8,
+      "questionType": "multiple_choice",
+      "prompt": "Pada graf tidak berarah, jumlah derajat semua simpul selalu …",
+      "bodyHtml": null,
+      "imageUrl": null,
+      "options": [
+        { "key": "A", "label": "Ganjil" },
+        { "key": "B", "label": "Genap" },
+        { "key": "C", "label": "Sama dengan jumlah sisi" },
+        { "key": "D", "label": "Tak terbatas" }
+      ],
+      "correctOption": "B",
+      "tags": ["graf", "teori-graf"]
+    }
+  ]
+}

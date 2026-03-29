@@ -1,14 +1,13 @@
 import '../App.css'
 import { useEffect, useState } from 'react'
-import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
+import { ApiError, type OpenTryoutItem } from '../lib/api'
 import { getTryoutScheduleText } from '../data/tryoutList'
 import { useAuthStore } from '../store/auth'
-import { filterStudentVisibleTryouts } from '../utils/tryoutStudent'
+import { fetchVisibleTryoutsForViewer } from '../utils/fetchVisibleTryouts'
 import { lmsDashboardHash } from '../utils/lmsDashboard'
 
 /**
- * Halaman daftar tryout (public). Dari sini masing-masing item mengarah ke halaman detail tryout (#/tryout-info).
- * Dihubungkan dari section TryOut Gratis di landing page.
+ * Halaman daftar tryout (public). Kartu → info publik (#/tryout-info/:id); jika sudah login sebagai siswa, tersedia pintasan ke LMS (#/student/tryout/:id).
  */
 export default function TryoutListPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
@@ -17,12 +16,16 @@ export default function TryoutListPage() {
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const loggedIn = !!(user && token)
+  const isGuru = user?.role === 'guru'
   const dashboardHref = lmsDashboardHash(user)
 
+  const preferStudentOpen = loggedIn && !isGuru
+
   useEffect(() => {
-    getOpenTryouts()
+    setLoading(true)
+    fetchVisibleTryoutsForViewer({ preferStudentOpen })
       .then((list) => {
-        setTryouts(filterStudentVisibleTryouts(list))
+        setTryouts(list)
         setError(null)
       })
       .catch((err) => {
@@ -30,7 +33,7 @@ export default function TryoutListPage() {
         setTryouts([])
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [preferStudentOpen])
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
@@ -46,15 +49,29 @@ export default function TryoutListPage() {
             ← Beranda
           </a>
           {loggedIn ? (
-            <a href={dashboardHref} className="nav-link font-medium text-sm ml-2">
-              Dashboard
-            </a>
+            <>
+              <a href={dashboardHref} className="nav-link font-medium text-sm ml-2">
+                Dashboard
+              </a>
+              {!isGuru ? (
+                <a href="#/student/tryout" className="nav-link font-medium text-sm ml-2">
+                  Tryout LMS
+                </a>
+              ) : (
+                <a href="#/student/tryout" className="nav-link font-medium text-sm ml-2 opacity-80">
+                  Tryout (siswa)
+                </a>
+              )}
+            </>
           ) : (
             <a href="#/auth" className="nav-link font-medium text-sm ml-2">
               Masuk
             </a>
           )}
-          <a href="#/auth?tab=register" className="btn-primary px-4 py-2 rounded-full font-semibold text-sm inline-block ml-2">
+          <a
+            href="#/auth?tab=register&redirect=%23%2Ftryout"
+            className="btn-primary px-4 py-2 rounded-full font-semibold text-sm inline-block ml-2"
+          >
             Daftar akun
           </a>
         </div>
@@ -69,7 +86,11 @@ export default function TryoutListPage() {
             TryOut Gratis
           </h1>
           <p className="text-[var(--fg-muted)]">
-            Semua proses tryout (lihat jadwal, daftar tryout, ikut ujian) dilakukan setelah Anda punya akun di platform. Daftar akun atau masuk terlebih dahulu, lalu akses menu Tryout di dashboard siswa untuk mendaftar tryout.
+            {loggedIn && !isGuru
+              ? 'Anda sudah masuk sebagai siswa. Gunakan tombol di setiap kartu untuk membuka halaman LMS (daftar & ujian), atau buka info publik untuk jadwal dan ringkasan aturan.'
+              : loggedIn && isGuru
+                ? 'Anda masuk sebagai guru. Untuk melihat alur siswa, gunakan tautan LMS per kartu atau menu Tryout (siswa) di atas. Info publik tetap tersedia untuk tiap tryout.'
+                : 'Semua proses tryout (daftar ke tryout, mulai ujian) dilakukan lewat akun siswa di LMS. Halaman ini memuat tryout yang masih terbuka menurut jadwal (filter sama dengan dashboard). Daftar akun atau masuk dulu, lalu lanjutkan dari tombol di bawah.'}
           </p>
         </div>
 
@@ -95,43 +116,84 @@ export default function TryoutListPage() {
         ) : (
           <div className="space-y-4">
             {tryouts.map((t) => (
-              <a
+              <div
                 key={t.id}
-                href={t.detailPath}
-                className="block border border-[var(--border)] rounded-2xl p-6 bg-[var(--card)] hover:border-[var(--accent)]/40 hover:shadow-lg transition-all"
+                className="border border-[var(--border)] rounded-2xl p-6 bg-[var(--card)] hover:border-[var(--accent)]/40 hover:shadow-lg transition-all"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h2 className="font-display font-semibold text-lg text-[var(--fg)]">{t.shortTitle || t.title}</h2>
-                      {t.badge && (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--accent)]/15 text-[var(--accent)] text-xs font-semibold">
-                          {t.badge}
-                        </span>
+                <a href={`#/tryout-info/${encodeURIComponent(t.id)}`} className="block group">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h2 className="font-display font-semibold text-lg text-[var(--fg)] group-hover:text-[var(--accent)]">
+                          {t.shortTitle || t.title}
+                        </h2>
+                        {t.badge && (
+                          <span className="px-2.5 py-0.5 rounded-full bg-[var(--accent)]/15 text-[var(--accent)] text-xs font-semibold">
+                            {t.badge}
+                          </span>
+                        )}
+                      </div>
+                      {t.description && (
+                        <p className="text-sm text-[var(--fg-muted)] mb-1 line-clamp-2">{t.description}</p>
+                      )}
+                      <p className="text-sm text-[var(--fg-muted)]">{getTryoutScheduleText(t)}</p>
+                      {(t.durationMinutes != null || t.questionCount != null) && (
+                        <p className="text-xs text-[var(--fg-muted)] opacity-90 mt-1">
+                          {[t.durationMinutes != null ? `${t.durationMinutes} menit` : null, t.questionCount != null ? `${t.questionCount} soal` : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
                       )}
                     </div>
-                    {t.description && (
-                      <p className="text-sm text-[var(--fg-muted)] mb-1 line-clamp-2">{t.description}</p>
-                    )}
-                    <p className="text-sm text-[var(--fg-muted)]">{getTryoutScheduleText(t)}</p>
+                    <span className="shrink-0 text-[var(--accent)] font-medium text-sm">Info publik →</span>
                   </div>
-                  <span className="shrink-0 text-[var(--accent)] font-medium text-sm">Lihat detail →</span>
-                </div>
-              </a>
+                </a>
+                {loggedIn ? (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex flex-wrap items-center gap-3">
+                    <a
+                      href={`#/student/tryout/${encodeURIComponent(t.id)}`}
+                      className="btn-primary px-4 py-2 rounded-full font-semibold text-sm inline-block"
+                    >
+                      {isGuru ? 'Buka di LMS siswa →' : 'Daftar & ujian (LMS) →'}
+                    </a>
+                    <span className="text-xs text-[var(--fg-muted)]">
+                      {isGuru ? 'Pratinjau alur peserta' : 'Langsung ke detail tryout di dashboard siswa'}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
         )}
 
         <div className="mt-8 flex flex-wrap items-center gap-4 text-sm">
-          <a href="#/auth?tab=register" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
-            Daftar akun untuk ikut tryout
-          </a>
-          <a
-            href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
-            className="text-[var(--accent)] hover:underline"
-          >
-            {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
-          </a>
+          {loggedIn ? (
+            <>
+              {!isGuru ? (
+                <a href="#/student/tryout" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
+                  Semua tryout di LMS siswa →
+                </a>
+              ) : null}
+              <a href={dashboardHref} className="text-[var(--accent)] hover:underline font-medium">
+                {isGuru ? 'Dashboard guru' : 'Dashboard'}
+              </a>
+              <a href="#/student/tryout" className="text-[var(--fg-muted)] hover:underline">
+                Daftar tryout (LMS)
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href="#/auth?tab=register&redirect=%23%2Ftryout"
+                className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
+              >
+                Daftar akun untuk ikut tryout
+              </a>
+              <a href="#/auth?redirect=%23%2Fstudent%2Ftryout" className="text-[var(--accent)] hover:underline">
+                Sudah punya akun? Masuk
+              </a>
+            </>
+          )}
           <a href="#/" className="text-[var(--fg-muted)] hover:underline">← Kembali ke beranda</a>
         </div>
       </main>

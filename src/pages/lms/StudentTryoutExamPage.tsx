@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ApiError,
+  fetchTryoutAttemptReview,
   getStudentTryoutAttemptPaper,
   putAttemptAnswer,
   submitStudentTryoutAttempt,
   type TryoutAttemptPaper,
+  type TryoutAttemptReviewRow,
   type TryoutAttemptSubmitResult,
   type TryoutExamQuestion,
 } from '../../lib/api'
@@ -83,6 +85,9 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
   const [currentIndex, setCurrentIndex] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState<TryoutAttemptSubmitResult | null>(null)
+  const [submittedAttemptId, setSubmittedAttemptId] = useState<string | null>(null)
+  const [reviewRows, setReviewRows] = useState<TryoutAttemptReviewRow[] | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
   const [remainingSec, setRemainingSec] = useState(0)
   const autoSubmitFired = useRef(false)
   const prevRemainingRef = useRef<number | null>(null)
@@ -102,12 +107,13 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
         await flushTryoutAnswersToServer(attemptId, answersMap)
         const result = await submitStudentTryoutAttempt(tryoutId, attemptId, answersMap)
         setSubmitResult(result)
+        setSubmittedAttemptId(attemptId)
         try {
           sessionStorage.removeItem(tryoutExamDraftKey(tryoutId, attemptId))
         } catch {
           /* ignore */
         }
-        clearTryoutExamSession()
+        clearTryoutExamSession(tryoutId)
         setPhase('submitted')
       } catch (err) {
         if (!opts?.quiet) {
@@ -194,6 +200,24 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
         setPhase('paper-error')
       })
   }, [tryoutId, finalizeSubmit])
+
+  useEffect(() => {
+    if (phase !== 'submitted' || !submittedAttemptId) return
+    if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') return
+    let cancelled = false
+    setReviewLoading(true)
+    setReviewRows(null)
+    void fetchTryoutAttemptReview(submittedAttemptId)
+      .then((rows) => {
+        if (!cancelled) setReviewRows(rows)
+      })
+      .finally(() => {
+        if (!cancelled) setReviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [phase, submittedAttemptId])
 
   useEffect(() => {
     if (phase !== 'exam' || !paper) return
@@ -385,6 +409,10 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
             ← Kembali ke detail tryout
           </a>
         </div>
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+          Ujian dibuka di penyedia eksternal. Skor dan riwayat di dashboard LMS hanya terisi otomatis jika backend juga
+          mengisi attempt lewat API yang sama dengan alur soal internal (ada <code className="text-[11px]">attemptId</code>).
+        </p>
         <div className="bg-slate-100 p-2 sm:p-3">
           <iframe
             title="Ujian tryout"
@@ -499,7 +527,7 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
       /\bpending\b/i.test(submitResult.gradingStatus ?? '') ||
       /\bprocessing\b/i.test(submitResult.gradingStatus ?? '')
     return (
-      <div className="max-w-lg space-y-4">
+      <div className="max-w-2xl space-y-4">
         <h1 className="text-xl font-bold text-gray-900">Jawaban terkirim</h1>
         {gradingPending ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -537,6 +565,52 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
         ) : (
           <p className="text-sm text-gray-600">Terima kasih telah mengerjakan tryout ini.</p>
         )}
+
+        <div className="rounded-xl border border-gray-200 bg-slate-50/80 px-4 py-3 text-sm text-gray-700">
+          <p className="font-medium text-gray-900 mb-1">Pembahasan per soal</p>
+          {reviewLoading ? (
+            <p className="text-gray-500 text-xs">Memuat pembahasan dari server…</p>
+          ) : reviewRows && reviewRows.length > 0 ? (
+            <ul className="mt-2 space-y-3 text-xs sm:text-sm">
+              {reviewRows.map((r, idx) => (
+                <li key={r.questionId} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <p className="font-semibold text-gray-900">
+                    Soal {r.order ?? idx + 1}
+                    {r.isCorrect === true ? (
+                      <span className="ml-2 text-emerald-600 font-normal">· Benar</span>
+                    ) : r.isCorrect === false ? (
+                      <span className="ml-2 text-rose-600 font-normal">· Perlu dicek</span>
+                    ) : null}
+                  </p>
+                  {r.prompt ? <p className="text-gray-600 mt-1 whitespace-pre-wrap">{r.prompt}</p> : null}
+                  {r.yourAnswer ? (
+                    <p className="text-gray-700 mt-1">
+                      <span className="text-gray-500">Jawaban Anda: </span>
+                      {r.yourAnswer}
+                    </p>
+                  ) : null}
+                  {r.correctAnswer ? (
+                    <p className="text-gray-800 mt-1">
+                      <span className="text-gray-500">Kunci / jawaban benar: </span>
+                      {r.correctAnswer}
+                    </p>
+                  ) : null}
+                  {r.explanation ? (
+                    <p className="text-gray-600 mt-2 whitespace-pre-wrap border-t border-gray-100 pt-2">{r.explanation}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Jika backend menyediakan{' '}
+              <code className="rounded bg-white px-1 py-0.5 text-[11px]">GET /attempts/&#123;id&#125;/review</code> (atau
+              <code className="rounded bg-white px-1 py-0.5 text-[11px]">/breakdown</code>), ringkasan akan tampil di sini.
+              Sementara gunakan Riwayat tryout untuk skor terkini.
+            </p>
+          )}
+        </div>
+
         <div className="flex flex-wrap gap-3 pt-2">
           <a
             href={backHref}
@@ -549,6 +623,12 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
             className="inline-flex px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
           >
             Lihat leaderboard
+          </a>
+          <a
+            href="#/student/tryout/history"
+            className="inline-flex px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+          >
+            Riwayat tryout
           </a>
         </div>
       </div>

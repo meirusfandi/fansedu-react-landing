@@ -1,9 +1,14 @@
 import '../App.css'
 import { useEffect, useMemo, useState } from 'react'
-import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../lib/api'
-import { getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../data/tryoutList'
+import { ApiError, type OpenTryoutItem } from '../lib/api'
+import {
+  getTryoutCloseDateText,
+  getTryoutRegistrationDeadlineText,
+  getTryoutScheduleText,
+} from '../data/tryoutList'
 import { useAuthStore } from '../store/auth'
 import { lmsDashboardHash } from '../utils/lmsDashboard'
+import { fetchVisibleTryoutsForViewer } from '../utils/fetchVisibleTryouts'
 
 interface TryoutInfoPageProps {
   tryoutId?: string | null
@@ -16,10 +21,13 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const loggedIn = !!(user && token)
+  const isGuru = user?.role === 'guru'
+  const preferStudentOpen = loggedIn && !isGuru
   const dashboardHref = lmsDashboardHash(user)
 
   useEffect(() => {
-    getOpenTryouts()
+    setLoading(true)
+    fetchVisibleTryoutsForViewer({ preferStudentOpen })
       .then((list) => {
         setTryouts(list)
         setError(null)
@@ -29,15 +37,69 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         setTryouts([])
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [preferStudentOpen])
 
-  const tryout = useMemo(
-    () => (tryoutId ? tryouts.find((t) => t.id === tryoutId) : null) ?? tryouts[0] ?? null,
-    [tryouts, tryoutId]
-  )
-  const leaderboardHref = tryout?.id ? `#/leaderboard/${tryout.id}` : '#/leaderboard'
+  const tryout = useMemo(() => {
+    if (tryouts.length === 0) return null
+    if (tryoutId) {
+      const raw = tryoutId.trim()
+      const decoded = (() => {
+        try {
+          return decodeURIComponent(raw)
+        } catch {
+          return raw
+        }
+      })()
+      return tryouts.find((t) => t.id === raw || t.id === decoded) ?? null
+    }
+    return tryouts[0] ?? null
+  }, [tryouts, tryoutId])
+
+  const leaderboardHref = tryout?.id ? `#/leaderboard/${encodeURIComponent(tryout.id)}` : '#/leaderboard'
+  const studentTryoutDetailHref = tryout?.id
+    ? `#/student/tryout/${encodeURIComponent(tryout.id)}`
+    : '#/student/tryout'
+  const registerRedirectHash = tryout?.id
+    ? encodeURIComponent(`#/tryout-info/${encodeURIComponent(tryout.id)}`)
+    : encodeURIComponent('#/tryout-info')
   const scheduleText = tryout ? getTryoutScheduleText(tryout) : null
   const deadlineText = getTryoutRegistrationDeadlineText(tryout?.registrationDeadlineAt)
+  const closeDateText = getTryoutCloseDateText(tryout?.closeAt)
+
+  const decodedRouteTryoutId = useMemo(() => {
+    if (!tryoutId?.trim()) return null
+    const raw = tryoutId.trim()
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
+  }, [tryoutId])
+
+  const loginRedirectHash = useMemo(() => {
+    const id = tryout?.id ?? decodedRouteTryoutId
+    if (id) return encodeURIComponent(`#/student/tryout/${encodeURIComponent(id)}`)
+    return encodeURIComponent('#/student/tryout')
+  }, [tryout?.id, decodedRouteTryoutId])
+
+  const durationLabel =
+    tryout?.durationMinutes != null
+      ? `${tryout.durationMinutes} menit`
+      : 'Sesuai pengaturan lembar di dashboard siswa setelah Anda mulai ujian'
+  const questionLabel =
+    tryout?.questionCount != null
+      ? `${tryout.questionCount} soal`
+      : 'Tercantum pada lembar ujian yang dimuat dari server saat mulai'
+  const pointsLabel =
+    tryout?.pointsPerQuestion != null ? `${tryout.pointsPerQuestion} poin` : '5 poin (contoh default OSN-K)'
+  const maxScoreDisplay =
+    tryout?.maxScore != null
+      ? String(tryout.maxScore)
+      : tryout?.questionCount != null && tryout?.pointsPerQuestion != null
+        ? String(tryout.questionCount * tryout.pointsPerQuestion)
+        : '100'
+  const questionCountTable =
+    tryout?.questionCount != null ? String(tryout.questionCount) : '— (lihat lembar di LMS)'
 
   if (loading) {
     return (
@@ -67,6 +129,52 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
       </div>
     )
   }
+
+  if (!loading && !error && !tryout) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <header className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <a href="#/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
+                <span className="font-display font-bold text-white text-lg">F</span>
+              </div>
+              <span className="font-display font-semibold text-xl hidden sm:inline">Fansedu</span>
+            </a>
+            <a href="#/tryout" className="nav-link font-medium text-sm">
+              Daftar tryout
+            </a>
+          </div>
+        </header>
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <h1 className="font-display font-bold text-2xl text-[var(--fg)] mb-4">Tryout tidak tersedia</h1>
+          <p className="text-[var(--fg-muted)] mb-6">
+            {tryoutId
+              ? 'Tryout ini tidak ditemukan di daftar yang sedang terbuka, atau periode mengikuti untuk peserta baru sudah berakhir. Data mengikuti API platform (sama dengan dashboard siswa).'
+              : 'Saat ini belum ada tryout terbuka. Silakan cek lagi nanti.'}
+          </p>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <a href="#/tryout" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block text-center">
+              ← Kembali ke daftar tryout
+            </a>
+            {decodedRouteTryoutId ? (
+              <a
+                href={`#/auth?redirect=${loginRedirectHash}`}
+                className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-center"
+              >
+                Masuk — lanjut ke LMS (tryout ini)
+              </a>
+            ) : null}
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!tryout) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <header className="border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur sticky top-0 z-50">
@@ -101,11 +209,17 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             Free TryOut
           </span>
           <h1 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl text-[var(--fg)] mb-2">
-            Informasi TryOut OSN Informatika 2026
+            {tryout.shortTitle || tryout.title}
           </h1>
           <p className="text-[var(--fg-muted)]">
-            Semua proses tryout dilakukan setelah Anda mendaftar dan punya akun di platform. Berikut info jadwal, format soal, penilaian, dan leaderboard.
+            Semua proses pendaftaran dan ujian dilakukan lewat akun platform (dashboard siswa). Informasi jadwal dan bobot di bawah mengikuti data API bila tersedia; angka pasti juga terlihat saat Anda membuka halaman tryout setelah masuk.
           </p>
+          {closeDateText ? (
+            <p className="text-sm text-[var(--fg-muted)] mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/50 px-4 py-2">
+              <span className="font-medium text-[var(--fg)]">Tutup untuk peserta baru: </span>
+              {closeDateText}
+            </p>
+          ) : null}
         </div>
 
         {/* 1. Informasi TryOut */}
@@ -148,15 +262,45 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
                 ) : null}
               </p>
               <div className="flex flex-wrap gap-3">
-                <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-6 py-3 rounded-full font-semibold inline-block">
+                <a
+                  href={`#/auth?tab=register&redirect=${registerRedirectHash}`}
+                  className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
+                >
                   Daftar akun
                 </a>
-                <a
-                  href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
-                  className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]"
-                >
-                  {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
-                </a>
+                {loggedIn ? (
+                  <>
+                    {!isGuru ? (
+                      <a
+                        href={studentTryoutDetailHref}
+                        className="btn-primary px-6 py-3 rounded-full font-semibold inline-block"
+                      >
+                        Lanjut: daftar tryout & ujian
+                      </a>
+                    ) : null}
+                    <a
+                      href={dashboardHref}
+                      className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]"
+                    >
+                      {isGuru ? 'Dashboard guru' : 'Dashboard'}
+                    </a>
+                    {isGuru ? (
+                      <a
+                        href={studentTryoutDetailHref}
+                        className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-sm"
+                      >
+                        Lihat halaman tryout (siswa)
+                      </a>
+                    ) : null}
+                  </>
+                ) : (
+                  <a
+                    href={`#/auth?redirect=${loginRedirectHash}`}
+                    className="px-6 py-3 rounded-full font-semibold inline-block border border-[var(--border)] hover:bg-[var(--bg-secondary)]"
+                  >
+                    Sudah punya akun? Masuk
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -170,10 +314,12 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           </h2>
           <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-6 sm:p-8 space-y-6">
             <p className="text-[var(--fg-muted)]">
-              Tes seleksi terdiri dari <strong className="text-[var(--fg)]">20 soal</strong> dengan waktu pengerjaan <strong className="text-[var(--fg)]">60 menit</strong>.
+              Cakupan ujian: <strong className="text-[var(--fg)]">{questionLabel}</strong> dengan durasi{' '}
+              <strong className="text-[var(--fg)]">{durationLabel}</strong>. Angka dari server akan sama di halaman ini dan di LMS
+              siswa setelah backend mengirim field meta tryout.
             </p>
             <p className="text-[var(--fg-muted)]">
-              Soal terbagi atas 3 bagian:
+              Contoh kerangka format OSN Informatika (rincian per gelombang mengikuti lembar resmi di platform):
             </p>
 
             <div className="space-y-4">
@@ -194,7 +340,8 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             <div className="flex items-start gap-3 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/50">
               <span className="text-[var(--accent)] shrink-0">ℹ</span>
               <p className="text-[var(--fg-muted)] text-sm">
-                Waktu pengerjaan 60 menit berlaku untuk seluruh bagian. Pastikan koneksi internet stabil dan perangkat siap sebelum memulai.
+                Durasi berlaku untuk keseluruhan lembar. Pastikan koneksi internet stabil dan perangkat siap sebelum memulai dari
+                dashboard siswa.
               </p>
             </div>
           </div>
@@ -216,14 +363,18 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             </p>
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Bentuk Soal & Poin</h3>
-              <p className="text-[var(--fg-muted)] mb-4">
-                Soal dapat berupa <strong className="text-[var(--fg)]">pilihan ganda</strong>,{' '}
-                <strong className="text-[var(--fg)]">isian singkat</strong>, atau{' '}
-                <strong className="text-[var(--fg)]">benar/salah</strong>. Tidak ada soal esai. Terdapat{' '}
-                <strong className="text-[var(--fg)]">20 soal</strong>;{' '}
-                <strong className="text-[var(--fg)]">setiap jawaban benar bernilai 5 poin</strong> untuk semua
-                jenis soal, sehingga <strong className="text-[var(--fg)]">nilai maksimal = 100</strong> (20 × 5).
-              </p>
+              {tryout.gradingNotes ? (
+                <div className="text-[var(--fg-muted)] mb-4 whitespace-pre-wrap rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/40 p-4 text-sm">
+                  {tryout.gradingNotes}
+                </div>
+              ) : (
+                <p className="text-[var(--fg-muted)] mb-4">
+                  Soal di platform dapat berupa <strong className="text-[var(--fg)]">pilihan ganda</strong>,{' '}
+                  <strong className="text-[var(--fg)]">isian singkat</strong>, atau{' '}
+                  <strong className="text-[var(--fg)]">benar/salah</strong>. Ringkasan angka mengikuti meta dari API; jika kosong,
+                  tampilan memakai contoh default format OSN-K.
+                </p>
+              )}
               <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
                 <table className="w-full text-sm border-collapse">
                   <thead>
@@ -235,15 +386,15 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
                   <tbody className="text-[var(--fg-muted)]">
                     <tr className="border-b border-[var(--border)]">
                       <td className="py-3 px-4">Jumlah soal</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">20</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">{questionCountTable}</td>
                     </tr>
                     <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4">Poin per jawaban benar (semua jenis)</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">5 poin</td>
+                      <td className="py-3 px-4">Poin per jawaban benar (acuan)</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">{pointsLabel}</td>
                     </tr>
                     <tr className="border-b border-[var(--border)]">
-                      <td className="py-3 px-4">Nilai maksimal</td>
-                      <td className="py-3 px-4 font-medium text-[var(--fg)]">100</td>
+                      <td className="py-3 px-4">Nilai maksimal (acuan)</td>
+                      <td className="py-3 px-4 font-medium text-[var(--fg)]">{maxScoreDisplay}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -252,8 +403,9 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
             <div>
               <h3 className="font-semibold text-[var(--fg)] mb-2">Tidak Ada Pengurangan Nilai</h3>
               <p className="text-[var(--fg-muted)]">
-                <strong className="text-[var(--fg)]">Jawaban salah atau kosong tidak mengurangi skor.</strong> Hanya
-                jawaban benar yang menambah poin. Skor akhir = jumlah poin dari jawaban benar, paling tinggi 100.
+                <strong className="text-[var(--fg)]">Jawaban salah atau kosong biasanya tidak mengurangi skor.</strong> Hanya
+                jawaban benar yang menambah poin. Skor akhir mengikuti kebijakan server; paling tinggi sesuai nilai maksimal di
+                atas.
               </p>
             </div>
             <div>
@@ -296,15 +448,28 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
           </div>
         </section>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-          <a href="#/auth?tab=register&redirect=%23%2Ftryout-info" className="btn-primary px-8 py-4 rounded-full font-semibold text-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4 flex-wrap">
+          <a
+            href={`#/auth?tab=register&redirect=${registerRedirectHash}`}
+            className="btn-primary px-8 py-4 rounded-full font-semibold text-center"
+          >
             Daftar akun
           </a>
+          {loggedIn && !isGuru ? (
+            <a href={studentTryoutDetailHref} className="btn-primary px-8 py-4 rounded-full font-semibold text-center">
+              Lanjut ke tryout (LMS siswa)
+            </a>
+          ) : null}
+          {loggedIn && isGuru ? (
+            <a href={studentTryoutDetailHref} className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
+              Buka halaman tryout (siswa)
+            </a>
+          ) : null}
           <a
-            href={loggedIn ? dashboardHref : '#/auth?redirect=%23%2Fstudent%2Ftryout'}
+            href={loggedIn ? dashboardHref : `#/auth?redirect=${loginRedirectHash}`}
             className="btn-secondary px-8 py-4 rounded-full font-semibold text-center"
           >
-            {loggedIn ? 'Buka dashboard' : 'Sudah punya akun? Masuk'}
+            {loggedIn ? (isGuru ? 'Dashboard guru' : 'Dashboard') : 'Sudah punya akun? Masuk'}
           </a>
           <a href="#/" className="btn-secondary px-8 py-4 rounded-full font-semibold text-center">
             ← Kembali ke Beranda

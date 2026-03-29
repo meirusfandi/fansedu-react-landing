@@ -211,7 +211,7 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
     setActionMessage(null)
     setStarting(true)
     try {
-      clearTryoutExamSession()
+      clearTryoutExamSession(tryout.id)
       const res = await startStudentTryoutWithFallback(tryout.id)
       const examOk = typeof res.examUrl === 'string' && res.examUrl.trim()
       const attemptOk = res.attemptId != null && String(res.attemptId).trim() !== ''

@@ -47,16 +47,17 @@ Dokumen ini merangkum alur dari landing page hingga proses pembelian kelas dan d
 |---------|---------|--------|------|
 | 1 | Landing | Klik "TryOut Gratis" di navbar (scroll) atau scroll ke section tryout | Section `#tryout` |
 | 2 | Landing section tryout | Klik "Ikuti TryOut Gratis" | `#/tryout` (list tryout) |
-| 3 | Daftar TryOut (list) | Klik salah satu tryout open | `#/tryout-info` (detail) |
-| 4 | Detail TryOut | Baca info, klik "Daftar TryOut" (jika pendaftaran dibuka) | `#/auth?tab=register&redirect=%23%2Ftryout-info` |
-| 5 | Auth (Register) | Isi form daftar → Daftar | Redirect ke `#/tryout-info` (kembali ke detail tryout) |
+| 3 | Daftar TryOut (list) | Klik salah satu tryout open | `#/tryout-info/:tryoutId` (detail per ID, data dari API + filter `closeAt`) |
+| 4 | Detail TryOut (publik) | Baca info, daftar akun atau masuk | Register dengan `redirect` ke hash detail yang sama; siswa login → **`#/student/tryout/:id`** untuk daftar & ujian |
+| 5 | Auth (Register) | Isi form daftar → Daftar | Redirect ke hash `redirect` (mis. `#/tryout-info/:id`) |
 
 **Perbaikan yang diterapkan:**
-- Link "Daftar TryOut" di halaman detail tryout sekarang membawa query `redirect=%23%2Ftryout-info` sehingga setelah register user diarahkan kembali ke halaman detail tryout.
+- Register dari halaman publik memakai `redirect` ke hash detail yang relevan (mis. `%23%2Ftryout-info%2F{tryoutId}`) agar setelah daftar user kembali ke tryout yang sama.
+- Halaman `#/tryout` (daftar): siswa yang sudah login mendapat pintasan **Daftar & ujian (LMS)** per kartu ke `#/student/tryout/:id`, plus link navbar/footer ke `#/student/tryout`.
 
-**Alternatif akses (siswa sudah login):**
-- Dashboard siswa → menu "Tryout" → `#/student/tryout` (list) → klik item → `#/tryout-info`.
-- Dashboard siswa → kartu "TryOut OSN" → `#/student/tryout` → sama seperti di atas.
+**Akses utama (siswa sudah login):**
+- Dashboard siswa → menu **Tryout** → `#/student/tryout` (list dari API siswa) → `#/student/tryout/:id` (detail, daftar, mulai ujian).
+- Halaman publik `#/tryout-info/:id` menyelaraskan jadwal/meta dengan API yang sama (hanya tryout yang masih `open` menurut `closeAt`); CTA siswa mengarah ke **`#/student/tryout/:id`**, bukan hanya `#/tryout-info` generik.
 
 ---
 
@@ -70,7 +71,8 @@ Dokumen ini merangkum alur dari landing page hingga proses pembelian kelas dan d
 | `#/checkout?program=:slug` | Checkout | Initiate → payment-session → success |
 | `#/checkout/success` | Success | Lalu "Mulai Belajar" → student/courses |
 | `#/tryout` | Daftar tryout (public) | List tryout open → klik ke detail |
-| `#/tryout-info` | Detail tryout | Info, jadwal, soal, tombol Daftar TryOut |
+| `#/tryout-info` atau `#/tryout-info/:tryoutId` | Detail tryout (publik) | Info dari API, filter tutup; CTA ke auth & LMS siswa |
+| `#/student/tryout`, `#/student/tryout/:id` | Tryout LMS siswa | Daftar, mulai ujian, leaderboard |
 | `#/auth`, `#/auth?tab=register` | Login / Daftar | Redirect setelah login/daftar via query `redirect` |
 | `#/student`, `#/student/courses`, `#/student/tryout`, dll. | Dashboard siswa | Setelah login |
 
@@ -79,8 +81,24 @@ Dokumen ini merangkum alur dari landing page hingga proses pembelian kelas dan d
 ## 5. Bagian yang Perlu Diperhatikan ke Depan
 
 - **Guest checkout:** Setelah bayar, akses kursus bisa bergantung pada backend (magic link, auto-login, atau wajib login dengan akun yang terdaftar). Halaman success sudah mengingatkan untuk masuk jika punya akun.
-- **Tryout:** Pendaftaran tryout saat ini mengarahkan ke daftar akun (register). Jika nanti ada endpoint daftar tryout per user (setelah login), bisa ditambah tombol "Daftar TryOut" yang memanggil API dan hanya tampil jika user sudah login.
+- **Tryout — sisi backend:** Skor, persentil, `graded`, pembahasan (`GET …/review`), analisis guru (`GET …/analysis`), dan simpan lembar (`PUT …/paper`) harus konsisten di API; frontend sudah menampilkan fallback/teks penjelasan bila endpoint belum ada.
+- **Publik vs siswa — sumber data:** Daftar publik memakai `GET /tryouts?status=open`; LMS siswa memakai `GET /student/tryouts/open` (dengan fallback). Jika kedua sumber tidak sinkron, pertimbangkan satu endpoint publik yang sudah difilter bidang atau dokumentasikan perbedaan itu.
+- **Sesi ujian:** Cache `sessionStorage` dipisah per `tryoutId` (`fansedu-tryout-exam:<id>`), sehingga siswa bisa punya progres berbeda di beberapa tryout tanpa saling menimpa (migrasi otomatis dari kunci global lama).
 - **Katalog:** Data list dari `GET /api/v1/packages`. Filter/search/pagination di client; jika backend menyediakan query param, bisa diseragamkan.
+
+---
+
+## 7. Checklist fitur Tryout (frontend vs backend)
+
+| Area | Frontend | Tergantung backend |
+|------|----------|-------------------|
+| Publik: filter `closeAt`, meta API, CTA ke LMS | ✅ | Kirim `durationMinutes`, `questionCount`, dll. di `GET /tryouts` |
+| LMS: lembar, timer, jawaban, submit | ✅ | `GET …/questions`, `PUT …/answers`, `POST …/submit` |
+| Skor 0 / penilaian async | Pesan penjelasan | `graded`, skor final, field respons |
+| Pembahasan setelah submit | ✅ fetch opsional | `GET …/review` atau `…/breakdown` |
+| Guru: analisis per soal | ✅ tabel | `GET /guru/tryouts/:id/analysis` |
+| Guru: impor lembar JSON | ✅ editor | `GET/PUT …/paper` |
+| Iframe-only ujian | Peringatan UX | Sinkron attempt/skor jika ujian eksternal |
 
 ---
 
@@ -88,7 +106,7 @@ Dokumen ini merangkum alur dari landing page hingga proses pembelian kelas dan d
 
 1. **Landing navbar:** Tambah link "Daftar" (ke `#/auth?tab=register`) di samping "Masuk" untuk pengunjung belum login; menu mobile juga menampilkan Masuk dan Daftar.
 2. **Section Program:** Tambah link "Lihat semua di Katalog →" ke `#/catalog`.
-3. **Tryout detail:** Link "Daftar TryOut" memakai `redirect=%23%2Ftryout-info` agar setelah register user kembali ke halaman detail tryout.
+3. **Tryout (publik + LMS):** `TryoutInfo` / `#/tryout` selaras dengan filter & CTA ke `#/student/tryout/:id`; `FLOW_AUDIT` §3 & §7 diperbarui.
 4. **Checkout success:** Tambah kalimat pengingat: "Jika Anda punya akun, masuk untuk mengakses kursus di dashboard."
 
 Dengan ini, flow dari landing → pembelian kelas dan flow daftar tryout gratis tetap konsisten dan lengkap.

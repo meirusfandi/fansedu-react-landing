@@ -1,4 +1,6 @@
-const STORAGE_KEY = 'fansedu-tryout-exam-session'
+/** Kunci lama (satu sesi global) — dibaca sekali untuk migrasi ke kunci per tryout. */
+const LEGACY_STORAGE_KEY = 'fansedu-tryout-exam-session'
+const SCOPED_KEY_PREFIX = 'fansedu-tryout-exam:'
 
 function decodeTryoutIdSegment(id: string): string {
   if (!id) return id
@@ -6,6 +8,57 @@ function decodeTryoutIdSegment(id: string): string {
     return decodeURIComponent(id)
   } catch {
     return id
+  }
+}
+
+function storageKeyForTryout(tryoutId: string): string {
+  const id = decodeTryoutIdSegment(tryoutId)
+  return `${SCOPED_KEY_PREFIX}${encodeURIComponent(id)}`
+}
+
+function parseStoredSessionJson(raw: string, expectedTryoutId: string): TryoutExamSession | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<TryoutExamSession>
+    const expectedDecoded = decodeTryoutIdSegment(expectedTryoutId)
+    if (
+      typeof parsed.tryoutId !== 'string'
+      || (parsed.tryoutId !== expectedTryoutId && parsed.tryoutId !== expectedDecoded)
+    ) {
+      return null
+    }
+    const examUrlStr = typeof parsed.examUrl === 'string' ? parsed.examUrl.trim() : ''
+    const attemptStr = typeof parsed.attemptId === 'string' ? parsed.attemptId.trim() : ''
+    if (!examUrlStr && !attemptStr) {
+      return null
+    }
+    const examDeadlineMs =
+      typeof parsed.examDeadlineMs === 'number' && Number.isFinite(parsed.examDeadlineMs)
+        ? parsed.examDeadlineMs
+        : undefined
+    return {
+      tryoutId: parsed.tryoutId,
+      ...(examUrlStr ? { examUrl: examUrlStr } : {}),
+      attemptId: attemptStr || null,
+      savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0,
+      ...(typeof parsed.expiresAt === 'string' && parsed.expiresAt.trim()
+        ? { expiresAt: parsed.expiresAt.trim() }
+        : {}),
+      ...(examDeadlineMs != null ? { examDeadlineMs } : {}),
+      ...(typeof parsed.startedAt === 'string' && parsed.startedAt.trim()
+        ? { startedAt: parsed.startedAt.trim() }
+        : {}),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeSession(tryoutId: string, payload: TryoutExamSession): void {
+  sessionStorage.setItem(storageKeyForTryout(tryoutId), JSON.stringify(payload))
+  try {
+    sessionStorage.removeItem(LEGACY_STORAGE_KEY)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -61,7 +114,7 @@ export function saveTryoutExamSession(
       ...(examDeadlineMs != null ? { examDeadlineMs } : {}),
       ...(startedAt ? { startedAt } : {}),
     }
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    writeSession(tryoutId, payload)
   } catch {
     /* quota / private mode */
   }
@@ -97,7 +150,7 @@ export function persistTryoutExamDeadlineIfMissing(tryoutId: string, patch: Tryo
       }
     }
     if (!next.expiresAt && next.examDeadlineMs == null) return
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    writeSession(tryoutId, next)
   } catch {
     /* ignore */
   }
@@ -145,9 +198,14 @@ export function hasInProgressTryoutExam(tryoutId: string): boolean {
   return Boolean(s?.attemptId)
 }
 
-export function clearTryoutExamSession(): void {
+/** Hapus sesi tersimpan untuk satu tryout. Wajib kirim `tryoutId` (kecuali migrasi legacy). */
+export function clearTryoutExamSession(tryoutId?: string): void {
   try {
-    sessionStorage.removeItem(STORAGE_KEY)
+    if (tryoutId) {
+      sessionStorage.removeItem(storageKeyForTryout(tryoutId))
+      return
+    }
+    sessionStorage.removeItem(LEGACY_STORAGE_KEY)
   } catch {
     /* ignore */
   }
@@ -159,38 +217,20 @@ export function tryoutExamDraftKey(tryoutId: string, attemptId: string): string 
 
 export function getTryoutExamSession(expectedTryoutId: string): TryoutExamSession | null {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<TryoutExamSession>
-    const expectedDecoded = decodeTryoutIdSegment(expectedTryoutId)
-    if (
-      typeof parsed.tryoutId !== 'string'
-      || (parsed.tryoutId !== expectedTryoutId && parsed.tryoutId !== expectedDecoded)
-    ) {
-      return null
+    const scopedKey = storageKeyForTryout(expectedTryoutId)
+    const scopedRaw = sessionStorage.getItem(scopedKey)
+    if (scopedRaw) {
+      return parseStoredSessionJson(scopedRaw, expectedTryoutId)
     }
-    const examUrlStr = typeof parsed.examUrl === 'string' ? parsed.examUrl.trim() : ''
-    const attemptStr = typeof parsed.attemptId === 'string' ? parsed.attemptId.trim() : ''
-    if (!examUrlStr && !attemptStr) {
-      return null
+    const legacyRaw = sessionStorage.getItem(LEGACY_STORAGE_KEY)
+    if (legacyRaw) {
+      const migrated = parseStoredSessionJson(legacyRaw, expectedTryoutId)
+      if (migrated) {
+        writeSession(expectedTryoutId, migrated)
+      }
+      return migrated
     }
-    const examDeadlineMs =
-      typeof parsed.examDeadlineMs === 'number' && Number.isFinite(parsed.examDeadlineMs)
-        ? parsed.examDeadlineMs
-        : undefined
-    return {
-      tryoutId: parsed.tryoutId,
-      ...(examUrlStr ? { examUrl: examUrlStr } : {}),
-      attemptId: attemptStr || null,
-      savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0,
-      ...(typeof parsed.expiresAt === 'string' && parsed.expiresAt.trim()
-        ? { expiresAt: parsed.expiresAt.trim() }
-        : {}),
-      ...(examDeadlineMs != null ? { examDeadlineMs } : {}),
-      ...(typeof parsed.startedAt === 'string' && parsed.startedAt.trim()
-        ? { startedAt: parsed.startedAt.trim() }
-        : {}),
-    }
+    return null
   } catch {
     return null
   }

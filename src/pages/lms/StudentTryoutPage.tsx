@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getOpenTryouts, getStudentTryoutsOpen, type OpenTryoutItem } from '../../lib/api'
+import { ApiError, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
-import { filterStudentVisibleTryouts } from '../../utils/tryoutStudent'
+import { fetchVisibleTryoutsForViewer } from '../../utils/fetchVisibleTryouts'
 
 export default function StudentTryoutPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
@@ -9,21 +9,14 @@ export default function StudentTryoutPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getStudentTryoutsOpen()
+    fetchVisibleTryoutsForViewer({ preferStudentOpen: true })
       .then((list) => {
-        setTryouts(filterStudentVisibleTryouts(list))
+        setTryouts(list)
         setError(null)
       })
-      .catch(() => {
-        return getOpenTryouts()
-          .then((list) => {
-            setTryouts(filterStudentVisibleTryouts(list))
-            setError(null)
-          })
-          .catch((err) => {
-            setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
-            setTryouts([])
-          })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
+        setTryouts([])
       })
       .finally(() => setLoading(false))
   }, [])
@@ -69,7 +62,7 @@ export default function StudentTryoutPage() {
           {tryouts.map((t) => (
             <a
               key={t.id}
-              href={`#/student/tryout/${t.id}`}
+              href={`#/student/tryout/${encodeURIComponent(t.id)}`}
               className="block border rounded-2xl p-6 bg-white hover:border-primary/30 hover:shadow-md transition-all"
             >
               <div className="flex items-start justify-between gap-4">
