@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ApiError,
   getStudentTryoutStatus,
@@ -69,6 +69,39 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
     }
   }, [tryoutId, role, reloadKey])
 
+  /** BE kadang mengembalikan rank/status “belum di leaderboard” padahal baris Anda sudah ada di GET leaderboard. */
+  const myLeaderboardRow = useMemo(
+    () => entries.find((row) => isLeaderboardRowCurrentUser(row.userId, myUserId)),
+    [entries, myUserId],
+  )
+  const iAmOnLeaderboardTable = myLeaderboardRow != null
+
+  const personalRankBanner = useMemo(() => {
+    if (role !== 'student') return null
+    const fromRankApi =
+      myRank != null &&
+      myRank.inLeaderboard !== false &&
+      (myRank.rank != null || myRank.score != null)
+    const fromTable =
+      myLeaderboardRow != null &&
+      (myLeaderboardRow.rank != null || Number.isFinite(myLeaderboardRow.score))
+    if (!fromRankApi && !fromTable) return null
+    if (fromRankApi && myRank) {
+      return {
+        rank: myRank.rank,
+        score: myRank.score,
+        percentile: myRank.percentile,
+      }
+    }
+    if (myLeaderboardRow) {
+      return {
+        rank: myLeaderboardRow.rank,
+        score: Number.isFinite(myLeaderboardRow.score) ? myLeaderboardRow.score : undefined,
+      }
+    }
+    return null
+  }, [role, myRank, myLeaderboardRow])
+
   const retry = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const backHref = role === 'guru'
@@ -90,7 +123,7 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
           : 'Peringkat peserta tryout.'}
       </p>
 
-      {role === 'student' && !loading && eligibleForPersonalRank === false ? (
+      {role === 'student' && !loading && eligibleForPersonalRank === false && !iAmOnLeaderboardTable ? (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Anda belum mendaftar tryout ini — nama Anda biasanya{' '}
           <span className="font-semibold">belum masuk leaderboard</span> sampai Anda mendaftar di halaman detail tryout.
@@ -98,18 +131,16 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
         </div>
       ) : null}
 
-      {role === 'student' &&
-      eligibleForPersonalRank !== false &&
-      myRank &&
-      myRank.inLeaderboard !== false &&
-      (myRank.rank != null || myRank.score != null) ? (
+      {role === 'student' && !loading && personalRankBanner ? (
         <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-800">
           <span className="font-semibold text-gray-900">Posisi Anda: </span>
-          {myRank.rank != null ? <>peringkat #{myRank.rank}</> : null}
-          {myRank.rank != null && myRank.score != null ? ' · ' : null}
-          {myRank.score != null ? <>skor {formatTryoutStatistic(myRank.score)}</> : null}
-          {myRank.percentile != null && Number.isFinite(myRank.percentile) ? (
-            <> · persentil {formatTryoutStatistic(myRank.percentile)}%</>
+          {personalRankBanner.rank != null ? <>peringkat #{personalRankBanner.rank}</> : null}
+          {personalRankBanner.rank != null && personalRankBanner.score != null ? ' · ' : null}
+          {personalRankBanner.score != null ? (
+            <>skor {formatTryoutStatistic(personalRankBanner.score)}</>
+          ) : null}
+          {personalRankBanner.percentile != null && Number.isFinite(personalRankBanner.percentile) ? (
+            <> · persentil {formatTryoutStatistic(personalRankBanner.percentile)}%</>
           ) : null}
         </div>
       ) : null}

@@ -10,7 +10,12 @@ import {
   type StudentTryoutStatusResponse,
 } from '../../lib/api'
 import { getTryoutCloseDateText, getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../../data/tryoutList'
-import { hasTryoutStartTimeArrived, isPastDeadline, isTryoutWindowOpen } from '../../utils/tryoutStudent'
+import {
+  hasTryoutStartTimeArrived,
+  isPastDeadline,
+  isTryoutExamNotYetOpenStatusSignal,
+  isTryoutWindowOpen,
+} from '../../utils/tryoutStudent'
 import {
   clearTryoutExamSession,
   getTryoutExamSession,
@@ -187,11 +192,24 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
   const windowOpen = isTryoutWindowOpen({ closeAt: effectiveCloseAt })
   const examPeriodStarted = hasTryoutStartTimeArrived({ startAt: openIsoForUi || undefined })
   const registrationClosed = isPastDeadline(tryout.registrationDeadlineAt)
-  /** BE: canRegister / canStartExam bila GET …/status tersedia; selain itu fallback lama. */
+  const localRegisterEligible =
+    windowOpen && !registrationClosed && actionState === 'unregistered'
+  /**
+   * Pendaftaran boleh sebelum waktu mulai ujian. BE kadang mengirim canRegister: false bersama
+   * BEFORE_OPENS_AT / canStartExam: false — itu untuk mulai ujian, bukan untuk menutup pendaftaran.
+   */
+  const examScheduleTreatAsRegisterOk =
+    isTryoutExamNotYetOpenStatusSignal(
+      serverStatus?.startDisabledReason,
+      serverStatus?.tryoutStatus,
+    ) ||
+    (serverStatus?.canStartExam === false && !examPeriodStarted)
   const canRegisterNow =
-    serverStatus?.canRegister !== undefined
-      ? serverStatus.canRegister
-      : windowOpen && !registrationClosed && actionState === 'unregistered'
+    serverStatus?.canRegister === true
+      ? localRegisterEligible
+      : serverStatus?.canRegister === false
+        ? localRegisterEligible && examScheduleTreatAsRegisterOk
+        : localRegisterEligible
   const canStartExamUi =
     serverStatus?.canStartExam !== undefined
       ? serverStatus.canStartExam
@@ -313,12 +331,7 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
       </div>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{tryout.title}</h1>
-      <p className="text-gray-500 mb-8">
-        Alur: lihat informasi di bawah → <strong className="text-gray-800">daftar tryout</strong> agar Anda tercatat
-        sebagai peserta dan masuk leaderboard → setelah <strong className="text-gray-800">waktu mulai ujian</strong>{' '}
-        (sesuai jadwal), tombol <strong className="text-gray-800">mulai mengerjakan</strong> akan aktif selama tryout
-        masih berlangsung. Anda bisa membuka leaderboard kapan saja untuk melihat peringkat peserta terdaftar.
-      </p>
+      <p className="text-gray-500 mb-8">Jadwal dan ketentuan di bawah; daftar serta mulai ujian dari panel Aksi Peserta.</p>
 
       {!windowOpen && (
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -404,18 +417,13 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
             ) : null}
 
             {showBeforeOpenNotice ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-gray-700 space-y-1">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-gray-700">
                 <p>
-                  <span className="font-semibold text-gray-900">Mulai ujian belum diizinkan.</span> Jadwal mulai:{' '}
-                  <span className="font-medium text-gray-900">{scheduleText}</span>. Tombol akan aktif otomatis setelah
+                  <span className="font-semibold text-gray-900">Mulai mengerjakan belum diizinkan</span> (Anda sudah
+                  terdaftar). Jadwal mulai ujian:{' '}
+                  <span className="font-medium text-gray-900">{scheduleText}</span>. Tombol mulai akan aktif setelah
                   server mengizinkan (mis. setelah waktu mulai tercapai).
                 </p>
-                {serverStatus?.startDisabledReason ? (
-                  <p className="text-gray-600">
-                    Status:{' '}
-                    <code className="text-[11px] bg-white px-1 rounded">{serverStatus.startDisabledReason}</code>
-                  </p>
-                ) : null}
               </div>
             ) : null}
 
@@ -471,8 +479,8 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
                   Lihat leaderboard
                 </a>
                 <p className="text-xs text-gray-500">
-                  Setelah terdaftar, posisi Anda di papan skor mengikuti data server (biasanya setelah ada attempt atau
-                  setelah terdaftar, tergantung backend).
+                  Buka leaderboard kapan saja. Setelah daftar, nama Anda biasanya sudah tercatat sebagai peserta. Skor dan
+                  peringkat di papan umumnya baru lengkap setelah Anda menyelesaikan tryout.
                 </p>
               </>
             ) : null}

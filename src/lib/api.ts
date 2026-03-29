@@ -391,22 +391,27 @@ export async function apiLogout(): Promise<void> {
 }
 
 export async function apiGetMe(): Promise<MeResponse> {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), AUTH_ME_TIMEOUT_MS)
+  /** `AbortSignal.timeout` tidak mengandalkan timer tab yang di-throttle sekeras `setTimeout` saat tab di-background. */
+  const signal =
+    typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(AUTH_ME_TIMEOUT_MS)
+      : (() => {
+          const c = new AbortController()
+          window.setTimeout(() => c.abort(), AUTH_ME_TIMEOUT_MS)
+          return c.signal
+        })()
   try {
     const res = await apiFetch(`${API_BASE}/auth/me`, {
       headers: authHeaders(),
-      signal: controller.signal,
+      signal,
     })
     return await handleResponse<MeResponse>(res)
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      clearAuthOnUnauthorized()
+      /** Jangan logout: timeout / jaringan lambat ≠ sesi habis. */
       throw new ApiError(408, getUserFacingHttpMessage(408), {})
     }
     throw e
-  } finally {
-    window.clearTimeout(timeoutId)
   }
 }
 

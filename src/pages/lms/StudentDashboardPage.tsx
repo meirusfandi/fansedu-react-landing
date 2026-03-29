@@ -141,6 +141,44 @@ function extractTryoutProgressSummary(
   }
 }
 
+/** Setelah idle, satu request lambat bisa menahan spinner lama; batasi fase “fullscreen loading”. */
+const DASHBOARD_SHOW_UI_AFTER_MS = 10_000
+
+function StudentDashboardSkeleton() {
+  const bar = 'h-4 rounded bg-slate-200 animate-pulse'
+  return (
+    <div aria-busy>
+      <div className={`${bar} w-48 max-w-full mb-2`} />
+      <div className={`${bar} w-72 max-w-full mb-8`} />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border bg-white p-5 space-y-3">
+            <div className={`${bar} w-24`} />
+            <div className={`${bar} w-16 h-8`} />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border bg-white p-6 mb-8 space-y-3">
+        <div className={`${bar} w-40`} />
+        <div className="grid md:grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-100 p-4 h-24 bg-slate-50/80 animate-pulse" />
+          ))}
+        </div>
+      </div>
+      <div className="rounded-2xl border bg-white p-6 mb-8 space-y-3">
+        <div className={`${bar} w-44`} />
+        <div className={`${bar} w-full`} />
+        <div className="grid sm:grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl bg-slate-50 h-16 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StudentDashboardPage() {
   const upsertNotifications = useNotificationsStore((s) => s.upsertItems)
   const [courses, setCourses] = useState<MyCourseItem[]>([])
@@ -157,17 +195,34 @@ export default function StudentDashboardPage() {
     completionRate: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [staleLoad, setStaleLoad] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.allSettled([
+    let cancelled = false
+    let slowTimer: ReturnType<typeof window.setTimeout> | null = null
+
+    setLoading(true)
+    setStaleLoad(false)
+    setError(null)
+
+    slowTimer = window.setTimeout(() => {
+      if (cancelled) return
+      setLoading(false)
+      setStaleLoad(true)
+    }, DASHBOARD_SHOW_UI_AFTER_MS)
+
+    const pending = Promise.allSettled([
       getStudentDashboard(),
       getMyCourses({ page: 1, limit: 200 }),
       getOpenTryouts(),
       getTransactions({ status: 'pending', page: 1, limit: 50 }),
       getStudentNextActions(),
     ])
+
+    pending
       .then(([dashboardRes, myCoursesRes, openTryoutsRes, transactionsRes, nextActionsRes]) => {
+        if (cancelled) return
         const dashboard =
           dashboardRes.status === 'fulfilled' ? dashboardRes.value : null
         const myCourses =
@@ -256,7 +311,18 @@ export default function StudentDashboardPage() {
           setError(null)
         }
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (slowTimer !== null) window.clearTimeout(slowTimer)
+        if (!cancelled) {
+          setLoading(false)
+          setStaleLoad(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+      if (slowTimer !== null) window.clearTimeout(slowTimer)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -362,13 +428,22 @@ export default function StudentDashboardPage() {
     tryoutProgress.bestScore,
   ])
 
-  if (loading) return <div className="py-8 text-gray-500">Memuat progress kursus...</div>
+  if (loading && !staleLoad) return <StudentDashboardSkeleton />
   if (error) return <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-sm">{error}</div>
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard Siswa</h1>
       <p className="text-gray-500 mb-6">{greeting}! Ringkasan progresmu hari ini.</p>
+
+      {staleLoad && (
+        <div
+          className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          role="status"
+        >
+          Koneksi ke server sedang lambat. Tampilan di bawah akan terisi otomatis setelah data selesai dimuat.
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="rounded-2xl border bg-white p-5">

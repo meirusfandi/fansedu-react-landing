@@ -38,15 +38,28 @@ export function LmsHeader({ layout = 'centered' }: LmsHeaderProps) {
   const markAsRead = useNotificationsStore((s) => s.markAsRead)
   const markAllAsRead = useNotificationsStore((s) => s.markAllAsRead)
 
-  // Sinkronkan user dari backend saat ada token (validasi session & refresh data)
+  // Sinkronkan user dari backend saat ada token; ulangi saat tab kembali terlihat (timer di tab background sering di-throttle).
   useEffect(() => {
     if (!token) return
-    apiGetMe()
-      .then((me) => {
-        const authUser = authUserFromApiResponse(me, token)
-        setUser(authUser)
-      })
-      .catch(() => {})
+    let cancelled = false
+
+    const syncMe = () => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      apiGetMe()
+        .then((me) => {
+          if (cancelled) return
+          const authUser = authUserFromApiResponse(me, token)
+          setUser(authUser)
+        })
+        .catch(() => {})
+    }
+
+    syncMe()
+    document.addEventListener('visibilitychange', syncMe)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', syncMe)
+    }
   }, [token, setUser])
 
   const defaultNotifHref = user?.role === 'guru' ? '#/guru' : '#/student'

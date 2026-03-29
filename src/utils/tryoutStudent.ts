@@ -33,3 +33,30 @@ export function hasTryoutStartTimeArrived(t: { startAt?: string }): boolean {
   if (Number.isNaN(start.getTime())) return true
   return Date.now() >= start.getTime()
 }
+
+function normalizeTryoutStatusToken(s: string): string {
+  return s.trim().toUpperCase().replace(/-/g, '_')
+}
+
+/**
+ * True jika sinyal dari GET …/status hanya menjelaskan bahwa **ujian belum boleh dimulai** (jadwal),
+ * bukan bahwa **pendaftaran** ditutup. Dipakai agar UI tetap menampilkan tombol Daftar sebelum opensAt.
+ */
+const EXAM_NOT_YET_OPEN_CODES = new Set([
+  'BEFORE_OPENS_AT',
+  'BEFORE_OPEN_AT',
+  'BEFORE_OPEN',
+  'NOT_YET_OPEN',
+  'EXAM_NOT_STARTED',
+  'TRYOUT_NOT_STARTED',
+])
+
+export function isTryoutExamNotYetOpenStatusSignal(
+  startDisabledReason?: string,
+  tryoutStatus?: string,
+): boolean {
+  const tokens: string[] = []
+  if (startDisabledReason) tokens.push(normalizeTryoutStatusToken(startDisabledReason))
+  if (tryoutStatus) tokens.push(normalizeTryoutStatusToken(tryoutStatus))
+  return tokens.some((c) => EXAM_NOT_YET_OPEN_CODES.has(c))
+}
