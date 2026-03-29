@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { useNotificationsStore, type AppNotification } from '../../store/notifications'
-import { apiLogout, apiGetMe, getMyNotifications, type UserNotificationsResponse } from '../../lib/api'
+import { apiGetMe, getMyNotifications, type UserNotificationsResponse } from '../../lib/api'
+import { performFullLogoutAndRedirect } from '../../lib/full-logout'
 import { authUserFromApiResponse } from '../../types/auth'
 
 function mapNotificationsFromApi(res: UserNotificationsResponse, defaultHref: string): AppNotification[] {
@@ -16,10 +17,16 @@ function mapNotificationsFromApi(res: UserNotificationsResponse, defaultHref: st
   }))
 }
 
-export function LmsHeader() {
+export type LmsHeaderLayout = 'centered' | 'app'
+
+interface LmsHeaderProps {
+  /** `app`: baris header selaras dengan sidebar (kolom kiri w-56). `centered`: konten dibatasi max-w-6xl (katalog, auth, checkout). */
+  layout?: LmsHeaderLayout
+}
+
+export function LmsHeader({ layout = 'centered' }: LmsHeaderProps) {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
-  const logout = useAuthStore((s) => s.logout)
   const token = useAuthStore((s) => s.token)
   const [openDropdown, setOpenDropdown] = useState(false)
   const [openNotifications, setOpenNotifications] = useState(false)
@@ -40,7 +47,7 @@ export function LmsHeader() {
         setUser(authUser)
       })
       .catch(() => {})
-  }, [token, setUser, logout])
+  }, [token, setUser])
 
   const defaultNotifHref = user?.role === 'guru' ? '#/guru' : '#/student'
 
@@ -96,101 +103,128 @@ export function LmsHeader() {
   const dashboardHref = user?.role === 'guru' ? '#/guru' : '#/student'
   const dashboardLabel = user?.role === 'guru' ? 'Dashboard Guru' : 'Dashboard Siswa'
 
-  return (
-    <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
-      <nav className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <a href="#/" className="font-bold text-lg text-primary">Fansedu LMS</a>
-        <div className="flex items-center gap-5">
-          <a href="#/catalog" className="text-gray-600 hover:text-primary text-sm font-medium">Katalog</a>
-          {user ? (
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={notificationRef}>
-                <button
-                  type="button"
-                  onClick={() => setOpenNotifications((o) => !o)}
-                  className="relative w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:text-primary hover:border-primary/30"
-                  aria-label="Notifikasi"
-                >
-                  <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.4-1.4a2 2 0 01-.6-1.4V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
-                  </svg>
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] font-semibold">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
+  const brand = (
+    <a href="#/" className="font-bold text-lg text-primary truncate">
+      Fansedu LMS
+    </a>
+  )
+
+  const actions = (
+    <div className="flex items-center gap-5 shrink-0">
+      <a href="#/catalog" className="text-gray-600 hover:text-primary text-sm font-medium whitespace-nowrap">
+        Katalog
+      </a>
+      {user ? (
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={notificationRef}>
+            <button
+              type="button"
+              onClick={() => setOpenNotifications((o) => !o)}
+              className="relative w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:text-primary hover:border-primary/30"
+              aria-label="Notifikasi"
+            >
+              <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.4-1.4a2 2 0 01-.6-1.4V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] font-semibold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            {openNotifications && (
+              <div className="absolute right-0 top-full mt-1 w-80 max-h-96 overflow-auto rounded-lg border bg-white shadow-lg">
+                <div className="px-4 py-3 border-b flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">Notifikasi</p>
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={markAllAsRead}
+                      className="text-xs text-primary font-medium hover:underline"
+                    >
+                      Tandai semua dibaca
+                    </button>
                   )}
-                </button>
-                {openNotifications && (
-                  <div className="absolute right-0 top-full mt-1 w-80 max-h-96 overflow-auto rounded-lg border bg-white shadow-lg">
-                    <div className="px-4 py-3 border-b flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gray-900">Notifikasi</p>
-                      {notifications.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={markAllAsRead}
-                          className="text-xs text-primary font-medium hover:underline"
-                        >
-                          Tandai semua dibaca
-                        </button>
-                      )}
-                    </div>
-                    {notifications.length === 0 ? (
-                      <p className="px-4 py-6 text-sm text-gray-500 text-center">Belum ada notifikasi.</p>
-                    ) : (
-                      <div className="py-1">
-                        {notifications.slice(0, 8).map((item) => (
-                          <a
-                            key={item.id}
-                            href={item.href || '#'}
-                            onClick={() => {
-                              markAsRead(item.id)
-                              setOpenNotifications(false)
-                            }}
-                            className={`block px-4 py-3 border-b last:border-0 hover:bg-slate-50 ${item.read ? '' : 'bg-blue-50/40'}`}
-                          >
-                            <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                            <p className="text-xs text-gray-600 mt-0.5">{item.message}</p>
-                          </a>
-                        ))}
-                      </div>
-                    )}
+                </div>
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-gray-500 text-center">Belum ada notifikasi.</p>
+                ) : (
+                  <div className="py-1">
+                    {notifications.slice(0, 8).map((item) => (
+                      <a
+                        key={item.id}
+                        href={item.href || '#'}
+                        onClick={() => {
+                          markAsRead(item.id)
+                          setOpenNotifications(false)
+                        }}
+                        className={`block px-4 py-3 border-b last:border-0 hover:bg-slate-50 ${item.read ? '' : 'bg-blue-50/40'}`}
+                      >
+                        <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{item.message}</p>
+                      </a>
+                    ))}
                   </div>
                 )}
               </div>
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown((o) => !o)}
-                  className="flex items-center gap-2 text-gray-700 hover:text-primary text-sm font-medium"
-                >
-                  <span className="max-w-[120px] truncate">{user.name}</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                {openDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 py-1 rounded-lg border bg-white shadow-lg">
-                    <a href={dashboardHref} className="block px-4 py-2 text-sm text-gray-700 hover:bg-slate-50" onClick={() => setOpenDropdown(false)}>
-                      {dashboardLabel}
-                    </a>
+            )}
+          </div>
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setOpenDropdown((o) => !o)}
+              className="flex items-center gap-2 text-gray-700 hover:text-primary text-sm font-medium"
+            >
+              <span className="max-w-[120px] sm:max-w-[180px] truncate">{user.name}</span>
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {openDropdown && (
+              <div className="absolute right-0 top-full mt-1 w-48 py-1 rounded-lg border bg-white shadow-lg">
+                <a href={dashboardHref} className="block px-4 py-2 text-sm text-gray-700 hover:bg-slate-50" onClick={() => setOpenDropdown(false)}>
+                  {dashboardLabel}
+                </a>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try { await apiLogout(); } catch { /* ignore network/API errors */ }
-                        logout()
+                      onClick={() => {
                         setOpenDropdown(false)
-                        window.location.hash = '/auth'
+                        void performFullLogoutAndRedirect()
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50"
                     >
                       Keluar
                     </button>
-                  </div>
-                )}
               </div>
-            </div>
-          ) : (
-            <a href="#/auth" className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover">Masuk</a>
-          )}
+            )}
+          </div>
         </div>
+      ) : (
+        <a href="#/auth" className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover whitespace-nowrap">
+          Masuk
+        </a>
+      )}
+    </div>
+  )
+
+  if (layout === 'app') {
+    return (
+      <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
+        <div className="flex h-14 min-h-[3.5rem] w-full items-stretch">
+          <div className="flex w-56 shrink-0 items-center border-r border-gray-200 px-4 bg-white/95">
+            {brand}
+          </div>
+          <nav className="flex min-w-0 flex-1 items-center justify-end gap-4 px-4 bg-white/95" aria-label="Menu akun">
+            {actions}
+          </nav>
+        </div>
+      </header>
+    )
+  }
+
+  return (
+    <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
+      <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4" aria-label="Utama">
+        {brand}
+        {actions}
       </nav>
     </header>
   )

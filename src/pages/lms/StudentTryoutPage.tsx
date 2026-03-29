@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
+import { ApiError, getOpenTryouts, getStudentTryoutsOpen, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
 import { filterStudentVisibleTryouts } from '../../utils/tryoutStudent'
 
@@ -9,24 +9,41 @@ export default function StudentTryoutPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getOpenTryouts()
+    getStudentTryoutsOpen()
       .then((list) => {
         setTryouts(filterStudentVisibleTryouts(list))
         setError(null)
       })
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
-        setTryouts([])
+      .catch(() => {
+        return getOpenTryouts()
+          .then((list) => {
+            setTryouts(filterStudentVisibleTryouts(list))
+            setError(null)
+          })
+          .catch((err) => {
+            setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
+            setTryouts([])
+          })
       })
       .finally(() => setLoading(false))
   }, [])
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Tryout</h1>
-      <p className="text-gray-500 mb-8">
-        Tryout yang tampil adalah yang sedang dibuka dan belum melewati tanggal tutup. Buka detail untuk mendaftar; setelah terdaftar Anda bisa mulai ujian kapan saja selama periode masih berjalan. Setelah mengerjakan, Anda dapat melihat leaderboard.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Tryout</h1>
+          <p className="text-gray-500">
+            Tryout yang terbuka untuk akun Anda. Jika server belum menyediakan daftar siswa, kami memuat tryout publik yang sedang open.
+          </p>
+        </div>
+        <a
+          href="#/student/tryout/history"
+          className="shrink-0 px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+        >
+          Riwayat tryout
+        </a>
+      </div>
 
       {loading ? (
         <div className="border rounded-2xl p-8 bg-white text-center text-gray-500">
@@ -78,6 +95,13 @@ export default function StudentTryoutPage() {
                     <p className="text-sm text-gray-600 mb-1 line-clamp-2">{t.description}</p>
                   )}
                   <p className="text-sm text-gray-500">{getTryoutScheduleText(t)}</p>
+                  {(t.durationMinutes != null || t.questionCount != null) && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {[t.durationMinutes != null ? `${t.durationMinutes} menit` : null, t.questionCount != null ? `${t.questionCount} soal` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-primary font-medium text-sm">Lihat detail →</span>
               </div>

@@ -16,7 +16,7 @@ export function GuruLayout({ children, currentPath }: { children: React.ReactNod
   return (
     <AuthGuard role="guru" currentPath={currentPath} onRedirect={onRedirect}>
       <div className="min-h-screen flex flex-col">
-        <LmsHeader />
+        <LmsHeader layout="app" />
         <div className="flex-1 flex">
           <aside className="w-56 border-r bg-white min-h-[calc(100vh-3.5rem)] py-6 px-4">
             <nav className="flex flex-col gap-1">

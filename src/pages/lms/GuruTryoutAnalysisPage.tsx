@@ -43,6 +43,12 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
     <div className="space-y-6">
       <div className="flex items-center gap-4 flex-wrap">
         <a href="#/guru/tryouts" className="text-primary font-medium text-sm hover:underline">← Daftar tryout</a>
+        <a
+          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/questions`}
+          className="text-sm font-medium text-gray-600 hover:text-primary hover:underline"
+        >
+          Lembar soal (API) →
+        </a>
       </div>
 
       <div className="rounded-2xl border bg-white p-6">

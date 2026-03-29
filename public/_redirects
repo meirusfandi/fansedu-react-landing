@@ -1,0 +1,2 @@
+# SPA: path /logout harus mengembalikan index.html (hosting statis seperti Netlify)
+/logout /index.html 200

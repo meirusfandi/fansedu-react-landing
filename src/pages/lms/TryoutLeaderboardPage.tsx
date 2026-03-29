@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getTryoutLeaderboard, type TryoutLeaderboardEntry } from '../../lib/api'
+import {
+  ApiError,
+  getTryoutLeaderboard,
+  getTryoutLeaderboardRank,
+  type TryoutLeaderboardEntry,
+  type TryoutLeaderboardRankResponse,
+} from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import { isLeaderboardRowCurrentUser } from '../../utils/leaderboardUser'
 
@@ -13,20 +19,26 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<TryoutLeaderboardEntry[]>([])
+  const [myRank, setMyRank] = useState<TryoutLeaderboardRankResponse | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getTryoutLeaderboard(tryoutId)
-      .then((rows) => {
+    setMyRank(null)
+    const rankPromise =
+      role === 'student' ? getTryoutLeaderboardRank(tryoutId) : Promise.resolve(null)
+    Promise.all([getTryoutLeaderboard(tryoutId), rankPromise])
+      .then(([rows, rank]) => {
         if (cancelled) return
         setEntries(rows)
+        setMyRank(rank)
       })
       .catch((err) => {
         if (cancelled) return
         setError(err instanceof ApiError ? err.message : 'Gagal memuat leaderboard.')
         setEntries([])
+        setMyRank(null)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -35,7 +47,7 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
     return () => {
       cancelled = true
     }
-  }, [tryoutId])
+  }, [tryoutId, role])
 
   const backHref = role === 'guru'
     ? `#/guru/tryouts/${encodeURIComponent(tryoutId)}`
@@ -51,8 +63,20 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Leaderboard Tryout</h1>
       <p className="text-gray-500 mb-6">
-        Halaman leaderboard khusus dashboard {role === 'guru' ? 'guru' : 'siswa'}.
+        Peringkat peserta tryout{role === 'student' ? '. Jika Anda sudah mengerjakan, ringkasan posisi Anda ditampilkan di bawah.' : '.'}
       </p>
+
+      {role === 'student' && myRank && (myRank.rank != null || myRank.score != null) ? (
+        <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-800">
+          <span className="font-semibold text-gray-900">Posisi Anda: </span>
+          {myRank.rank != null ? <>peringkat #{myRank.rank}</> : null}
+          {myRank.rank != null && myRank.score != null ? ' · ' : null}
+          {myRank.score != null ? <>skor {myRank.score}</> : null}
+          {myRank.percentile != null && Number.isFinite(myRank.percentile) ? (
+            <> · persentil {myRank.percentile}</>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border bg-white overflow-hidden">
         {loading ? (

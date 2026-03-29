@@ -71,6 +71,12 @@ export default function GuruTryoutsPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <a
+                  href={`#/guru/tryouts/${encodeURIComponent(t.id)}/questions`}
+                  className="inline-flex px-4 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  Lembar soal (API)
+                </a>
+                <a
                   href={`#/guru/tryouts/${encodeURIComponent(t.id)}`}
                   className="inline-flex px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover"
                 >

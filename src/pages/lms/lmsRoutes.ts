@@ -11,7 +11,9 @@ export interface LmsRoute {
     | 'student-courses'
     | 'student-course-learn'
     | 'student-tryout'
+    | 'student-tryout-history'
     | 'student-tryout-detail'
+    | 'student-tryout-exam'
     | 'student-leaderboard'
     | 'student-coding'
     | 'student-coding-problem'
@@ -29,6 +31,7 @@ export interface LmsRoute {
     | 'guru-tryouts'
     | 'guru-leaderboard'
     | 'guru-tryout-analysis'
+    | 'guru-tryout-questions'
     | 'guru-tryout-student-detail'
     | 'guru-attempt-ai'
   programSlug?: string
@@ -75,6 +78,17 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   const studentCourseLearnMatch = pathOnly.match(/^\/student\/courses\/([^/]+)$/)
   if (studentCourseLearnMatch) return { type: 'student-course-learn', courseSlug: studentCourseLearnMatch[1], studentPath: '/student/courses' }
   if (pathOnly === '/student/tryout') return { type: 'student-tryout', studentPath: '/student/tryout' }
+  if (pathOnly === '/student/tryout/history') {
+    return { type: 'student-tryout-history', studentPath: '/student/tryout' }
+  }
+  const studentTryoutExamMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)\/exam\/?$/)
+  if (studentTryoutExamMatch) {
+    return {
+      type: 'student-tryout-exam',
+      studentTryoutId: studentTryoutExamMatch[1],
+      studentPath: '/student/tryout',
+    }
+  }
   const studentTryoutDetailMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)$/)
   if (studentTryoutDetailMatch) return { type: 'student-tryout-detail', studentTryoutId: studentTryoutDetailMatch[1], studentPath: '/student/tryout' }
   const studentLeaderboardMatch = pathOnly.match(/^\/student\/leaderboard\/([^/]+)$/)
@@ -108,6 +122,14 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (gp === '/guru/tryouts') return { type: 'guru-tryouts', guruPath: '/guru/tryouts' }
   const guruLeaderboardMatch = gp.match(/^\/guru\/leaderboard\/([^/]+)$/)
   if (guruLeaderboardMatch) return { type: 'guru-leaderboard', guruTryoutId: guruLeaderboardMatch[1], guruPath: '/guru/tryouts' }
+  const guruTryoutQuestionsMatch = gp.match(/^\/guru\/tryouts\/([^/]+)\/questions\/?$/)
+  if (guruTryoutQuestionsMatch) {
+    return {
+      type: 'guru-tryout-questions',
+      guruTryoutId: guruTryoutQuestionsMatch[1],
+      guruPath: '/guru/tryouts',
+    }
+  }
   const tryoutAnalysisMatch = gp.match(/^\/guru\/tryouts\/([^/]+)\/?$/)
   if (tryoutAnalysisMatch) return { type: 'guru-tryout-analysis', guruTryoutId: tryoutAnalysisMatch[1], guruPath: '/guru/tryouts' }
   const tryoutStudentDetailMatch = gp.match(/^\/guru\/tryouts\/([^/]+)\/students\/([^/]+)\/?$/)

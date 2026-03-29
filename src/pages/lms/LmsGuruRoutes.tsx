@@ -10,6 +10,7 @@ import GuruEarningsPage from './GuruEarningsPage'
 import GuruProfilePage from './GuruProfilePage'
 import GuruTryoutsPage from './GuruTryoutsPage'
 import GuruTryoutAnalysisPage from './GuruTryoutAnalysisPage'
+import GuruTryoutQuestionsEditorPage from './GuruTryoutQuestionsEditorPage'
 import GuruAttemptAIAnalysisPage from './GuruAttemptAIAnalysisPage'
 import GuruTryoutStudentDetailPage from './GuruTryoutStudentDetailPage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
@@ -81,6 +82,12 @@ export default function LmsGuruRoutes({ route }: { route: LmsRoute }) {
       return (
         <GuruLayout currentPath="/guru/tryouts">
           <GuruTryoutAnalysisPage tryoutId={route.guruTryoutId ?? ''} />
+        </GuruLayout>
+      )
+    case 'guru-tryout-questions':
+      return (
+        <GuruLayout currentPath="/guru/tryouts">
+          <GuruTryoutQuestionsEditorPage tryoutId={route.guruTryoutId ?? ''} />
         </GuruLayout>
       )
     case 'guru-tryout-student-detail':

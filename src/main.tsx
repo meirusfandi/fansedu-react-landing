@@ -8,13 +8,24 @@ import TryoutInfoPage from './pages/TryoutInfo.tsx'
 import TryoutLeaderboardPage from './pages/TryoutLeaderboard.tsx'
 import LMSApp from './pages/lms/LMSApp.tsx'
 import { parseLmsRoute } from './pages/lms/lmsRoutes.ts'
+import LogoutPage from './pages/LogoutPage.tsx'
+import { isLogoutUrl } from './lib/full-logout'
 
 const LMS_PATHS =
   /^\/(auth|catalog|program(\/[^/]*)?|checkout(\/(success|confirm))?|student(\/[^?]*)?|guru(\/[^?]*)?|instructor(\/[^?]*)?)(\?|$)/
 
-function parseHash(): { route: 'home' | 'article' | 'tryout' | 'tryout-info' | 'leaderboard' | 'lms'; slug: string | null; tryoutId: string | null; lmsPath?: string } {
+function parseHash(): {
+  route: 'home' | 'article' | 'tryout' | 'tryout-info' | 'leaderboard' | 'lms' | 'logout'
+  slug: string | null
+  tryoutId: string | null
+  lmsPath?: string
+} {
   const hash = window.location.hash.slice(1) || '/'
   const path = hash.startsWith('/') ? hash : `/${hash}`
+  const pathOnly = path.split('?')[0]
+  if (pathOnly === '/logout') {
+    return { route: 'logout', slug: null, tryoutId: null }
+  }
   if (LMS_PATHS.test(path.split('?')[0])) {
     return { route: 'lms', slug: null, tryoutId: null, lmsPath: path }
   }
@@ -75,6 +86,7 @@ function Root() {
     }
   }, [location.route, location.slug])
 
+  if (isLogoutUrl()) return <LogoutPage />
   if (location.route === 'leaderboard') return <TryoutLeaderboardPage tryoutId={location.tryoutId} />
   if (location.route === 'tryout') return <TryoutListPage />
   if (location.route === 'tryout-info') return <TryoutInfoPage tryoutId={location.tryoutId} />

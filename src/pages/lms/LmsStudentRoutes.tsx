@@ -5,7 +5,9 @@ import StudentCoursesPage from './StudentCoursesPage'
 import StudentCourseLearnPage from './StudentCourseLearnPage'
 import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
+import StudentTryoutHistoryPage from './StudentTryoutHistoryPage'
 import StudentTryoutDetailPage from './StudentTryoutDetailPage'
+import StudentTryoutExamPage from './StudentTryoutExamPage'
 import StudentCodingProblemPage from './StudentCodingProblemPage'
 import StudentTransactionsPage from './StudentTransactionsPage'
 import StudentCertificatesPage from './StudentCertificatesPage'
@@ -39,10 +41,22 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
           <StudentTryoutPage />
         </StudentLayout>
       )
+    case 'student-tryout-history':
+      return (
+        <StudentLayout currentPath="/student/tryout">
+          <StudentTryoutHistoryPage />
+        </StudentLayout>
+      )
     case 'student-tryout-detail':
       return (
         <StudentLayout currentPath="/student/tryout">
           <StudentTryoutDetailPage tryoutId={route.studentTryoutId ?? ''} />
+        </StudentLayout>
+      )
+    case 'student-tryout-exam':
+      return (
+        <StudentLayout currentPath="/student/tryout">
+          <StudentTryoutExamPage tryoutId={route.studentTryoutId ?? ''} />
         </StudentLayout>
       )
     case 'student-leaderboard':

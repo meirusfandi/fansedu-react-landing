@@ -1,6 +1,21 @@
 import { defineConfig, loadEnv } from 'vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import https from 'node:https'
+
+/** Dev: `/logout` → `index.html` agar SPA bisa tangani (sama seperti hosting SPA fallback). */
+function logoutSpaFallback(): Plugin {
+  return {
+    name: 'logout-spa-fallback',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const url = req.url?.split('?')[0]
+        if (url === '/logout') req.url = '/index.html'
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -45,7 +60,7 @@ export default defineConfig(({ mode }) => {
       /** Sinkron dengan `MODE` / `VITE_MODE` di .env (Vite tidak mengekspos `MODE` ke klien). */
       'import.meta.env.VITE_MODE': JSON.stringify(appApiMode),
     },
-    plugins: [react()],
+    plugins: [react(), logoutSpaFallback()],
     server: {
       proxy: {
         '/api': {
