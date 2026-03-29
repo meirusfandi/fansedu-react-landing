@@ -12,6 +12,7 @@ export interface LmsRoute {
     | 'student-course-learn'
     | 'student-tryout'
     | 'student-tryout-history'
+    | 'student-tryout-attempt-review'
     | 'student-tryout-detail'
     | 'student-tryout-exam'
     | 'student-leaderboard'
@@ -42,6 +43,8 @@ export interface LmsRoute {
   codingProblemSlug?: string
   courseSlug?: string
   studentTryoutId?: string
+  /** GET /student/attempts/:id — halaman hasil & pembahasan */
+  studentAttemptId?: string
   studentPath?: string
   guruPath?: string
   guruTryoutId?: string
@@ -80,6 +83,14 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   if (pathOnly === '/student/tryout') return { type: 'student-tryout', studentPath: '/student/tryout' }
   if (pathOnly === '/student/tryout/history') {
     return { type: 'student-tryout-history', studentPath: '/student/tryout' }
+  }
+  const studentTryoutAttemptReviewMatch = pathOnly.match(/^\/student\/tryout\/attempts\/([^/]+)\/?$/)
+  if (studentTryoutAttemptReviewMatch) {
+    return {
+      type: 'student-tryout-attempt-review',
+      studentAttemptId: studentTryoutAttemptReviewMatch[1],
+      studentPath: '/student/tryout',
+    }
   }
   const studentTryoutExamMatch = pathOnly.match(/^\/student\/tryout\/([^/]+)\/exam\/?$/)
   if (studentTryoutExamMatch) {

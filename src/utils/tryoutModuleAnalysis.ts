@@ -2,6 +2,8 @@
  * Agregasi hasil tryout per modul / topik (dari field soal atau tag).
  */
 
+import { effectiveTryoutQuestionCorrect } from './tryoutReviewGrading'
+
 export interface TryoutModuleStat {
   moduleKey: string
   moduleLabel: string
@@ -81,11 +83,19 @@ function ensureStat(
 }
 
 type QuestionLike = { id: string; moduleKey?: string; moduleLabel?: string }
-type ReviewLike = { questionId: string; isCorrect?: boolean; moduleKey?: string; moduleLabel?: string }
+type ReviewLike = {
+  questionId: string
+  isCorrect?: boolean | null
+  moduleKey?: string
+  moduleLabel?: string
+  scoreGot?: number
+  maxScore?: number
+}
 
 /**
  * Gabungkan lembar soal dengan baris review: hitung benar/salah/tidak dinilai per modul.
  * Urutan modul mengikuti kemunculan pertama di daftar soal.
+ * Jika isCorrect null tetapi ada scoreGot + maxScore, benar/salah disimpulkan (skor penuh = benar).
  */
 export function buildTryoutModuleStats(questions: QuestionLike[], reviewRows: ReviewLike[] | null): TryoutModuleStat[] {
   const rowById = new Map((reviewRows ?? []).map((r) => [r.questionId, r]))
@@ -107,8 +117,9 @@ export function buildTryoutModuleStats(questions: QuestionLike[], reviewRows: Re
     pushOrder(key)
     const st = ensureStat(stats, key, label)
     st.total += 1
-    if (row?.isCorrect === true) st.correct += 1
-    else if (row?.isCorrect === false) st.wrong += 1
+    const eff = row ? effectiveTryoutQuestionCorrect(row) : null
+    if (eff === true) st.correct += 1
+    else if (eff === false) st.wrong += 1
     else st.unknown += 1
   }
 
@@ -119,8 +130,9 @@ export function buildTryoutModuleStats(questions: QuestionLike[], reviewRows: Re
     pushOrder(key)
     const st = ensureStat(stats, key, label)
     st.total += 1
-    if (r.isCorrect === true) st.correct += 1
-    else if (r.isCorrect === false) st.wrong += 1
+    const eff = effectiveTryoutQuestionCorrect(r)
+    if (eff === true) st.correct += 1
+    else if (eff === false) st.wrong += 1
     else st.unknown += 1
   }
 
@@ -157,4 +169,26 @@ export function pctCorrect(stat: TryoutModuleStat): number | null {
   const graded = stat.correct + stat.wrong
   if (graded <= 0) return null
   return Math.round((100 * stat.correct) / graded)
+}
+
+/** True jika baris agregat server tidak punya satupun benar/salah (semua dianggap belum dinilai). */
+export function tryoutModuleServerStatsUninformative(rows: TryoutModuleStat[]): boolean {
+  if (rows.length === 0) return true
+  return rows.every((r) => r.correct === 0 && r.wrong === 0)
+}
+
+/** Saran singkat berdasarkan skor total (melengkapi insight per modul). */
+export function tryoutOverallStudyHint(score: number | undefined, maxScore: number): string | null {
+  if (maxScore <= 0 || score == null || !Number.isFinite(score)) return null
+  const pct = (100 * score) / maxScore
+  if (pct >= 85) {
+    return 'Skor keseluruhan sudah tinggi. Lanjutkan dengan mereview soal yang masih salah di pembahasan dan pertahankan kebiasaan latihan rutin.'
+  }
+  if (pct >= 65) {
+    return 'Hasil sudah solid. Fokus latihan pada modul yang persentase benarnya lebih rendah di tabel analisis, lalu ulangi soal sejenis.'
+  }
+  if (pct >= 45) {
+    return 'Masih ada celah pemahaman. Pelajari kunci jawaban dan penjelasan pada soal yang salah, lalu ulang materi dasar di bidang yang paling banyak meleset.'
+  }
+  return 'Prioritaskan memahami konsep dari pembahasan per soal — jangan hanya menghafal jawaban. Ulangi modul dengan jawaban salah terbanyak sampai pola soalnya terasa familiar.'
 }

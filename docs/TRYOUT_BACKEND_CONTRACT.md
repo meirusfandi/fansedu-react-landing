@@ -109,26 +109,53 @@ Frontend saat ini:
 
 ## 5b. Submit + GET attempt — analisis & skor maks
 
+### Penilaian & `review[]` (kontrak terbaru)
+
+1. **Skor per soal biner** untuk PG / isian **dengan kunci** (`correctOption` / `correctText` terisi di bank soal):  
+   - benar → `scoreGot === maxScore`, `isCorrect: true`  
+   - salah atau kosong → `scoreGot: 0`, `isCorrect: false`  
+   - **Tidak ada skor parsial** (mis. 2,5/5) untuk aturan lama 50% atau sejenisnya.
+
+2. **Tanpa kunci** di soal (kunci kosong):  
+   - `scoreGot: 0`, **`isCorrect: null`** (eksplisit di JSON, bukan menghilangkan field) = belum dinilai otomatis, meski siswa sudah mengisi jawaban.
+
+3. **`moduleAnalysis` / `moduleSummary`:** agregat **`correctCount` / `wrongCount` / `unscoredCount`** harus selaras dengan aturan di atas (sama seperti interpretasi `review[]`).
+
 ### `POST /api/v1/attempts/:attemptId/submit` (`SubmitResponse`)
 
 | Field JSON | Keterangan |
 |------------|------------|
-| `maxScore` | **Wajib dianggap ada** oleh FE (number). Gunakan `0` jika tidak ada di DB. Dipakai menampilkan skor sebagai `X / Y`. |
-| `review` | Daftar outcome per soal: `questionId`, `isCorrect` (boolean atau **`null`** jika belum bisa dinilai — field tetap dikirim eksplisit), teks pembahasan, metadata modul bila ada. Boleh array langsung atau dibungkus `items` / `outcomes` / `questionReviewOutcomes`. |
-| `moduleAnalysis` | Agregat per modul (`ModuleAnalysisAgg`): `moduleId`, `moduleTitle` / `bidang`, `totalCount`, `correctCount`, `wrongCount`, `unscoredCount` (dan sinonim snake_case yang dipetakan di klien). |
-| `moduleSummary` | **Duplikat isi `moduleAnalysis`** (kompatibilitas nama); FE membaca keduanya. |
+| `maxScore` | Total skor maksimum lembar — **ada di body submit** (number; `0` jika tidak ada di DB). Dipakai menampilkan `X / Y`. |
+| `review` | Array per soal: `questionId`, `scoreGot`, `maxScore`, **`isCorrect`: `true` \| `false` \| `null`** (`null` eksplisit jika belum dinilai). Pembahasan, metadata modul, dll. Boleh dibungkus `items` / `outcomes` / `questionReviewOutcomes`. |
+| `percentile` | **Opsional.** Hilangkan field dari JSON jika belum bisa dihitung (bukan `0` palsu). Jika ada: angka **0–100** (persentil dalam peserta tryout yang sama; butuh minimal dua skor untuk makna statistik). |
+| `moduleAnalysis` | Agregat per modul (`totalCount`, `correctCount`, `wrongCount`, `unscoredCount` + sinonim snake_case). |
+| `moduleSummary` | **Isi sama dengan `moduleAnalysis`** (alias kompatibilitas); FE membaca keduanya. |
 
-### `GET /api/v1/student/attempts/{attemptId}` (setelah submitted)
+### `GET /api/v1/student/attempts/{attemptId}` (siswa, setelah submitted)
 
-Respons **AttemptResponse** dapat memuat field yang sama: `review`, `moduleAnalysis`, `moduleSummary` (salinan `moduleAnalysis`), dihitung ulang lewat **TryoutAnalysisForAttempt** (sama seperti saat submit). FE memanggil GET ini setelah submit agar **refresh halaman** tetap mendapat pembahasan dan tabel modul tanpa menyimpan body submit di klien.
+Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`moduleAnalysis`**, **`moduleSummary`** (dihitung ulang di server, DTO sama dengan submit) agar **refresh halaman** atau buka **`#/student/tryout/attempts/:id`** tetap mendapat analisis tanpa menyimpan body submit di klien.
 
 **Lembar ujian siswa (`QuestionResponse`):** `moduleId`, `moduleTitle`, `bidang`, `tags` — **tanpa** `correctOption` / `correctText`.
 
-**Perilaku frontend:**
+### Persentil — perilaku frontend
 
-- Setelah `submitted`, memanggil `GET /student/attempts/:attemptId` dan memprioritaskan `review` + `moduleAnalysis` dari situ untuk UI; fallback: isi dari respons submit, lalu `GET …/attempts/:id/review` / breakdown.
-- Tabel modul: prioritas agregat dari GET attempt, lalu dari submit, lalu hitung ulang lokal dari soal + baris review.
-- `isCorrect: null` ditampilkan sebagai “Belum dinilai” (bukan benar/salah).
+- Tipe di klien: `percentile?: number` (field boleh absen).  
+- Parser mengabaikan `percentile: null` atau string kosong.  
+- Jika field **tidak ada**: UI menampilkan copy **“Persentil belum tersedia”** (bukan 0%).  
+- Jika `percentile === 0` **dan** skor total **&gt; 0**: UI menganggap placeholder lama dan menampilkan penjelasan serupa (bukan “Anda dapat 0%”).  
+- Jika `percentile === 0` dan skor 0: boleh ditampilkan 0% sebagai peringkat terendah yang sah.
+
+### Perilaku frontend (ringkas)
+
+- Setelah submit: tetap **GET** `/student/attempts/:attemptId`; prioritas **`review` + `moduleAnalysis` / `moduleSummary`** dari GET; lalu isi submit; lalu endpoint review/breakdown.  
+- Tampilan per soal mengikuti kontrak: **`isCorrect === null` + `scoreGot === 0`** → **“Belum dinilai otomatis”** (bukan salah); penilaian biner dengan kunci → **0 atau penuh** saja.  
+- Fallback agregat modul lokal hanya jika tabel server tidak informatif tetapi `review` punya skor.
+
+---
+
+## 5c. Email transaksi (checkout, dll.)
+
+**Bukan perubahan kontrak API untuk FE.** Jika di server `BREVO_SMTP_KEY` atau `SMTP_PASSWORD` (+ konfigurasi SMTP/from) terisi, email benar-benar dikirim; jika tidak, cukup log (dev). Variabel env ini untuk **deploy backend**, bukan untuk app frontend.
 
 ---
 
@@ -139,6 +166,8 @@ Respons **AttemptResponse** dapat memuat field yang sama: `review`, `moduleAnaly
 - [ ] **`GET …/status`** akurat untuk `isRegistered` / `hasAttempted` (dan tetap hidup untuk siswa login).  
 - [ ] **Leaderboard list** hanya (atau utamakan) peserta terdaftar.  
 - [ ] **`…/leaderboard/rank`** tidak mengexpose posisi “palsu” untuk user yang belum daftar.  
+- [ ] **Submit + GET attempt:** skor per soal biner dengan kunci; tanpa kunci → `isCorrect: null` eksplisit; **`percentile`** opsional tanpa placeholder 0; **`moduleSummary`** = **`moduleAnalysis`**.  
+- [ ] **`GET /student/tryouts/history`:** kirim **`attemptId`** per baris untuk tautan detail hasil.  
 - [ ] Dokumentasi error untuk `start` / `register` (kode + pesan) untuk UX.
 
 ---
@@ -149,7 +178,9 @@ Respons **AttemptResponse** dapat memuat field yang sama: `review`, `moduleAnaly
 - Alur tombol & copy: `src/pages/lms/StudentTryoutDetailPage.tsx`.  
 - Leaderboard + status: `src/pages/lms/TryoutLeaderboardPage.tsx`.  
 - Parsing field tryout: `src/lib/api.ts` — `parseOpenTryoutsResponse` / `OpenTryoutItem`.  
-- Submit + `review` / `moduleAnalysis` / `maxScore`: `parseTryoutSubmitResultPayload`, `pickEmbeddedReviewFromSubmit`, `pickEmbeddedModuleAnalysisFromSubmit` di `src/lib/api.ts`; **GET attempt**: `getStudentAttemptDetail` mem-parsing embed yang sama. Agregat fallback: `src/utils/tryoutModuleAnalysis.ts`.  
-- UI hasil: `src/pages/lms/StudentTryoutExamPage.tsx` (fase `submitted` — hydrasi dari GET attempt).
+- Submit + `review` / `moduleAnalysis` / `moduleSummary` / `maxScore` / `percentile` opsional: `parseTryoutSubmitResultPayload`, `pickEmbeddedReviewFromSubmit`, `pickEmbeddedModuleAnalysisFromSubmit` di `src/lib/api.ts`; **GET attempt**: `getStudentAttemptDetail`. Agregat fallback: `src/utils/tryoutModuleAnalysis.ts`.  
+- Penilaian tampilan per soal: `src/utils/tryoutReviewGrading.ts` (`effectiveTryoutQuestionCorrect`, `resolveTryoutReviewDisplay`).  
+- UI hasil: `src/components/lms/TryoutAttemptResultView.tsx`; dipakai oleh `StudentTryoutExamPage` (submitted + hydrasi GET attempt) dan **`#/student/tryout/attempts/:attemptId`** (`StudentTryoutAttemptReviewPage`).
+- Riwayat: `GET /student/tryouts/history` harus mengirim **`attemptId`** per baris agar tautan “Detail hasil” memuat pembahasan attempt yang benar.
 
 Setelah backend memenuhi poin di atas, perilaku server dan UI akan selaras tanpa mengandalkan “kebaikan” user saja.

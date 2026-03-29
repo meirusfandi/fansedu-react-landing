@@ -975,10 +975,14 @@ export interface TryoutAttemptPaper {
 
 export interface TryoutAttemptSubmitResult {
   score?: number
-  /** Skor maksimum lembar (SubmitResponse); 0 jika tidak ada di DB. */
+  /** Skor maksimum lembar (SubmitResponse); wajib di body submit bila tersedia. */
   maxScore: number
   message?: string
   submittedAt?: string
+  /**
+   * Opsional: kirim hanya jika sudah dihitung (0–100, persentil dalam peserta tryout yang sama, minimal 2 skor).
+   * Jangan kirim `null` atau `0` palsu sebagai placeholder; hilangkan field jika belum ada.
+   */
   percentile?: number
   feedback?: string
   /** false jika backend menandai penilaian belum final (skor 0 bisa sementara). */
@@ -991,10 +995,11 @@ export interface TryoutAttemptSubmitResult {
    */
   review?: TryoutAttemptReviewRow[]
   /**
-   * Dari POST …/submit (`moduleAnalysis` — alias API: `moduleSummary` / `module_summary`).
-   * Agregat per modul: benar / salah / belum dinilai; sumber utama untuk tabel analisis modul.
+   * Agregat per modul: benar / salah / belum dinilai; selaras dengan `isCorrect` + skor per soal.
    */
   moduleAnalysis?: TryoutModuleStat[]
+  /** Alias isi sama dengan `moduleAnalysis` (kompatibilitas kontrak backend). */
+  moduleSummary?: TryoutModuleStat[]
 }
 
 /** Satu baris pembahasan pasca-submit (GET …/review — opsional di backend). */
@@ -1046,13 +1051,16 @@ export interface StudentAttemptDetail {
   status?: string
   score?: number
   maxScore: number
+  /** Opsional; sama aturan dengan submit — absen jika belum dihitung. */
   percentile?: number
   timeSecondsSpent?: number
   startedAt?: string
   submittedAt?: string
-  /** Dari GET attempt setelah submit (TryoutAnalysisForAttempt). */
+  /** Untuk status submitted: pembahasan per soal (refresh halaman / GET setelah submit). */
   review?: TryoutAttemptReviewRow[]
   moduleAnalysis?: TryoutModuleStat[]
+  /** Alias isi sama dengan `moduleAnalysis`. */
+  moduleSummary?: TryoutModuleStat[]
 }
 
 export interface TryoutLeaderboardRankResponse {
@@ -1408,6 +1416,10 @@ export async function getStudentAttemptDetail(attemptId: string): Promise<Studen
   const embeddedReview = pickEmbeddedReviewFromSubmit(o, layers)
   const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(o, layers)
   const maxScoreNum = toFiniteNumber(o.maxScore ?? o.max_score) ?? 0
+  const pctRaw = o.percentile ?? o.percentileRank ?? o.percentile_rank
+  const attemptPercentile =
+    pctRaw !== null && pctRaw !== undefined && pctRaw !== '' ? toFiniteNumber(pctRaw) : undefined
+  const modAgg = embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0 ? embeddedModuleAnalysis : undefined
   return {
     id: String(o.id ?? attemptId),
     tryoutId: tryoutIdRaw != null ? String(tryoutIdRaw) : undefined,
@@ -1416,15 +1428,13 @@ export async function getStudentAttemptDetail(attemptId: string): Promise<Studen
     status: o.status != null ? String(o.status) : undefined,
     score: toFiniteNumber(o.score),
     maxScore: maxScoreNum,
-    percentile: toFiniteNumber(o.percentile),
+    ...(attemptPercentile !== undefined ? { percentile: attemptPercentile } : {}),
     timeSecondsSpent: toFiniteNumber(o.timeSecondsSpent ?? o.time_seconds_spent),
     startedAt: o.startedAt != null ? String(o.startedAt) : (o.started_at != null ? String(o.started_at) : undefined),
     submittedAt:
       o.submittedAt != null ? String(o.submittedAt) : (o.submitted_at != null ? String(o.submitted_at) : undefined),
     ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
-    ...(embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0
-      ? { moduleAnalysis: embeddedModuleAnalysis }
-      : {}),
+    ...(modAgg ? { moduleAnalysis: modAgg, moduleSummary: modAgg } : {}),
   }
 }
 
@@ -2394,6 +2404,7 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
   let percentile: number | undefined
   for (const o of layers) {
     const pctRaw = o.percentile ?? o.percentileRank ?? o.percentile_rank
+    if (pctRaw === null || pctRaw === undefined || pctRaw === '') continue
     const p = tryParseNumberField(pctRaw)
     if (p !== undefined) percentile = p
   }
@@ -2452,6 +2463,7 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
   }
   const embeddedReview = pickEmbeddedReviewFromSubmit(raw, layers)
   const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(raw, layers)
+  const modAgg = embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0 ? embeddedModuleAnalysis : undefined
   return {
     score: score != null && Number.isFinite(score) ? score : undefined,
     maxScore,
@@ -2462,9 +2474,7 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
     graded,
     gradingStatus,
     ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
-    ...(embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0
-      ? { moduleAnalysis: embeddedModuleAnalysis }
-      : {}),
+    ...(modAgg ? { moduleAnalysis: modAgg, moduleSummary: modAgg } : {}),
   }
 }
 

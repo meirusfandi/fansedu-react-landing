@@ -22,13 +22,7 @@ import {
   type TryoutExamSession,
 } from '../../lib/tryout-exam-session'
 import { QuestionBody } from '../../components/lms/QuestionBody'
-import { formatTryoutStatistic } from '../../utils/formatTryoutDisplay'
-import {
-  buildTryoutModuleStats,
-  pctCorrect,
-  tryoutModuleInsight,
-  type TryoutModuleStat,
-} from '../../utils/tryoutModuleAnalysis'
+import { TryoutAttemptResultView } from '../../components/lms/TryoutAttemptResultView'
 
 type Phase =
   | 'init'
@@ -231,8 +225,10 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
       .then((detail) => {
         if (cancelled) return
         setAttemptHydration({
-          moduleAnalysis:
-            detail.moduleAnalysis && detail.moduleAnalysis.length > 0 ? detail.moduleAnalysis : null,
+          moduleAnalysis: (() => {
+            const mod = detail.moduleAnalysis ?? detail.moduleSummary
+            return mod && mod.length > 0 ? mod : null
+          })(),
           maxScore: detail.maxScore,
         })
         if (detail.review && detail.review.length > 0) {
@@ -358,18 +354,6 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
     () => questions.filter((q) => Boolean(answers[q.id]?.trim())).length,
     [questions, answers],
   )
-
-  const moduleStats = useMemo(() => {
-    if (phase !== 'submitted') return []
-    const fromAttempt = attemptHydration?.moduleAnalysis
-    if (fromAttempt && fromAttempt.length > 0) return fromAttempt
-    if (submitResult?.moduleAnalysis && submitResult.moduleAnalysis.length > 0) {
-      return submitResult.moduleAnalysis
-    }
-    return buildTryoutModuleStats(paper?.questions ?? [], reviewRows)
-  }, [phase, attemptHydration?.moduleAnalysis, submitResult?.moduleAnalysis, paper?.questions, reviewRows])
-
-  const moduleInsightText = useMemo(() => tryoutModuleInsight(moduleStats), [moduleStats])
 
   const handleSubmit = useCallback(
     async (fromTimer = false) => {
@@ -579,214 +563,26 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
 
   if (phase === 'submitted' && submitResult) {
     const displayMaxScore = attemptHydration?.maxScore ?? submitResult.maxScore ?? 0
-    const gradingPending =
-      submitResult.graded === false ||
-      /\bpending\b/i.test(submitResult.gradingStatus ?? '') ||
-      /\bprocessing\b/i.test(submitResult.gradingStatus ?? '')
-    const serverModuleTable =
-      Boolean(attemptHydration?.moduleAnalysis?.length) ||
-      Boolean(submitResult.moduleAnalysis && submitResult.moduleAnalysis.length > 0)
     return (
-      <div className="max-w-2xl space-y-4">
-        <h1 className="text-xl font-bold text-gray-900">Jawaban terkirim</h1>
-        {gradingPending ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Server menandai penilaian belum final. Angka skor/persentil di bawah bisa sementara — cek lagi nanti di{' '}
-            <a href="#/student/tryout/history" className="font-medium text-amber-950 underline hover:no-underline">
-              Riwayat tryout
-            </a>{' '}
-            atau leaderboard setelah backend selesai menghitung.
-          </div>
-        ) : null}
-        {submitResult.score != null && Number.isFinite(submitResult.score) ? (
-          <p className="text-sm text-gray-700">
-            Skor:{' '}
-            <span className="font-semibold text-gray-900">{formatTryoutStatistic(submitResult.score)}</span>
-            {displayMaxScore > 0 ? (
-              <>
-                {' '}
-                <span className="text-gray-500 font-normal">
-                  / {formatTryoutStatistic(displayMaxScore)}
-                </span>
-              </>
-            ) : null}
-          </p>
-        ) : null}
-        {submitResult.percentile != null && Number.isFinite(submitResult.percentile) ? (
-          <p className="text-sm text-gray-700">
-            Persentil:{' '}
-            <span className="font-semibold text-gray-900">
-              {formatTryoutStatistic(submitResult.percentile)}%
-            </span>
-          </p>
-        ) : null}
-        {!gradingPending &&
-        submitResult.score === 0 &&
-        submitResult.percentile === 0 &&
-        submitResult.graded !== true ? (
-          <p className="text-xs text-gray-500">
-            Skor dan persentil di atas langsung dari respons API saat submit. Jika backend belum mengirim skor final
-            (atau hanya mengirim 0), tampilan akan tetap 0 sampai server diperbarui — bukan bug tampilan di halaman ini.
-          </p>
-        ) : null}
-        {submitResult.feedback ? (
-          <p className="text-sm text-gray-600 whitespace-pre-wrap">{submitResult.feedback}</p>
-        ) : null}
-        {submitResult.message ? (
-          <p className="text-sm text-gray-600">{submitResult.message}</p>
-        ) : (
-          <p className="text-sm text-gray-600">Terima kasih telah mengerjakan tryout ini.</p>
-        )}
-
-        {moduleStats.length > 0 ? (
-          <div className="rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 to-white px-4 py-3 text-sm text-gray-800 shadow-sm">
-            <p className="font-semibold text-gray-900 mb-1">Analisis per modul / topik</p>
-            <p className="text-xs text-gray-600 mb-3">
-              {serverModuleTable
-                ? 'Ringkasan per modul dari server (`moduleAnalysis` / `moduleSummary`), dihitung ulang lewat TryoutAnalysisForAttempt — tersedia di respons submit dan di GET /student/attempts/:attemptId setelah selesai.'
-                : 'Ringkasan dari jumlah soal per grup materi pada lembar ini dan hasil penilaian per soal (jika server mengirim status benar/salah di pembahasan atau di submit).'}
-            </p>
-            {moduleInsightText ? (
-              <p className="text-sm text-gray-800 mb-3 leading-relaxed border-l-2 border-primary/40 pl-3">
-                {moduleInsightText}
-              </p>
-            ) : reviewLoading ? null : serverModuleTable ? (
-              <p className="text-xs text-slate-600 bg-slate-100/80 border border-slate-200 rounded-lg px-3 py-2 mb-3">
-                Rekomendasi teks tambahan muncul jika ada cukup soal yang sudah ditandai benar/salah per modul. Tanpa itu,
-                gunakan baris tabel sebagai ringkasan utama dari server.
-              </p>
-            ) : (
-              <p className="text-xs text-amber-800 bg-amber-50/80 border border-amber-100 rounded-lg px-3 py-2 mb-3">
-                Untuk rekomendasi otomatis per modul, pastikan respons submit atau pembahasan mengirim{' '}
-                <code className="text-[11px]">isCorrect</code> per soal (dan metadata modul pada soal). Anda tetap bisa
-                melihat komposisi soal per topik di tabel bawah.
-              </p>
-            )}
-            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-              <table className="w-full text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-slate-50 text-left text-gray-600">
-                    <th className="py-2.5 px-3 font-medium">Modul / topik</th>
-                    <th className="py-2.5 px-2 font-medium text-right">Benar</th>
-                    <th className="py-2.5 px-2 font-medium text-right">Salah</th>
-                    <th className="py-2.5 px-2 font-medium text-right whitespace-nowrap">Belum dinilai</th>
-                    <th className="py-2.5 px-3 font-medium text-right whitespace-nowrap">% benar*</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {moduleStats.map((row) => {
-                    const pct = pctCorrect(row)
-                    return (
-                      <tr key={row.moduleKey} className="border-b border-gray-100 last:border-0">
-                        <td className="py-2 px-3 font-medium text-gray-900">{row.moduleLabel}</td>
-                        <td className="py-2 px-2 text-right tabular-nums text-emerald-700">{row.correct}</td>
-                        <td className="py-2 px-2 text-right tabular-nums text-rose-700">{row.wrong}</td>
-                        <td className="py-2 px-2 text-right tabular-nums text-gray-500">{row.unknown}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-900">{pct != null ? `${pct}%` : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-[11px] text-gray-500 mt-2">
-              *Persentase dari soal yang sudah ditandai benar atau salah.{' '}
-              {serverModuleTable
-                ? 'Angka per modul mengikuti agregat server (prioritas data dari GET attempt setelah submit, lalu respons submit).'
-                : 'Grup modul di klien diambil dari metadata soal (mis. moduleId, moduleTitle, bidang, tags).'}
-            </p>
-          </div>
-        ) : null}
-
-        <div className="rounded-xl border border-gray-200 bg-slate-50/80 px-4 py-3 text-sm text-gray-700">
-          <p className="font-medium text-gray-900 mb-1">Pembahasan per soal</p>
-          {reviewLoading ? (
-            <p className="text-gray-500 text-xs">Memuat pembahasan dari server…</p>
-          ) : reviewRows && reviewRows.length > 0 ? (
-            <ul className="mt-2 space-y-3 text-xs sm:text-sm">
-              {reviewRows.map((r, idx) => (
-                <li key={r.questionId} className="rounded-lg border border-gray-200 bg-white p-3">
-                  <p className="font-semibold text-gray-900">
-                    Soal {r.order ?? idx + 1}
-                    {r.isCorrect === true ? (
-                      <span className="ml-2 text-emerald-600 font-normal">· Benar</span>
-                    ) : r.isCorrect === false ? (
-                      <span className="ml-2 text-rose-600 font-normal">· Salah</span>
-                    ) : r.isCorrect === null ? (
-                      <span className="ml-2 text-amber-700 font-normal">· Belum dinilai</span>
-                    ) : null}
-                  </p>
-                  {r.scoreGot != null && Number.isFinite(r.scoreGot) ? (
-                    <p className="text-gray-700 mt-1 text-xs">
-                      <span className="text-gray-500">Skor soal: </span>
-                      {formatTryoutStatistic(r.scoreGot)}
-                      {r.maxScore != null && r.maxScore > 0 ? (
-                        <span className="text-gray-500">
-                          {' '}
-                          / {formatTryoutStatistic(r.maxScore)}
-                        </span>
-                      ) : null}
-                    </p>
-                  ) : null}
-                  {r.moduleTitle || r.bidang || (r.tags && r.tags.length > 0) ? (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      {[r.moduleTitle, r.bidang].filter(Boolean).join(' · ')}
-                      {r.tags && r.tags.length > 0
-                        ? `${r.moduleTitle || r.bidang ? ' · ' : ''}${r.tags.join(', ')}`
-                        : null}
-                    </p>
-                  ) : null}
-                  {r.prompt ? <p className="text-gray-600 mt-1 whitespace-pre-wrap">{r.prompt}</p> : null}
-                  {r.yourAnswer ? (
-                    <p className="text-gray-700 mt-1">
-                      <span className="text-gray-500">Jawaban Anda: </span>
-                      {r.yourAnswer}
-                    </p>
-                  ) : null}
-                  {r.correctAnswer ? (
-                    <p className="text-gray-800 mt-1">
-                      <span className="text-gray-500">Kunci / jawaban benar: </span>
-                      {r.correctAnswer}
-                    </p>
-                  ) : null}
-                  {r.explanation ? (
-                    <p className="text-gray-600 mt-2 whitespace-pre-wrap border-t border-gray-100 pt-2">{r.explanation}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-gray-500">
-              Pembahasan diisi dari <code className="rounded bg-white px-1 py-0.5 text-[11px]">GET /api/v1/student/attempts/&#123;id&#125;</code>{' '}
-              (field <code className="text-[11px]">review</code> setelah submit), dari respons{' '}
-              <code className="text-[11px]">POST …/submit</code>, atau fallback{' '}
-              <code className="text-[11px]">GET …/attempts/&#123;id&#125;/review</code> / breakdown. Cek juga Riwayat tryout untuk skor
-              terkini.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <a
-            href={backHref}
-            className="inline-flex px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover"
-          >
-            Kembali ke detail tryout
-          </a>
-          <a
-            href={`#/student/leaderboard/${encodeURIComponent(tryoutId)}`}
-            className="inline-flex px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-          >
-            Lihat leaderboard
-          </a>
-          <a
-            href="#/student/tryout/history"
-            className="inline-flex px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-          >
-            Riwayat tryout
-          </a>
-        </div>
-      </div>
+      <TryoutAttemptResultView
+        heading="Jawaban terkirim"
+        score={submitResult.score}
+        displayMaxScore={displayMaxScore}
+        percentile={submitResult.percentile}
+        feedback={submitResult.feedback}
+        message={submitResult.message}
+        graded={submitResult.graded}
+        gradingStatus={submitResult.gradingStatus}
+        reviewRows={reviewRows}
+        reviewLoading={reviewLoading}
+        paperQuestions={paper?.questions ?? []}
+        attemptHydrationModuleAnalysis={attemptHydration?.moduleAnalysis}
+        submitModuleAnalysis={submitResult.moduleAnalysis ?? submitResult.moduleSummary}
+        tryoutId={tryoutId}
+        backHref={backHref}
+        backLabel="Kembali ke detail tryout"
+        showStaleSubmitHint
+      />
     )
   }
 

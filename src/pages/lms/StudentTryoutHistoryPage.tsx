@@ -107,12 +107,21 @@ export default function StudentTryoutHistoryPage() {
                         : '—'}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <a
-                        href={`#/student/tryout/${encodeURIComponent(row.tryoutId)}`}
-                        className="text-primary text-sm font-medium hover:underline"
-                      >
-                        Detail
-                      </a>
+                      {row.attemptId ? (
+                        <a
+                          href={`#/student/tryout/attempts/${encodeURIComponent(row.attemptId)}`}
+                          className="text-primary text-sm font-medium hover:underline"
+                        >
+                          Detail hasil
+                        </a>
+                      ) : (
+                        <a
+                          href={`#/student/tryout/${encodeURIComponent(row.tryoutId)}`}
+                          className="text-gray-500 text-sm hover:underline"
+                        >
+                          Info tryout
+                        </a>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -7,6 +7,7 @@ import StudentCourseLearnPage from './StudentCourseLearnPage'
 import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
 import StudentTryoutHistoryPage from './StudentTryoutHistoryPage'
+import StudentTryoutAttemptReviewPage from './StudentTryoutAttemptReviewPage'
 import StudentTryoutDetailPage from './StudentTryoutDetailPage'
 
 const StudentTryoutExamPage = lazy(() => import('./StudentTryoutExamPage'))
@@ -47,6 +48,12 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/tryout">
           <StudentTryoutHistoryPage />
+        </StudentLayout>
+      )
+    case 'student-tryout-attempt-review':
+      return (
+        <StudentLayout currentPath="/student/tryout">
+          <StudentTryoutAttemptReviewPage attemptId={route.studentAttemptId ?? ''} />
         </StudentLayout>
       )
     case 'student-tryout-detail':
