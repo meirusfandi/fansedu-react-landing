@@ -1,25 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ApiError, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
+import { TryoutListSkeletonLms } from '../../components/tryout/TryoutListSkeleton'
 import { fetchVisibleTryoutsForViewer } from '../../utils/fetchVisibleTryouts'
 
 export default function StudentTryoutPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const retryLoad = useCallback(() => setReloadKey((k) => k + 1), [])
 
   useEffect(() => {
+    let cancelled = false
+    setLoading(true)
     fetchVisibleTryoutsForViewer({ preferStudentOpen: true })
       .then((list) => {
-        setTryouts(list)
-        setError(null)
+        if (!cancelled) {
+          setTryouts(list)
+          setError(null)
+        }
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
-        setTryouts([])
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
+          setTryouts([])
+        }
       })
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
 
   return (
     <div>
@@ -39,15 +54,13 @@ export default function StudentTryoutPage() {
       </div>
 
       {loading ? (
-        <div className="border rounded-2xl p-8 bg-white text-center text-gray-500">
-          Memuat daftar tryout...
-        </div>
+        <TryoutListSkeletonLms rows={4} />
       ) : error ? (
         <div className="border rounded-2xl p-8 bg-white text-center">
           <p className="text-sm text-amber-700 mb-4">{error}</p>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={retryLoad}
             className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-medium hover:bg-gray-50"
           >
             Coba lagi

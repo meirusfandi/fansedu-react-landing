@@ -31,7 +31,7 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
           setAggregateNote(
             err instanceof ApiError
               ? err.message
-              : 'Endpoint GET /guru/tryouts/:id/analysis belum tersedia atau gagal.',
+              : 'Terjadi kendala saat memuat ringkasan analisis. Silakan coba lagi nanti.',
           )
         }
         return null

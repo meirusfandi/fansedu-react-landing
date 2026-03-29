@@ -21,3 +21,15 @@ export function isPastDeadline(iso?: string): boolean {
   if (Number.isNaN(t.getTime())) return false
   return Date.now() > t.getTime()
 }
+
+/**
+ * True jika waktu mulai ujian (opensAt / startAt dari API) sudah tiba.
+ * Tanpa tanggal valid dari server → true (jangan blokir; kompatibel data lama).
+ */
+export function hasTryoutStartTimeArrived(t: { startAt?: string }): boolean {
+  const raw = (t.startAt ?? '').trim()
+  if (!raw) return true
+  const start = new Date(raw)
+  if (Number.isNaN(start.getTime())) return true
+  return Date.now() >= start.getTime()
+}

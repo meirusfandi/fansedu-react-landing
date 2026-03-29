@@ -1,5 +1,5 @@
 import '../App.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, type OpenTryoutItem } from '../lib/api'
 import {
   getTryoutCloseDateText,
@@ -8,6 +8,7 @@ import {
 } from '../data/tryoutList'
 import { useAuthStore } from '../store/auth'
 import { lmsDashboardHash } from '../utils/lmsDashboard'
+import { TryoutListSkeleton } from '../components/tryout/TryoutListSkeleton'
 import { fetchVisibleTryoutsForViewer } from '../utils/fetchVisibleTryouts'
 
 interface TryoutInfoPageProps {
@@ -18,6 +19,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const loggedIn = !!(user && token)
@@ -26,18 +28,30 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
   const dashboardHref = lmsDashboardHash(user)
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     fetchVisibleTryoutsForViewer({ preferStudentOpen })
       .then((list) => {
-        setTryouts(list)
-        setError(null)
+        if (!cancelled) {
+          setTryouts(list)
+          setError(null)
+        }
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
-        setTryouts([])
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
+          setTryouts([])
+        }
       })
-      .finally(() => setLoading(false))
-  }, [preferStudentOpen])
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [preferStudentOpen, reloadKey])
+
+  const retryLoad = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const tryout = useMemo(() => {
     if (tryouts.length === 0) return null
@@ -104,8 +118,10 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg)]">
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-[var(--fg-muted)]">
-          Memuat detail tryout...
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="h-8 w-48 bg-[var(--bg-secondary)] rounded-lg animate-pulse mb-2" />
+          <p className="text-sm text-[var(--fg-muted)] mb-6">Memuat informasi tryout…</p>
+          <TryoutListSkeleton rows={2} />
         </main>
       </div>
     )
@@ -117,11 +133,7 @@ export default function TryoutInfoPage({ tryoutId = null }: TryoutInfoPageProps)
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center">
             <p className="text-[var(--fg-muted)] mb-4">{error}</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="btn-secondary px-6 py-3 rounded-full font-medium"
-            >
+            <button type="button" onClick={retryLoad} className="btn-secondary px-6 py-3 rounded-full font-medium">
               Coba lagi
             </button>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getProblemBySlug } from '../../data/codingProblems'
 import type { CodingProblem } from '../../data/codingProblems'
+import { getUserFacingHttpMessage, USER_FACING_NETWORK_ERROR } from '../../lib/user-facing-error'
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   easy: 'Mudah',
@@ -22,19 +23,21 @@ async function runCppCode(code: string, stdin: string): Promise<{ stdout: string
         stdin,
       }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      return { stdout: '', stderr: '', error: getUserFacingHttpMessage(res.status) }
+    }
     const data = (await res.json()) as { run?: { stdout?: string; stderr?: string }; message?: string }
     const run = data.run
     return {
       stdout: run?.stdout ?? '',
       stderr: run?.stderr ?? '',
-      error: data.message,
+      error: undefined,
     }
-  } catch (e) {
+  } catch {
     return {
       stdout: '',
       stderr: '',
-      error: e instanceof Error ? e.message : 'Koneksi gagal. Gunakan simulasi atau coba lagi.',
+      error: USER_FACING_NETWORK_ERROR,
     }
   }
 }

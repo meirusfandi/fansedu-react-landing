@@ -7,9 +7,10 @@ import {
   registerStudentTryout,
   startStudentTryoutWithFallback,
   type OpenTryoutItem,
+  type StudentTryoutStatusResponse,
 } from '../../lib/api'
 import { getTryoutCloseDateText, getTryoutRegistrationDeadlineText, getTryoutScheduleText } from '../../data/tryoutList'
-import { isPastDeadline, isTryoutWindowOpen } from '../../utils/tryoutStudent'
+import { hasTryoutStartTimeArrived, isPastDeadline, isTryoutWindowOpen } from '../../utils/tryoutStudent'
 import {
   clearTryoutExamSession,
   getTryoutExamSession,
@@ -26,6 +27,27 @@ function deriveTryoutActionState(tryout: OpenTryoutItem | null): TryoutActionSta
   return 'unregistered'
 }
 
+function applyServerStatusToUi(
+  status: StudentTryoutStatusResponse | null,
+  tryout: OpenTryoutItem,
+  setActionState: (s: TryoutActionState) => void,
+  setCanRetake: (b: boolean) => void,
+) {
+  setCanRetake(Boolean(tryout.canRetake))
+  setActionState(deriveTryoutActionState(tryout))
+  if (!status) return
+  setCanRetake(Boolean(status.canRetake))
+  if (status.hasAttempted) {
+    setActionState('attempted')
+    return
+  }
+  if (status.isRegistered) {
+    setActionState('registered')
+    return
+  }
+  setActionState('unregistered')
+}
+
 export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string }) {
   const tryoutStatusFeatureFlag = import.meta.env.VITE_TRYOUT_STATUS_ENDPOINT_ENABLED as string | undefined
   const isTryoutStatusEndpointEnabled = tryoutStatusFeatureFlag ? tryoutStatusFeatureFlag === 'true' : true
@@ -40,70 +62,59 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
   const [actionState, setActionState] = useState<TryoutActionState>('unregistered')
   const [canRetake, setCanRetake] = useState(false)
   const [retakeConfirmOpen, setRetakeConfirmOpen] = useState(false)
+  /** Respons terbaru GET …/status (canRegister, canStartExam, opensAt, dll.). */
+  const [serverStatus, setServerStatus] = useState<StudentTryoutStatusResponse | null>(null)
+  const [, setStartGateTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    getStudentTryoutDetail(tryoutId)
-      .then((t) => {
-        if (!cancelled) {
-          setTryout(t)
+    setServerStatus(null)
+
+    const statusPromise = isTryoutStatusEndpointEnabled
+      ? getStudentTryoutStatus(tryoutId)
+      : Promise.resolve(null as StudentTryoutStatusResponse | null)
+
+    ;(async () => {
+      try {
+        const t = await getStudentTryoutDetail(tryoutId)
+        if (cancelled) return
+        setTryout(t)
+        const status = await statusPromise.catch(() => null)
+        if (cancelled) return
+        setServerStatus(status)
+        applyServerStatusToUi(status, t, setActionState, setCanRetake)
+      } catch {
+        try {
+          const list = await getStudentTryoutsOpen()
+          const t = list.find((x) => x.id === tryoutId) ?? null
+          if (cancelled) return
+          if (!t) {
+            setTryout(null)
+            setError('Tryout tidak ditemukan atau tidak tersedia untuk akun Anda.')
+          } else {
+            setTryout(t)
+            const status = await statusPromise.catch(() => null)
+            if (cancelled) return
+            setServerStatus(status)
+            applyServerStatusToUi(status, t, setActionState, setCanRetake)
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
+            setTryout(null)
+          }
         }
-      })
-      .catch(() => {
-        return getStudentTryoutsOpen()
-          .then((list) => {
-            const t = list.find((x) => x.id === tryoutId) ?? null
-            if (!cancelled) {
-              if (t) setTryout(t)
-              else {
-                setTryout(null)
-                setError('Tryout tidak ditemukan atau tidak tersedia untuk akun Anda.')
-              }
-            }
-          })
-          .catch((err) => {
-            if (!cancelled) {
-              setError(err instanceof ApiError ? err.message : 'Gagal memuat detail tryout.')
-              setTryout(null)
-            }
-          })
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
+    })()
+
     return () => {
       cancelled = true
     }
-  }, [tryoutId])
-
-  useEffect(() => {
-    if (!tryout) return
-    const fallbackState = deriveTryoutActionState(tryout)
-    setActionState(fallbackState)
-    setCanRetake(Boolean(tryout.canRetake))
-
-    if (!isTryoutStatusEndpointEnabled) return
-
-    getStudentTryoutStatus(tryoutId)
-      .then((status) => {
-        if (!status) return
-        setCanRetake(Boolean(status.canRetake))
-        if (status.hasAttempted) {
-          setActionState('attempted')
-          return
-        }
-        if (status.isRegistered) {
-          setActionState('registered')
-          return
-        }
-        setActionState('unregistered')
-      })
-      .catch(() => {
-        /* tetap pakai state dari detail */
-      })
-  }, [tryoutId, tryout, isTryoutStatusEndpointEnabled])
+  }, [tryoutId, isTryoutStatusEndpointEnabled])
 
   useEffect(() => {
     if (!retakeConfirmOpen) return
@@ -114,8 +125,33 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
     return () => window.removeEventListener('keydown', onKey)
   }, [retakeConfirmOpen])
 
+  useEffect(() => {
+    if (!tryoutId || !isTryoutStatusEndpointEnabled) return
+    if (actionState !== 'registered') return
+    if (!isTryoutWindowOpen({ closeAt: serverStatus?.closesAt ?? tryout?.closeAt })) return
+    if (serverStatus?.canStartExam) return
+    const id = window.setInterval(() => {
+      void getStudentTryoutStatus(tryoutId)
+        .then((s) => {
+          if (s) setServerStatus(s)
+        })
+        .finally(() => setStartGateTick((n) => n + 1))
+    }, 15_000)
+    return () => window.clearInterval(id)
+  }, [tryoutId, tryout?.closeAt, actionState, serverStatus?.canStartExam, serverStatus?.closesAt, isTryoutStatusEndpointEnabled])
+
   if (loading) {
-    return <div className="py-8 text-gray-500">Memuat detail tryout...</div>
+    return (
+      <div className="space-y-6 py-4" aria-busy="true" aria-label="Memuat detail tryout">
+        <div className="h-4 w-44 bg-gray-200 rounded animate-pulse" />
+        <div className="h-8 max-w-md bg-gray-200 rounded-lg animate-pulse" />
+        <div className="h-4 max-w-2xl bg-gray-100 rounded animate-pulse" />
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-52 rounded-2xl border border-gray-200 bg-gray-50 animate-pulse" />
+          <div className="h-52 rounded-2xl border border-gray-200 bg-gray-50 animate-pulse" />
+        </div>
+      </div>
+    )
   }
   if (error) {
     return (
@@ -140,19 +176,43 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
     )
   }
 
-  const scheduleText = getTryoutScheduleText(tryout)
+  const openIsoForUi = (serverStatus?.opensAt ?? tryout.startAt ?? '').trim()
+  const scheduleText = getTryoutScheduleText({
+    startAt: openIsoForUi || tryout.startAt,
+    intervalDays: tryout.intervalDays,
+  })
   const deadlineText = getTryoutRegistrationDeadlineText(tryout.registrationDeadlineAt)
-  const closeDateText = getTryoutCloseDateText(tryout.closeAt)
-  const windowOpen = isTryoutWindowOpen(tryout)
+  const effectiveCloseAt = serverStatus?.closesAt ?? tryout.closeAt
+  const closeDateText = getTryoutCloseDateText(effectiveCloseAt)
+  const windowOpen = isTryoutWindowOpen({ closeAt: effectiveCloseAt })
+  const examPeriodStarted = hasTryoutStartTimeArrived({ startAt: openIsoForUi || undefined })
   const registrationClosed = isPastDeadline(tryout.registrationDeadlineAt)
-  const canRegisterNow = windowOpen && !registrationClosed && actionState === 'unregistered'
-  const canStartExamNow = windowOpen && actionState === 'registered'
+  /** BE: canRegister / canStartExam bila GET …/status tersedia; selain itu fallback lama. */
+  const canRegisterNow =
+    serverStatus?.canRegister !== undefined
+      ? serverStatus.canRegister
+      : windowOpen && !registrationClosed && actionState === 'unregistered'
+  const canStartExamUi =
+    serverStatus?.canStartExam !== undefined
+      ? serverStatus.canStartExam
+      : windowOpen && actionState === 'registered' && examPeriodStarted
   const showRetake =
-    actionState === 'attempted' && canRetake && windowOpen && !singleAttemptOnly
+    actionState === 'attempted' &&
+    canRetake &&
+    windowOpen &&
+    examPeriodStarted &&
+    !singleAttemptOnly &&
+    (serverStatus?.canStartExam !== false)
   const leaderboardHref = `#/student/leaderboard/${tryout.id}`
   const cachedExam = getTryoutExamSession(tryout.id)
-  const canResumeExam = canStartExamNow && Boolean(cachedExam?.attemptId)
-  const showMulaiPertama = canStartExamNow && !cachedExam?.attemptId
+  const canResumeExam = actionState === 'registered' && Boolean(cachedExam?.attemptId)
+  const showMulaiPertama =
+    windowOpen && actionState === 'registered' && canStartExamUi && !cachedExam?.attemptId
+  const showBeforeOpenNotice =
+    actionState === 'registered' &&
+    windowOpen &&
+    !canResumeExam &&
+    !canStartExamUi
   const examHref = `#/student/tryout/${encodeURIComponent(tryout.id)}/exam`
   const durationLabel =
     tryout.durationMinutes != null
@@ -170,7 +230,13 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
     try {
       await registerStudentTryout(tryout.id)
       setActionState('registered')
-      setActionMessage('Pendaftaran tryout berhasil. Anda bisa lanjut mulai ujian.')
+      if (isTryoutStatusEndpointEnabled) {
+        const s = await getStudentTryoutStatus(tryout.id).catch(() => null)
+        if (s) setServerStatus(s)
+      }
+      setActionMessage(
+        'Pendaftaran berhasil. Nama Anda tercatat sebagai peserta. Tombol mulai mengerjakan mengikuti jadwal dan aturan server.',
+      )
     } catch (err) {
       setActionMessage(err instanceof ApiError ? err.message : 'Gagal mendaftarkan tryout.')
     } finally {
@@ -248,7 +314,10 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">{tryout.title}</h1>
       <p className="text-gray-500 mb-8">
-        Daftar tryout dulu untuk bisa memulai ujian. Setelah terdaftar, Anda bisa mulai kapan saja selama periode tryout belum berakhir. Leaderboard dapat dibuka kapan saja untuk melihat peringkat peserta, meskipun Anda belum mengerjakan.
+        Alur: lihat informasi di bawah → <strong className="text-gray-800">daftar tryout</strong> agar Anda tercatat
+        sebagai peserta dan masuk leaderboard → setelah <strong className="text-gray-800">waktu mulai ujian</strong>{' '}
+        (sesuai jadwal), tombol <strong className="text-gray-800">mulai mengerjakan</strong> akan aktif selama tryout
+        masih berlangsung. Anda bisa membuka leaderboard kapan saja untuk melihat peringkat peserta terdaftar.
       </p>
 
       {!windowOpen && (
@@ -286,45 +355,81 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
                 {actionMessage}
               </div>
             )}
-            <a
-              href={leaderboardHref}
-              className="block w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-center text-gray-800 hover:bg-gray-50"
-            >
-              Lihat Leaderboard
-            </a>
-            <p className="text-xs text-gray-500">
-              Tersedia untuk semua peserta: lihat peringkat dan siapa yang sudah mengerjakan, tanpa harus menyelesaikan ujian dulu.
-            </p>
-            {actionState === 'unregistered' && canRegisterNow && (
-              <button
-                type="button"
-                className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
-                onClick={onRegisterTryout}
-                disabled={registering || starting}
-              >
-                {registering ? 'Mendaftarkan...' : 'Daftar Tryout'}
-              </button>
-            )}
-            {actionState === 'unregistered' && !canRegisterNow && (
-              <p className="text-sm text-gray-600">
-                {!windowOpen
-                  ? 'Periode tryout sudah berakhir — tidak bisa mendaftar.'
-                  : registrationClosed
-                    ? 'Pendaftaran sudah ditutup.'
-                    : 'Tidak dapat mendaftar saat ini.'}
-              </p>
-            )}
-            {actionState === 'registered' && showMulaiPertama && (
+
+            {actionState === 'unregistered' && canRegisterNow ? (
+              <>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Sebelum mendaftar, Anda <span className="font-medium text-gray-800">belum tercatat sebagai peserta</span>{' '}
+                  dan biasanya <span className="font-medium text-gray-800">tidak muncul di leaderboard</span>. Daftar dulu,
+                  lalu nama Anda mengikuti aturan server (mis. tampil meski skor 0 setelah terdaftar).
+                </p>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+                  onClick={onRegisterTryout}
+                  disabled={registering || starting}
+                >
+                  {registering ? 'Mendaftarkan...' : 'Daftar tryout'}
+                </button>
+                <a
+                  href={leaderboardHref}
+                  className="block w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-center text-gray-800 hover:bg-gray-50"
+                >
+                  Lihat leaderboard
+                </a>
+                <p className="text-xs text-gray-500">
+                  Leaderboard menampilkan peserta terdaftar / yang sudah berpartisipasi sesuai data server.
+                </p>
+              </>
+            ) : null}
+
+            {actionState === 'unregistered' && !canRegisterNow ? (
+              <>
+                <a
+                  href={leaderboardHref}
+                  className="block w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-center text-gray-800 hover:bg-gray-50"
+                >
+                  Lihat leaderboard
+                </a>
+                <p className="text-sm text-gray-600">
+                  {!windowOpen
+                    ? 'Periode tryout sudah berakhir — tidak bisa mendaftar.'
+                    : registrationClosed
+                      ? 'Pendaftaran sudah ditutup.'
+                      : serverStatus?.canRegister === false
+                        ? 'Server menandai pendaftaran tidak tersedia untuk akun ini saat ini (cek status tryout atau batas waktu).'
+                        : 'Tidak dapat mendaftar saat ini.'}
+                </p>
+              </>
+            ) : null}
+
+            {showBeforeOpenNotice ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-gray-700 space-y-1">
+                <p>
+                  <span className="font-semibold text-gray-900">Mulai ujian belum diizinkan.</span> Jadwal mulai:{' '}
+                  <span className="font-medium text-gray-900">{scheduleText}</span>. Tombol akan aktif otomatis setelah
+                  server mengizinkan (mis. setelah waktu mulai tercapai).
+                </p>
+                {serverStatus?.startDisabledReason ? (
+                  <p className="text-gray-600">
+                    Status:{' '}
+                    <code className="text-[11px] bg-white px-1 rounded">{serverStatus.startDisabledReason}</code>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {actionState === 'registered' && showMulaiPertama ? (
               <button
                 type="button"
                 className="w-full px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
                 onClick={onStartExam}
                 disabled={starting || registering}
               >
-                {starting ? 'Memulai...' : 'Mulai Ujian'}
+                {starting ? 'Memulai...' : 'Mulai mengerjakan'}
               </button>
-            )}
-            {actionState === 'registered' && canResumeExam && (
+            ) : null}
+            {actionState === 'registered' && canResumeExam ? (
               <>
                 <a
                   href={examHref}
@@ -333,15 +438,13 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
                   Lanjutkan ujian
                 </a>
                 <p className="text-xs text-gray-500">
-                  Sesi sudah dimulai (hanya sekali). Timer dan jawaban dilanjutkan dari cache perangkat ini.
+                  Sesi sudah dimulai. Timer dan jawaban dilanjutkan dari cache perangkat ini.
                 </p>
               </>
-            )}
-            {actionState === 'registered' && !canStartExamNow && (
-              <p className="text-sm text-gray-600">
-                Periode tryout sudah berakhir — tidak bisa memulai ujian.
-              </p>
-            )}
+            ) : null}
+            {actionState === 'registered' && !windowOpen ? (
+              <p className="text-sm text-gray-600">Periode tryout sudah berakhir — tidak bisa memulai ujian.</p>
+            ) : null}
             {actionState === 'attempted' && windowOpen && singleAttemptOnly && (
               <p className="text-sm text-gray-600">
                 Anda sudah mengerjakan tryout ini. Untuk sesi ini, percobaan ulang tidak ditampilkan (satu kali
@@ -358,6 +461,21 @@ export default function StudentTryoutDetailPage({ tryoutId }: { tryoutId: string
                 {starting ? 'Memulai Ulang...' : 'Mulai Ulang'}
               </button>
             )}
+
+            {actionState === 'registered' || actionState === 'attempted' ? (
+              <>
+                <a
+                  href={leaderboardHref}
+                  className="block w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-center text-gray-800 hover:bg-gray-50"
+                >
+                  Lihat leaderboard
+                </a>
+                <p className="text-xs text-gray-500">
+                  Setelah terdaftar, posisi Anda di papan skor mengikuti data server (biasanya setelah ada attempt atau
+                  setelah terdaftar, tergantung backend).
+                </p>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

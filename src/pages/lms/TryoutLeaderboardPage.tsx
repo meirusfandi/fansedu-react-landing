@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError,
+  getStudentTryoutStatus,
   getTryoutLeaderboard,
   getTryoutLeaderboardRank,
   type TryoutLeaderboardEntry,
   type TryoutLeaderboardRankResponse,
 } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
+import { formatTryoutStatistic } from '../../utils/formatTryoutDisplay'
 import { isLeaderboardRowCurrentUser } from '../../utils/leaderboardUser'
 
 interface TryoutLeaderboardPageProps {
@@ -20,25 +22,43 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<TryoutLeaderboardEntry[]>([])
   const [myRank, setMyRank] = useState<TryoutLeaderboardRankResponse | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  /** Siswa: false = belum daftar → jangan tampilkan kartu "Posisi Anda" (mengikuti alur daftar dulu). */
+  const [eligibleForPersonalRank, setEligibleForPersonalRank] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
     setMyRank(null)
+    setEligibleForPersonalRank(null)
     const rankPromise =
       role === 'student' ? getTryoutLeaderboardRank(tryoutId) : Promise.resolve(null)
-    Promise.all([getTryoutLeaderboard(tryoutId), rankPromise])
-      .then(([rows, rank]) => {
+    const statusPromise =
+      role === 'student' ? getStudentTryoutStatus(tryoutId).catch(() => null) : Promise.resolve(null)
+    Promise.all([getTryoutLeaderboard(tryoutId), rankPromise, statusPromise])
+      .then(([rows, rank, status]) => {
         if (cancelled) return
         setEntries(rows)
         setMyRank(rank)
+        if (role === 'student') {
+          if (rank?.inLeaderboard === false) {
+            setEligibleForPersonalRank(false)
+          } else if (status) {
+            setEligibleForPersonalRank(Boolean(status.isRegistered || status.hasAttempted))
+          } else {
+            setEligibleForPersonalRank(null)
+          }
+        } else {
+          setEligibleForPersonalRank(true)
+        }
       })
       .catch((err) => {
         if (cancelled) return
         setError(err instanceof ApiError ? err.message : 'Gagal memuat leaderboard.')
         setEntries([])
         setMyRank(null)
+        setEligibleForPersonalRank(role === 'student' ? null : true)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -47,7 +67,9 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
     return () => {
       cancelled = true
     }
-  }, [tryoutId, role])
+  }, [tryoutId, role, reloadKey])
+
+  const retry = useCallback(() => setReloadKey((k) => k + 1), [])
 
   const backHref = role === 'guru'
     ? `#/guru/tryouts/${encodeURIComponent(tryoutId)}`
@@ -63,30 +85,48 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
 
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Leaderboard Tryout</h1>
       <p className="text-gray-500 mb-6">
-        Peringkat peserta tryout{role === 'student' ? '. Jika Anda sudah mengerjakan, ringkasan posisi Anda ditampilkan di bawah.' : '.'}
+        {role === 'student'
+          ? 'Hanya peserta yang sudah mendaftar tryout yang tercatat di leaderboard (detail mengikuti server). Anda bisa melihat papan peringkat kapan saja.'
+          : 'Peringkat peserta tryout.'}
       </p>
 
-      {role === 'student' && myRank && (myRank.rank != null || myRank.score != null) ? (
+      {role === 'student' && !loading && eligibleForPersonalRank === false ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Anda belum mendaftar tryout ini — nama Anda biasanya{' '}
+          <span className="font-semibold">belum masuk leaderboard</span> sampai Anda mendaftar di halaman detail tryout.
+          Tabel di bawah menampilkan peserta terdaftar / yang sudah berpartisipasi sesuai data server.
+        </div>
+      ) : null}
+
+      {role === 'student' &&
+      eligibleForPersonalRank !== false &&
+      myRank &&
+      myRank.inLeaderboard !== false &&
+      (myRank.rank != null || myRank.score != null) ? (
         <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-800">
           <span className="font-semibold text-gray-900">Posisi Anda: </span>
           {myRank.rank != null ? <>peringkat #{myRank.rank}</> : null}
           {myRank.rank != null && myRank.score != null ? ' · ' : null}
-          {myRank.score != null ? <>skor {myRank.score}</> : null}
+          {myRank.score != null ? <>skor {formatTryoutStatistic(myRank.score)}</> : null}
           {myRank.percentile != null && Number.isFinite(myRank.percentile) ? (
-            <> · persentil {myRank.percentile}</>
+            <> · persentil {formatTryoutStatistic(myRank.percentile)}%</>
           ) : null}
         </div>
       ) : null}
 
       <div className="rounded-2xl border bg-white overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Memuat leaderboard...</div>
+          <div className="p-8 space-y-2" aria-busy="true" aria-label="Memuat leaderboard">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
         ) : error ? (
           <div className="p-8 text-center">
             <p className="text-sm text-amber-700 mb-4">{error}</p>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={retry}
               className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-medium hover:bg-gray-50"
             >
               Coba lagi
@@ -122,8 +162,8 @@ export default function TryoutLeaderboardPage({ tryoutId, role }: TryoutLeaderbo
                         <td className={`py-3 px-4 text-primary ${isMe ? 'font-bold' : 'font-semibold'}`}>{row.rank}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'font-medium'}`}>{row.userName}</td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{row.schoolName}</td>
-                        <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>
-                          {Number.isFinite(row.score) ? row.score : 0}
+                        <td className={`py-3 px-4 tabular-nums ${isMe ? 'font-bold' : ''}`}>
+                          {Number.isFinite(row.score) ? formatTryoutStatistic(row.score) : '0'}
                         </td>
                         <td className={`py-3 px-4 ${isMe ? 'font-bold' : ''}`}>{row.hasAttempt ? 'Ya' : 'Tidak'}</td>
                       </tr>

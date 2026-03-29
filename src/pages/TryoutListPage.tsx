@@ -1,8 +1,9 @@
 import '../App.css'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ApiError, type OpenTryoutItem } from '../lib/api'
 import { getTryoutScheduleText } from '../data/tryoutList'
 import { useAuthStore } from '../store/auth'
+import { TryoutListSkeleton } from '../components/tryout/TryoutListSkeleton'
 import { fetchVisibleTryoutsForViewer } from '../utils/fetchVisibleTryouts'
 import { lmsDashboardHash } from '../utils/lmsDashboard'
 
@@ -13,6 +14,7 @@ export default function TryoutListPage() {
   const [tryouts, setTryouts] = useState<OpenTryoutItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
   const loggedIn = !!(user && token)
@@ -22,18 +24,30 @@ export default function TryoutListPage() {
   const preferStudentOpen = loggedIn && !isGuru
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     fetchVisibleTryoutsForViewer({ preferStudentOpen })
       .then((list) => {
-        setTryouts(list)
-        setError(null)
+        if (!cancelled) {
+          setTryouts(list)
+          setError(null)
+        }
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
-        setTryouts([])
+        if (!cancelled) {
+          setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar tryout.')
+          setTryouts([])
+        }
       })
-      .finally(() => setLoading(false))
-  }, [preferStudentOpen])
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [preferStudentOpen, reloadKey])
+
+  const retryLoad = useCallback(() => setReloadKey((k) => k + 1), [])
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
@@ -95,17 +109,11 @@ export default function TryoutListPage() {
         </div>
 
         {loading ? (
-          <div className="border border-[var(--border)] rounded-2xl p-12 bg-[var(--card)] text-center text-[var(--fg-muted)]">
-            Memuat daftar tryout...
-          </div>
+          <TryoutListSkeleton rows={4} />
         ) : error ? (
           <div className="border border-[var(--border)] rounded-2xl p-12 bg-[var(--card)] text-center">
             <p className="text-[var(--fg-muted)] mb-4">{error}</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="btn-secondary px-6 py-3 rounded-full font-medium"
-            >
+            <button type="button" onClick={retryLoad} className="btn-secondary px-6 py-3 rounded-full font-medium">
               Coba lagi
             </button>
           </div>

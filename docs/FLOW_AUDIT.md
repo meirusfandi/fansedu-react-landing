@@ -81,7 +81,7 @@ Dokumen ini merangkum alur dari landing page hingga proses pembelian kelas dan d
 ## 5. Bagian yang Perlu Diperhatikan ke Depan
 
 - **Guest checkout:** Setelah bayar, akses kursus bisa bergantung pada backend (magic link, auto-login, atau wajib login dengan akun yang terdaftar). Halaman success sudah mengingatkan untuk masuk jika punya akun.
-- **Tryout — sisi backend:** Skor, persentil, `graded`, pembahasan (`GET …/review`), analisis guru (`GET …/analysis`), dan simpan lembar (`PUT …/paper`) harus konsisten di API; frontend sudah menampilkan fallback/teks penjelasan bila endpoint belum ada.
+- **Tryout — sisi backend:** Skor, persentil, `graded`, pembahasan (`GET …/review`), analisis guru (`GET …/analysis`), dan simpan lembar (`PUT …/paper`) harus konsisten di API; frontend sudah menampilkan fallback/teks penjelasan bila endpoint belum ada. **Alur daftar → leaderboard → mulai setelah `opensAt`:** lihat checklist dan kontrak API di [`docs/TRYOUT_BACKEND_CONTRACT.md`](./TRYOUT_BACKEND_CONTRACT.md).
 - **Publik vs siswa — sumber data:** Daftar publik memakai `GET /tryouts?status=open`; LMS siswa memakai `GET /student/tryouts/open` (dengan fallback). Jika kedua sumber tidak sinkron, pertimbangkan satu endpoint publik yang sudah difilter bidang atau dokumentasikan perbedaan itu.
 - **Sesi ujian:** Cache `sessionStorage` dipisah per `tryoutId` (`fansedu-tryout-exam:<id>`), sehingga siswa bisa punya progres berbeda di beberapa tryout tanpa saling menimpa (migrasi otomatis dari kunci global lama).
 - **Katalog:** Data list dari `GET /api/v1/packages`. Filter/search/pagination di client; jika backend menyediakan query param, bisa diseragamkan.

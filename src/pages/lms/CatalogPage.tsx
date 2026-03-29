@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { CourseCard } from '../../components/lms/CourseCard'
-import { getPackages, packageToCourse } from '../../lib/api'
+import { ApiError, getPackages, packageToCourse } from '../../lib/api'
 import type { Course } from '../../types/course'
 
 const CATEGORIES = ['Semua', 'Program', 'Bundle']
@@ -21,7 +21,7 @@ export default function CatalogPage() {
     getPackages()
       .then((list) => setPackages(list.map(packageToCourse)))
       .catch((err) => {
-        setError(err?.message || 'Gagal memuat katalog.')
+        setError(err instanceof ApiError ? err.message : 'Gagal memuat katalog.')
         setPackages([])
       })
       .finally(() => setLoading(false))

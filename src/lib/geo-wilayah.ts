@@ -5,6 +5,7 @@
  * @see docs/GEO_REDIS_BACKEND.md
  */
 import { API_BASE } from './api-config'
+import { getUserFacingHttpMessage } from './user-facing-error'
 
 export interface GeoProvinceItem {
   id: string
@@ -99,7 +100,7 @@ export async function fetchProvinces(options?: { cacheTtlMs?: number }): Promise
   if (cached && cached.length > 0) return cached
 
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Gagal memuat provinsi (${res.status})`)
+  if (!res.ok) throw new Error(getUserFacingHttpMessage(res.status))
   const rows: unknown = await res.json()
   const parsed = parseWilayahRows(rows) as GeoProvinceItem[]
   writeCache(cacheKey, parsed)
@@ -122,7 +123,7 @@ export async function fetchRegenciesByProvince(
   if (cached && cached.length > 0) return cached
 
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Gagal memuat kabupaten/kota (${res.status})`)
+  if (!res.ok) throw new Error(getUserFacingHttpMessage(res.status))
   const rows: unknown = await res.json()
   const parsed = parseWilayahRows(rows) as GeoCityItem[]
   writeCache(cacheKey, parsed)

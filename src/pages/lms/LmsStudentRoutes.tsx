@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import type { LmsRoute } from './lmsRoutes'
 import { StudentLayout } from './StudentLayout'
 import StudentDashboardPage from './StudentDashboardPage'
@@ -7,7 +8,8 @@ import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
 import StudentTryoutHistoryPage from './StudentTryoutHistoryPage'
 import StudentTryoutDetailPage from './StudentTryoutDetailPage'
-import StudentTryoutExamPage from './StudentTryoutExamPage'
+
+const StudentTryoutExamPage = lazy(() => import('./StudentTryoutExamPage'))
 import StudentCodingProblemPage from './StudentCodingProblemPage'
 import StudentTransactionsPage from './StudentTransactionsPage'
 import StudentCertificatesPage from './StudentCertificatesPage'
@@ -56,7 +58,17 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
     case 'student-tryout-exam':
       return (
         <StudentLayout currentPath="/student/tryout">
-          <StudentTryoutExamPage tryoutId={route.studentTryoutId ?? ''} />
+          <Suspense
+            fallback={
+              <div className="py-10 px-1 space-y-4" aria-busy="true" aria-label="Memuat halaman ujian">
+                <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
+                <div className="h-32 rounded-2xl border border-gray-200 bg-gray-50 animate-pulse" />
+                <p className="text-sm text-gray-500">Memuat lembar ujian…</p>
+              </div>
+            }
+          >
+            <StudentTryoutExamPage tryoutId={route.studentTryoutId ?? ''} />
+          </Suspense>
         </StudentLayout>
       )
     case 'student-leaderboard':

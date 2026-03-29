@@ -7,10 +7,12 @@
 import { clearAuthOnUnauthorized, clearStoredAuthOnly } from './auth-clear'
 import { recordApiClientFailure, recordHttpApiFailure } from './api-error-log'
 import { API_BASE, PACKAGES_API_URL } from './api-config'
+import { getUserFacingHttpMessage, USER_FACING_SYSTEM_ERROR } from './user-facing-error'
 import type { Course } from '../types/course'
 import { decodeJwtPayload, normalizeAuthFields } from '../types/auth'
 import { splitPhoneForRegisterApi } from '../utils/phone'
-import { TRYOUT_EXAM_MOCK_QUESTIONS } from '../data/tryoutExamMockPaper'
+import tryoutExamSampleExport from '../data/tryoutExamSampleExport.json'
+import { extractModuleFromPayload, type TryoutModuleStat } from '../utils/tryoutModuleAnalysis'
 
 function getStoredToken(): string | null {
   try {
@@ -54,20 +56,47 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
       message: err instanceof Error ? err.message : String(err),
       errorName: err instanceof Error ? err.name : 'Error',
     })
-    throw err
+    throw new ApiError(0, getUserFacingHttpMessage(0), {})
   }
+}
+
+/** Pesan dari body JSON writeError: `{ "error": { "code", "message" } }` atau bentuk datar. */
+export function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>
+    if (typeof o.message === 'string' && o.message.trim()) return o.message.trim()
+    const err = o.error
+    if (typeof err === 'string' && err.trim()) return err.trim()
+    if (err && typeof err === 'object' && !Array.isArray(err)) {
+      const e = err as Record<string, unknown>
+      if (typeof e.message === 'string' && e.message.trim()) return e.message.trim()
+    }
+  }
+  return fallback
+}
+
+/** Kode stabil API v1 (`error.code`, UPPER_SNAKE) — untuk log / branching opsional; jangan tampilkan mentah ke user. */
+export function extractApiErrorCode(data: unknown): string | undefined {
+  if (data && typeof data === 'object') {
+    const err = (data as Record<string, unknown>).error
+    if (err && typeof err === 'object' && !Array.isArray(err)) {
+      const c = (err as Record<string, unknown>).code
+      if (typeof c === 'string' && c.trim()) return c.trim()
+    }
+  }
+  return undefined
 }
 
 export class ApiError extends Error {
   status: number
-  data?: { error?: string; message?: string }
+  data?: { error?: string | { code?: string; message?: string }; message?: string }
 
   constructor(
     status: number,
     message: string,
-    data?: { error?: string; message?: string }
+    data?: { error?: string | { code?: string; message?: string }; message?: string },
   ) {
-    super(message || data?.message || data?.error || `Error ${status}`)
+    super(message?.trim() ? message : USER_FACING_SYSTEM_ERROR)
     this.name = 'ApiError'
     this.status = status
     this.data = data
@@ -85,16 +114,13 @@ async function handleResponse<T>(
   const method = meta?.method
 
   if (res.status === 401) {
-    recordHttpApiFailure(res, data, { method, message: 'Tidak terotorisasi (401)' })
+    const technical = extractApiErrorMessage(data, 'Tidak terotorisasi (401)')
+    recordHttpApiFailure(res, data, { method, message: technical })
     const errBody = data as { message?: string; error?: string }
-    const fromServer =
-      (typeof errBody.message === 'string' && errBody.message.trim()) ||
-      (typeof errBody.error === 'string' && errBody.error.trim()) ||
-      ''
 
     if (meta?.on401 === 'credentials') {
       clearStoredAuthOnly()
-      throw new ApiError(401, fromServer || 'Email atau kata sandi tidak valid.', errBody)
+      throw new ApiError(401, 'Email atau kata sandi tidak valid.', errBody)
     }
 
     clearAuthOnUnauthorized()
@@ -128,11 +154,10 @@ async function handleResponse<T>(
   }
 
   if (!res.ok) {
-    const errBody = data as unknown as { message?: string; error?: string }
-    const msg =
-      typeof errBody.message === 'string' ? errBody.message : res.statusText
-    recordHttpApiFailure(res, data, { method, message: msg })
-    throw new ApiError(res.status, msg, errBody)
+    const errBody = data as unknown as { message?: string; error?: string | { code?: string; message?: string } }
+    const technical = extractApiErrorMessage(data, res.statusText)
+    recordHttpApiFailure(res, data, { method, message: technical })
+    throw new ApiError(res.status, getUserFacingHttpMessage(res.status), errBody)
   }
   return data as T
 }
@@ -223,12 +248,9 @@ export async function apiGetRoles(options?: { force?: boolean }): Promise<RoleLi
       /** Jangan pakai handleResponse: 401 di sini tidak boleh memicu clear sesi (daftar sebagai guest). */
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        recordHttpApiFailure(res, data, { method: 'GET' })
-        throw new ApiError(
-          res.status,
-          (data as { message?: string }).message || res.statusText,
-          data as { error?: string; message?: string },
-        )
+        const technical = extractApiErrorMessage(data, res.statusText)
+        recordHttpApiFailure(res, data, { method: 'GET', message: technical })
+        throw new ApiError(res.status, getUserFacingHttpMessage(res.status), data as { error?: string; message?: string })
       }
       const raw = await res.json().catch(() => null)
       const items = parseRolesResponse(raw)
@@ -380,7 +402,7 @@ export async function apiGetMe(): Promise<MeResponse> {
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
       clearAuthOnUnauthorized()
-      throw new ApiError(408, 'Validasi sesi memakan waktu terlalu lama.', {})
+      throw new ApiError(408, getUserFacingHttpMessage(408), {})
     }
     throw e
   } finally {
@@ -510,8 +532,9 @@ export async function getPackages(options?: { force?: boolean }): Promise<Packag
       })
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}))
-        recordHttpApiFailure(res, errBody, { method: 'GET' })
-        throw new ApiError(res.status, res.statusText)
+        const technical = extractApiErrorMessage(errBody, res.statusText)
+        recordHttpApiFailure(res, errBody, { method: 'GET', message: technical })
+        throw new ApiError(res.status, getUserFacingHttpMessage(res.status), errBody)
       }
       const data = await res.json().catch(() => null)
       const list = parsePackagesResponse(data)
@@ -806,8 +829,9 @@ export async function submitPaymentProof(orderId: string, form: FormData): Promi
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    recordHttpApiFailure(res, data, { method: 'POST' })
-    throw new ApiError(res.status, (data as { message?: string }).message || res.statusText, data as { error?: string; message?: string })
+    const technical = extractApiErrorMessage(data, res.statusText)
+    recordHttpApiFailure(res, data, { method: 'POST', message: technical })
+    throw new ApiError(res.status, getUserFacingHttpMessage(res.status), data as { error?: string; message?: string })
   }
 }
 
@@ -915,6 +939,12 @@ export interface TryoutStartResponse {
 export interface TryoutExamQuestion {
   id: string
   order: number
+  /** Grup modul/topik dari API (`module`, `bidang`, `tags`, dll.) — untuk analisis pasca-submit. */
+  moduleKey?: string
+  moduleLabel?: string
+  /** Dari QuestionResponse backend (tanpa kunci jawaban di lembar siswa). */
+  bidang?: string
+  tags?: string[]
   /** Teks ringkas / judul (opsional jika ada bodyHtml) */
   prompt: string
   /** HTML dari field `body` backend (render dengan QuestionBody) */
@@ -940,6 +970,8 @@ export interface TryoutAttemptPaper {
 
 export interface TryoutAttemptSubmitResult {
   score?: number
+  /** Skor maksimum lembar (SubmitResponse); 0 jika tidak ada di DB. */
+  maxScore: number
   message?: string
   submittedAt?: string
   percentile?: number
@@ -948,17 +980,38 @@ export interface TryoutAttemptSubmitResult {
   graded?: boolean
   /** Contoh: pending, completed — dari API bila ada. */
   gradingStatus?: string
+  /**
+   * Dari POST …/submit (`dto.SubmitResponse.review` / QuestionReviewOutcome[]).
+   * Jika terisi, UI memakai ini dan boleh melewati GET …/review terpisah.
+   */
+  review?: TryoutAttemptReviewRow[]
+  /**
+   * Dari POST …/submit (`moduleAnalysis` — alias API: `moduleSummary` / `module_summary`).
+   * Agregat per modul: benar / salah / belum dinilai; sumber utama untuk tabel analisis modul.
+   */
+  moduleAnalysis?: TryoutModuleStat[]
 }
 
 /** Satu baris pembahasan pasca-submit (GET …/review — opsional di backend). */
 export interface TryoutAttemptReviewRow {
   questionId: string
+  moduleKey?: string
+  moduleLabel?: string
+  moduleId?: string
+  moduleTitle?: string
+  bidang?: string
+  tags?: string[]
+  /** Skor diperoleh pada soal ini (kontrak backend: `scoreGot`). */
+  scoreGot?: number
+  /** Skor maks soal (bila dikirim per baris review). */
+  maxScore?: number
   order?: number
   prompt?: string
   yourAnswer?: string
   correctAnswer?: string
   explanation?: string
-  isCorrect?: boolean
+  /** `null` = server eksplisit: belum bisa dinilai (bukan benar/salah). */
+  isCorrect?: boolean | null
 }
 
 /** Body PUT /attempts/:attemptId/answers/:questionId */
@@ -974,6 +1027,9 @@ export interface StudentAttemptListItem {
   tryoutTitle?: string
   status?: string
   score?: number
+  maxScore?: number
+  percentile?: number
+  timeSecondsSpent?: number
   startedAt?: string
   submittedAt?: string
 }
@@ -984,11 +1040,19 @@ export interface StudentAttemptDetail {
   tryoutTitle?: string
   status?: string
   score?: number
+  maxScore: number
+  percentile?: number
+  timeSecondsSpent?: number
   startedAt?: string
   submittedAt?: string
+  /** Dari GET attempt setelah submit (TryoutAnalysisForAttempt). */
+  review?: TryoutAttemptReviewRow[]
+  moduleAnalysis?: TryoutModuleStat[]
 }
 
 export interface TryoutLeaderboardRankResponse {
+  /** BE baru: false = belum daftar / belum ada entri leaderboard untuk user ini. */
+  inLeaderboard?: boolean
   rank?: number
   score?: number
   percentile?: number
@@ -1000,6 +1064,13 @@ export interface StudentTryoutStatusResponse {
   canRetake: boolean
   attemptCount?: number
   lastAttemptId?: string
+  /** Jadwal & gate dari BE (sumber utama untuk tombol Daftar / Mulai). */
+  opensAt?: string
+  closesAt?: string
+  tryoutStatus?: string
+  canRegister?: boolean
+  canStartExam?: boolean
+  startDisabledReason?: string
 }
 
 export interface TryoutLeaderboardEntry {
@@ -1019,6 +1090,16 @@ function toIntSafe(v: unknown, fallback = 14): number {
     if (Number.isFinite(n)) return Math.max(1, Math.trunc(n))
   }
   return fallback
+}
+
+/** Skor / persentil dari API (bisa desimal, mis. 85.5). */
+function toFiniteNumber(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v.trim())
+    if (Number.isFinite(n)) return n
+  }
+  return undefined
 }
 
 function extractTryoutListArray(raw: unknown): Record<string, unknown>[] {
@@ -1060,7 +1141,9 @@ function parseOptionalPositiveInt(value: unknown): number | undefined {
 /** Jumlah soal dari payload item tryout (list/detail). */
 function parseTryoutMetaQuestionCount(item: Record<string, unknown>): number | undefined {
   return parseOptionalPositiveInt(
-    item.questionCount ??
+    item.questionsCount ??
+      item.questions_count ??
+      item.questionCount ??
       item.question_count ??
       item.totalQuestions ??
       item.total_questions ??
@@ -1170,7 +1253,7 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
             ? 'Gratis'
             : typeof badgeRaw === 'number'
               ? String(badgeRaw)
-              : 'Gratis'
+              : undefined
 
       const durationMinutes = parseDurationMinutesFromPayload(item)
       const questionCount = parseTryoutMetaQuestionCount(item)
@@ -1187,7 +1270,7 @@ function parseOpenTryoutsResponse(raw: unknown): OpenTryoutItem[] {
         intervalDays,
         registrationDeadlineAt: registrationDeadlineAtRaw ? String(registrationDeadlineAtRaw) : undefined,
         closeAt: closeAtRaw ? String(closeAtRaw).trim() : undefined,
-        badge: badgeStr,
+        ...(badgeStr != null ? { badge: badgeStr } : {}),
         isRegistered: Boolean(
           item.isRegistered ??
           item.is_registered ??
@@ -1278,18 +1361,31 @@ export async function getStudentAttempts(): Promise<StudentAttemptListItem[]> {
   const listRaw = Array.isArray(payload.data)
     ? payload.data
     : (Array.isArray(data) ? data : [])
-  return (listRaw as Record<string, unknown>[]).map((item) => ({
-    id: String(item.id ?? item.attemptId ?? item.attempt_id ?? ''),
-    tryoutId: String(item.tryoutId ?? item.tryout_id ?? ''),
-    tryoutTitle: item.tryoutTitle != null ? String(item.tryoutTitle) : (item.tryout_title != null ? String(item.tryout_title) : undefined),
-    status: item.status != null ? String(item.status) : undefined,
-    score: toInt(item.score) ?? undefined,
-    startedAt: item.startedAt != null ? String(item.startedAt) : (item.started_at != null ? String(item.started_at) : undefined),
-    submittedAt:
-      item.submittedAt != null
-        ? String(item.submittedAt)
-        : (item.submitted_at != null ? String(item.submitted_at) : undefined),
-  })).filter((row) => Boolean(row.id))
+  return (listRaw as Record<string, unknown>[]).map((item) => {
+    const tryoutIdRaw =
+      item.tryoutId ??
+      item.tryout_id ??
+      item.tryoutSessionId ??
+      item.tryout_session_id
+    return {
+      id: String(item.id ?? item.attemptId ?? item.attempt_id ?? ''),
+      tryoutId: tryoutIdRaw != null ? String(tryoutIdRaw) : '',
+      tryoutTitle:
+        item.tryoutTitle != null
+          ? String(item.tryoutTitle)
+          : (item.tryout_title != null ? String(item.tryout_title) : undefined),
+      status: item.status != null ? String(item.status) : undefined,
+      score: toFiniteNumber(item.score),
+      maxScore: toFiniteNumber(item.maxScore ?? item.max_score),
+      percentile: toFiniteNumber(item.percentile),
+      timeSecondsSpent: toFiniteNumber(item.timeSecondsSpent ?? item.time_seconds_spent),
+      startedAt: item.startedAt != null ? String(item.startedAt) : (item.started_at != null ? String(item.started_at) : undefined),
+      submittedAt:
+        item.submittedAt != null
+          ? String(item.submittedAt)
+          : (item.submitted_at != null ? String(item.submitted_at) : undefined),
+    }
+  }).filter((row) => Boolean(row.id))
 }
 
 /** GET /student/attempts/:attemptId */
@@ -1302,16 +1398,28 @@ export async function getStudentAttemptDetail(attemptId: string): Promise<Studen
     data.data != null && typeof data.data === 'object' && !Array.isArray(data.data)
       ? (data.data as Record<string, unknown>)
       : data
+  const tryoutIdRaw = o.tryoutId ?? o.tryout_id ?? o.tryoutSessionId ?? o.tryout_session_id
+  const layers: Record<string, unknown>[] = [o]
+  const embeddedReview = pickEmbeddedReviewFromSubmit(o, layers)
+  const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(o, layers)
+  const maxScoreNum = toFiniteNumber(o.maxScore ?? o.max_score) ?? 0
   return {
     id: String(o.id ?? attemptId),
-    tryoutId: o.tryoutId != null ? String(o.tryoutId) : (o.tryout_id != null ? String(o.tryout_id) : undefined),
+    tryoutId: tryoutIdRaw != null ? String(tryoutIdRaw) : undefined,
     tryoutTitle:
       o.tryoutTitle != null ? String(o.tryoutTitle) : (o.tryout_title != null ? String(o.tryout_title) : undefined),
     status: o.status != null ? String(o.status) : undefined,
-    score: toInt(o.score) ?? undefined,
+    score: toFiniteNumber(o.score),
+    maxScore: maxScoreNum,
+    percentile: toFiniteNumber(o.percentile),
+    timeSecondsSpent: toFiniteNumber(o.timeSecondsSpent ?? o.time_seconds_spent),
     startedAt: o.startedAt != null ? String(o.startedAt) : (o.started_at != null ? String(o.started_at) : undefined),
     submittedAt:
       o.submittedAt != null ? String(o.submittedAt) : (o.submitted_at != null ? String(o.submitted_at) : undefined),
+    ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
+    ...(embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0
+      ? { moduleAnalysis: embeddedModuleAnalysis }
+      : {}),
   }
 }
 
@@ -1320,12 +1428,22 @@ export async function getTryoutLeaderboardRank(tryoutId: string): Promise<Tryout
   const res = await apiFetch(`${API_BASE}/tryouts/${encodeURIComponent(tryoutId)}/leaderboard/rank`, {
     headers: authHeaders(),
   })
-  if (res.status === 401 || res.status === 403 || res.status === 404) return null
-  const data = await handleResponse<Record<string, unknown>>(res)
+  if (res.status === 401 || res.status === 404) return null
+  if (res.status === 403) return null
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok) {
+    const technical = extractApiErrorMessage(data, res.statusText)
+    recordHttpApiFailure(res, data, { method: 'GET', message: technical })
+    throw new ApiError(res.status, getUserFacingHttpMessage(res.status), data as ApiError['data'])
+  }
   const o =
     data.data != null && typeof data.data === 'object' && !Array.isArray(data.data)
       ? (data.data as Record<string, unknown>)
       : data
+  const inLbRaw = o.inLeaderboard ?? o.in_leaderboard
+  if (inLbRaw === false) {
+    return { inLeaderboard: false }
+  }
   const rank = toInt(o.rank ?? o.position)
   const score = parseLeaderboardRowScore(o)
   const pctRaw = o.percentile ?? o.percentileRank ?? o.percentile_rank
@@ -1334,6 +1452,7 @@ export async function getTryoutLeaderboardRank(tryoutId: string): Promise<Tryout
       ? pctRaw
       : (typeof pctRaw === 'string' && pctRaw.trim() ? Number(pctRaw) : undefined)
   return {
+    inLeaderboard: inLbRaw === true ? true : undefined,
     rank: rank ?? undefined,
     score: score ?? undefined,
     percentile: percentile != null && Number.isFinite(percentile) ? percentile : undefined,
@@ -1454,16 +1573,28 @@ export async function startStudentTryoutWithFallback(tryoutId: string): Promise<
 }
 
 function buildMockTryoutAttemptPaper(): TryoutAttemptPaper {
+  const sampleQs = tryoutExamSampleExport.questions as Array<{
+    id: string
+    order?: number
+    prompt: string
+    questionType?: string
+    options: { key: string; label: string }[]
+    tags?: string[]
+  }>
   return {
     title: 'Tryout (mode demo lokal)',
     durationMinutes: 60,
-    questions: TRYOUT_EXAM_MOCK_QUESTIONS.map((q, i) => ({
-      id: q.id,
-      order: i + 1,
-      prompt: q.prompt,
-      questionType: 'multiple_choice' as const,
-      options: q.options,
-    })),
+    questions: sampleQs.map((q, i) => {
+      const mod = extractModuleFromPayload(q as unknown as Record<string, unknown>)
+      return {
+        id: q.id,
+        order: q.order ?? i + 1,
+        prompt: q.prompt,
+        questionType: 'multiple_choice' as const,
+        options: q.options,
+        ...(mod ? { moduleKey: mod.moduleKey, moduleLabel: mod.moduleLabel } : {}),
+      }
+    }),
   }
 }
 
@@ -1513,6 +1644,29 @@ function optionsFromQuestionItem(item: Record<string, unknown>): { key: string; 
   return out
 }
 
+function normalizeTagsField(raw: unknown): string[] | undefined {
+  if (Array.isArray(raw)) {
+    const out = raw
+      .filter((t): t is string => typeof t === 'string' && t.trim())
+      .map((t) => t.trim())
+    return out.length ? out : undefined
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const p = JSON.parse(raw) as unknown
+      if (Array.isArray(p)) {
+        const out = p
+          .filter((t): t is string => typeof t === 'string' && t.trim())
+          .map((t) => t.trim())
+        return out.length ? out : undefined
+      }
+    } catch {
+      /* bukan JSON array */
+    }
+  }
+  return undefined
+}
+
 function detectQuestionType(item: Record<string, unknown>): 'multiple_choice' | 'short' | 'true_false' {
   const raw = String(item.type ?? item.question_type ?? item.questionType ?? '')
     .toLowerCase()
@@ -1527,6 +1681,14 @@ function detectQuestionType(item: Record<string, unknown>): 'multiple_choice' | 
 
 function normalizeTryoutExamQuestion(item: Record<string, unknown>, index: number): TryoutExamQuestion | null {
   const id = String(item.id ?? item.question_id ?? item.questionId ?? `q-${index + 1}`)
+  const sortOrderRaw =
+    item.sortOrder ?? item.sort_order ?? item.order ?? item.number ?? item.question_number ?? item.questionNumber
+  let orderNum = index + 1
+  if (typeof sortOrderRaw === 'number' && Number.isFinite(sortOrderRaw)) orderNum = Math.max(1, Math.trunc(sortOrderRaw))
+  else if (typeof sortOrderRaw === 'string' && sortOrderRaw.trim()) {
+    const n = Number(sortOrderRaw.trim())
+    if (Number.isFinite(n)) orderNum = Math.max(1, Math.trunc(n))
+  }
   const questionType = detectQuestionType(item)
   const bodyRaw = item.body ?? item.stem ?? item.stem_html
   const bodyStr = typeof bodyRaw === 'string' ? bodyRaw : ''
@@ -1557,10 +1719,18 @@ function normalizeTryoutExamQuestion(item: Record<string, unknown>, index: numbe
   }
   if (questionType === 'multiple_choice' && options.length < 2) return null
 
+  const imageUrlsFirst = (() => {
+    const arr = item.imageUrls ?? item.image_urls
+    if (!Array.isArray(arr)) return null
+    for (const u of arr) {
+      if (typeof u === 'string' && u.trim()) return u.trim()
+    }
+    return null
+  })()
   const imageUrl =
     (typeof item.image_url === 'string' && item.image_url) ||
     (typeof item.imageUrl === 'string' && item.imageUrl) ||
-    null
+    imageUrlsFirst
 
   const savedRaw =
     item.selectedOption ??
@@ -1573,9 +1743,14 @@ function normalizeTryoutExamQuestion(item: Record<string, unknown>, index: numbe
   const atRaw = item.answerText ?? item.answer_text
   const savedAnswerText = typeof atRaw === 'string' && atRaw.trim() ? atRaw.trim() : undefined
 
+  const mod = extractModuleFromPayload(item)
+  const bidangRaw = item.bidang
+  const bidang = typeof bidangRaw === 'string' && bidangRaw.trim() ? bidangRaw.trim() : undefined
+  const tags = normalizeTagsField(item.tags)
+
   return {
     id,
-    order: index + 1,
+    order: orderNum,
     prompt,
     bodyHtml,
     imageUrl,
@@ -1583,6 +1758,9 @@ function normalizeTryoutExamQuestion(item: Record<string, unknown>, index: numbe
     options,
     savedSelectedOption,
     savedAnswerText,
+    ...(mod ? { moduleKey: mod.moduleKey, moduleLabel: mod.moduleLabel } : {}),
+    ...(bidang ? { bidang } : {}),
+    ...(tags?.length ? { tags } : {}),
   }
 }
 
@@ -1673,6 +1851,7 @@ function parseTryoutAttemptPaperPayload(raw: Record<string, unknown>): TryoutAtt
   const questions = items
     .map((item, idx) => normalizeTryoutExamQuestion(item, idx))
     .filter((q): q is TryoutExamQuestion => q != null)
+    .sort((a, b) => a.order - b.order)
   return { title, durationMinutes, endsAt, timeLeftSeconds, questions }
 }
 
@@ -1706,6 +1885,10 @@ function buildGuruTryoutPaperPutBody(paper: TryoutAttemptPaper): Record<string, 
       body_html: q.bodyHtml ?? undefined,
       image_url: q.imageUrl ?? undefined,
       options: q.options.map((o) => ({ key: o.key, label: o.label })),
+      ...(q.moduleKey ? { module_id: q.moduleKey, module_key: q.moduleKey } : {}),
+      ...(q.moduleLabel ? { module_title: q.moduleLabel, module_name: q.moduleLabel } : {}),
+      ...(q.bidang ? { bidang: q.bidang } : {}),
+      ...(q.tags?.length ? { tags: q.tags } : {}),
     })),
   }
 }
@@ -1755,7 +1938,7 @@ export async function saveGuruTryoutPaperToApi(tryoutId: string, paper: TryoutAt
   }
   throw new ApiError(
     404,
-    'Backend belum mengexpose simpan lembar (404/405). Implementasikan salah satu: PUT atau POST ke /guru/tryouts/:tryoutId/paper (atau /instructor/... / /admin/...) dengan body { title, duration_minutes, questions: [...] }.',
+    'Tidak dapat menyimpan lembar saat ini. Silakan coba lagi nanti atau hubungi admin.',
     {},
   )
 }
@@ -1798,10 +1981,11 @@ export async function putAttemptAnswer(
   body: PutAttemptAnswerBody,
 ): Promise<void> {
   if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') return
+  /** Backend Go: AnswerPutRequest memakai json camelCase (selectedOption, answerText, isMarked). */
   const payload: Record<string, unknown> = {}
-  if (body.answerText != null && body.answerText !== '') payload.answer_text = body.answerText
-  if (body.selectedOption != null && body.selectedOption !== '') payload.selected_option = body.selectedOption
-  if (body.isMarked === true) payload.is_marked = true
+  if (body.answerText != null && body.answerText !== '') payload.answerText = body.answerText
+  if (body.selectedOption != null && body.selectedOption !== '') payload.selectedOption = body.selectedOption
+  if (body.isMarked !== undefined) payload.isMarked = body.isMarked
   const res = await apiFetch(
     `${API_BASE}/attempts/${encodeURIComponent(attemptId)}/answers/${encodeURIComponent(questionId)}`,
     {
@@ -1819,6 +2003,7 @@ export async function putAttemptAnswer(
 export async function submitTryoutAttempt(attemptId: string): Promise<TryoutAttemptSubmitResult> {
   if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') {
     return {
+      maxScore: 0,
       message: 'Terima kasih — mode demo: submit lokal.',
       submittedAt: new Date().toISOString(),
     }
@@ -1833,7 +2018,17 @@ export async function submitTryoutAttempt(attemptId: string): Promise<TryoutAtte
 
 function parseAttemptReviewRowsFromPayload(raw: unknown): TryoutAttemptReviewRow[] {
   const pickArray = (o: Record<string, unknown>): unknown[] | null => {
-    const keys = ['items', 'questions', 'breakdown', 'results', 'rows', 'review']
+    const keys = [
+      'items',
+      'questions',
+      'breakdown',
+      'results',
+      'rows',
+      'review',
+      'outcomes',
+      'questionReviewOutcomes',
+      'question_review_outcomes',
+    ]
     for (const k of keys) {
       const v = o[k]
       if (Array.isArray(v) && v.length > 0) return v
@@ -1874,23 +2069,44 @@ function parseAttemptReviewRowsFromPayload(raw: unknown): TryoutAttemptReviewRow
       o.correctAnswer ?? o.correct_answer ?? o.answerKey ?? o.answer_key ?? '',
     ).trim()
     const explanation = String(o.explanation ?? o.pembahasan ?? o.rationale ?? '').trim()
-    const ic = o.isCorrect ?? o.is_correct
-    const isCorrect =
-      typeof ic === 'boolean'
-        ? ic
-        : ic === 1 || ic === '1' || ic === 'true'
-          ? true
-          : ic === 0 || ic === '0' || ic === 'false'
-            ? false
-            : undefined
+    const ic =
+      Object.prototype.hasOwnProperty.call(o, 'isCorrect')
+        ? o.isCorrect
+        : Object.prototype.hasOwnProperty.call(o, 'is_correct')
+          ? o.is_correct
+          : undefined
+    let isCorrect: boolean | null | undefined
+    if (ic === null) isCorrect = null
+    else if (typeof ic === 'boolean') isCorrect = ic
+    else if (ic === 1 || ic === '1' || ic === 'true') isCorrect = true
+    else if (ic === 0 || ic === '0' || ic === 'false') isCorrect = false
+    const rowMod = extractModuleFromPayload(o)
+    const mk = String(o.moduleKey ?? o.module_key ?? '').trim()
+    const ml = String(o.moduleLabel ?? o.module_label ?? '').trim()
+    const mid = String(o.moduleId ?? o.module_id ?? '').trim()
+    const mt = String(o.moduleTitle ?? o.module_title ?? '').trim()
+    const bid = typeof o.bidang === 'string' && o.bidang.trim() ? o.bidang.trim() : undefined
+    const tags = normalizeTagsField(o.tags)
+    const scoreGot = tryParseNumberField(o.scoreGot ?? o.score_got ?? o.pointsEarned ?? o.points_earned)
+    const rowMaxScore = tryParseNumberField(o.maxScore ?? o.max_score ?? o.questionMaxScore ?? o.question_max_score)
+    const modKeyOut = mk || rowMod?.moduleKey
+    const modLabelOut = ml || rowMod?.moduleLabel
     out.push({
       questionId,
+      ...(modKeyOut ? { moduleKey: modKeyOut } : {}),
+      ...(modLabelOut ? { moduleLabel: modLabelOut } : {}),
+      ...(mid ? { moduleId: mid } : {}),
+      ...(mt ? { moduleTitle: mt } : {}),
+      ...(bid ? { bidang: bid } : {}),
+      ...(tags?.length ? { tags } : {}),
+      ...(scoreGot !== undefined ? { scoreGot } : {}),
+      ...(rowMaxScore !== undefined ? { maxScore: rowMaxScore } : {}),
       ...(order != null && Number.isFinite(order) ? { order } : {}),
       ...(prompt ? { prompt } : {}),
       ...(yourAnswer ? { yourAnswer } : {}),
       ...(correctAnswer ? { correctAnswer } : {}),
       ...(explanation ? { explanation } : {}),
-      ...(isCorrect !== undefined ? { isCorrect } : {}),
+      ...(isCorrect !== undefined || ic === null ? { isCorrect: isCorrect ?? null } : {}),
     })
   }
   return out
@@ -1921,8 +2137,19 @@ export async function fetchTryoutAttemptReview(attemptId: string): Promise<Tryou
 }
 
 /**
- * Ambil lembar soal: utama GET /attempts/:id/questions, fallback legacy …/paper pada namespace siswa.
- * Set `VITE_TRYOUT_EXAM_MOCK=true` untuk soal demo.
+ * Parse respons paper siswa: array QuestionResponse mentah atau objek berisi `questions`.
+ */
+function parseStudentPaperResponsePayload(payload: unknown): TryoutAttemptPaper {
+  if (Array.isArray(payload)) return parseAttemptQuestionsPayload(payload)
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return parseTryoutAttemptPaperPayload(payload as Record<string, unknown>)
+  }
+  return parseTryoutAttemptPaperPayload({})
+}
+
+/**
+ * Lembar soal: sesuai router siswa GET …/student/tryouts/:id/attempts/:attemptId/paper (bisa array mentah),
+ * lalu fallback GET /attempts/:attemptId/questions.
  */
 export async function getStudentTryoutAttemptPaper(
   tryoutId: string,
@@ -1931,26 +2158,20 @@ export async function getStudentTryoutAttemptPaper(
   if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') {
     return buildMockTryoutAttemptPaper()
   }
-  try {
-    return await getAttemptQuestions(attemptId)
-  } catch (e) {
-    if (!(e instanceof ApiError) || (e.status !== 404 && e.status !== 405)) throw e
-  }
   const base = `${API_BASE}/student/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attemptId)}`
-  const urls = [`${base}/paper`, base]
-  let lastStatus = 404
-  for (const url of urls) {
+  for (const url of [`${base}/paper`, base]) {
     const res = await apiFetch(url, { headers: authHeaders() })
-    if (res.status === 404) continue
+    if (res.status === 404 || res.status === 405) continue
     try {
-      const payload = await handleResponse<Record<string, unknown>>(res)
-      const paper = parseTryoutAttemptPaperPayload(payload)
+      const payload = await handleResponse<unknown>(res)
+      const paper = parseStudentPaperResponsePayload(payload)
       if (paper.questions.length > 0) return paper
-    } catch (err) {
-      if (err instanceof ApiError) lastStatus = err.status
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 404 || e.status === 405)) continue
+      throw e
     }
   }
-  throw new ApiError(lastStatus, 'Soal ujian tidak ditemukan atau belum tersedia.', {})
+  return getAttemptQuestions(attemptId)
 }
 
 function tryParseNumberField(value: unknown): number | undefined {
@@ -1981,6 +2202,9 @@ function flattenTryoutSubmitPayloadLayers(raw: Record<string, unknown>): Record<
       'payload',
       'submission',
       'summary',
+      'tryoutSubmitAnalysis',
+      'submitAnalysis',
+      'analysis',
     ]) {
       const inner = o[key]
       if (inner && typeof inner === 'object' && !Array.isArray(inner)) walk(inner as Record<string, unknown>)
@@ -2028,6 +2252,128 @@ function parseFeedbackFromLayer(o: Record<string, unknown>): string | undefined 
     const rec = f.recommendation_text ?? f.recommendationText
     if (typeof rec === 'string' && rec.trim()) parts.push(rec.trim())
     if (parts.length) return parts.join('\n\n')
+  }
+  return undefined
+}
+
+function parseModuleAnalysisAggList(raw: unknown): TryoutModuleStat[] | null {
+  let arr: unknown[] = []
+  if (Array.isArray(raw)) arr = raw
+  else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    const nest = o.modules ?? o.items ?? o.rows ?? o.aggregates ?? o.moduleBreakdown
+    if (Array.isArray(nest) && nest.length > 0) arr = nest
+  }
+  if (arr.length === 0) return null
+  const out: TryoutModuleStat[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const x = item as Record<string, unknown>
+    const keyFromBe = String(x.moduleKey ?? x.module_key ?? '').trim()
+    const labelFromBe = String(x.moduleLabel ?? x.module_label ?? '').trim()
+    const moduleId = String(x.moduleId ?? x.module_id ?? '').trim()
+    const moduleTitle = String(x.moduleTitle ?? x.module_title ?? x.bidang ?? '').trim()
+    const label = labelFromBe || moduleTitle || moduleId || 'Umum'
+    const slug =
+      keyFromBe ||
+      moduleId ||
+      label
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-_]/gi, '') ||
+      '__general__'
+    const total =
+      tryParseNumberField(
+        x.questionCount ??
+          x.question_count ??
+          x.totalCount ??
+          x.total ??
+          x.totalQuestions ??
+          x.jumlah_soal,
+      ) ?? 0
+    let correct = tryParseNumberField(x.correctCount ?? x.correct ?? x.benar ?? x.jumlah_benar) ?? 0
+    let wrong = tryParseNumberField(x.wrongCount ?? x.wrong ?? x.salah ?? x.jumlah_salah) ?? 0
+    let unknown =
+      tryParseNumberField(
+        x.unscoredCount ??
+          x.ungradedCount ??
+          x.unknown ??
+          x.belumDinilai ??
+          x.belum_dinilai ??
+          x.pending_count ??
+          x.pending,
+      ) ?? 0
+    if (total <= 0 && (correct > 0 || wrong > 0 || unknown > 0)) {
+      const sum = correct + wrong + unknown
+      out.push({
+        moduleKey: slug,
+        moduleLabel: label,
+        total: sum,
+        correct,
+        wrong,
+        unknown,
+      })
+      continue
+    }
+    if (total > 0 && unknown === 0 && correct + wrong < total) {
+      unknown = Math.max(0, total - correct - wrong)
+    }
+    const effTotal = total > 0 ? total : correct + wrong + unknown
+    out.push({
+      moduleKey: slug,
+      moduleLabel: label,
+      total: effTotal,
+      correct,
+      wrong,
+      unknown,
+    })
+  }
+  return out.length > 0 ? out : null
+}
+
+function pickEmbeddedReviewFromSubmit(
+  raw: Record<string, unknown>,
+  layers: Record<string, unknown>[],
+): TryoutAttemptReviewRow[] | undefined {
+  const tryArr = (v: unknown): TryoutAttemptReviewRow[] | undefined => {
+    if (v == null) return undefined
+    const rows = parseAttemptReviewRowsFromPayload(v)
+    return rows.length > 0 ? rows : undefined
+  }
+  const candidates: unknown[] = [
+    raw.review,
+    raw.outcomes,
+    raw.questionReviewOutcomes,
+    raw.question_review_outcomes,
+  ]
+  for (const layer of layers) {
+    candidates.push(
+      layer.review,
+      layer.outcomes,
+      layer.questionReviewOutcomes,
+      layer.question_review_outcomes,
+    )
+  }
+  for (const c of candidates) {
+    const parsed = tryArr(c)
+    if (parsed) return parsed
+  }
+  return undefined
+}
+
+function pickEmbeddedModuleAnalysisFromSubmit(
+  raw: Record<string, unknown>,
+  layers: Record<string, unknown>[],
+): TryoutModuleStat[] | undefined {
+  const keys = ['moduleAnalysis', 'module_summary', 'moduleSummary', 'moduleSummaries'] as const
+  const candidates: unknown[] = []
+  for (const k of keys) candidates.push(raw[k])
+  for (const layer of layers) {
+    for (const k of keys) candidates.push(layer[k])
+  }
+  for (const c of candidates) {
+    const parsed = parseModuleAnalysisAggList(c)
+    if (parsed && parsed.length > 0) return parsed
   }
   return undefined
 }
@@ -2094,14 +2440,26 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
       break
     }
   }
+  let maxScore = 0
+  for (const layer of layers) {
+    const m = tryParseNumberField(layer.maxScore ?? layer.max_score ?? layer.maxPoints ?? layer.max_points)
+    if (m !== undefined && Number.isFinite(m) && m >= 0) maxScore = m
+  }
+  const embeddedReview = pickEmbeddedReviewFromSubmit(raw, layers)
+  const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(raw, layers)
   return {
     score: score != null && Number.isFinite(score) ? score : undefined,
+    maxScore,
     message,
     submittedAt,
     percentile: percentile != null && Number.isFinite(percentile) ? percentile : undefined,
     feedback,
     graded,
     gradingStatus,
+    ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
+    ...(embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0
+      ? { moduleAnalysis: embeddedModuleAnalysis }
+      : {}),
   }
 }
 
@@ -2116,6 +2474,7 @@ export async function submitStudentTryoutAttempt(
   if (import.meta.env.VITE_TRYOUT_EXAM_MOCK === 'true') {
     const n = _answers ? Object.keys(_answers).filter((k) => _answers[k]?.trim()).length : 0
     return {
+      maxScore: 0,
       message: n > 0 ? `Terima kasih — mode demo: ${n} jawaban tercatat lokal.` : 'Terima kasih — mode demo.',
       submittedAt: new Date().toISOString(),
     }
@@ -2140,6 +2499,10 @@ export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentT
     return null
   }
   const data = await handleResponse<Record<string, unknown>>(res)
+  const root =
+    data.data != null && typeof data.data === 'object' && !Array.isArray(data.data)
+      ? (data.data as Record<string, unknown>)
+      : data
 
   const toBool = (value: unknown): boolean =>
     value === true ||
@@ -2148,39 +2511,68 @@ export async function getStudentTryoutStatus(tryoutId: string): Promise<StudentT
     value === 'true'
 
   const isRegistered = toBool(
-    data.isRegistered ??
-    data.is_registered ??
-    data.registered ??
-    data.has_registered
+    root.isRegistered ??
+    root.is_registered ??
+    root.registered ??
+    root.has_registered
   )
   const hasAttempted = toBool(
-    data.hasAttempted ??
-    data.has_attempted ??
-    data.hasAttempt ??
-    data.has_attempt ??
-    data.isCompleted ??
-    data.is_completed ??
-    data.completed
+    root.hasAttempted ??
+    root.has_attempted ??
+    root.hasAttempt ??
+    root.has_attempt ??
+    root.isCompleted ??
+    root.is_completed ??
+    root.completed
   )
   const canRetake = toBool(
-    data.canRetake ??
-    data.can_retake ??
-    data.allowRetake ??
-    data.allow_retake
+    root.canRetake ??
+    root.can_retake ??
+    root.allowRetake ??
+    root.allow_retake
   )
-  const attemptCountRaw = data.attemptCount ?? data.attempt_count
+  const attemptCountRaw = root.attemptCount ?? root.attempt_count
   const attemptCountNum = typeof attemptCountRaw === 'number'
     ? Math.trunc(attemptCountRaw)
     : (typeof attemptCountRaw === 'string' && attemptCountRaw.trim() ? Math.trunc(Number(attemptCountRaw)) : undefined)
+
+  const lastAttemptRaw = root.lastAttemptId ?? root.last_attempt_id
+  const lastAttemptId =
+    typeof lastAttemptRaw === 'string' && lastAttemptRaw.trim()
+      ? lastAttemptRaw.trim()
+      : lastAttemptRaw != null && String(lastAttemptRaw).trim()
+        ? String(lastAttemptRaw).trim()
+        : undefined
+
+  const opensAtRaw = root.opensAt ?? root.opens_at
+  const closesAtRaw = root.closesAt ?? root.closes_at ?? root.closeAt ?? root.close_at
+  const tryoutStatusRaw = root.tryoutStatus ?? root.tryout_status ?? root.status
+  const startReasonRaw = root.startDisabledReason ?? root.start_disabled_reason
+
+  const canRegRaw = root.canRegister ?? root.can_register
+  const canStartRaw = root.canStartExam ?? root.can_start_exam ?? root.canStart ?? root.can_start
+
+  const opensAt = typeof opensAtRaw === 'string' && opensAtRaw.trim() ? opensAtRaw.trim() : undefined
+  const closesAt = typeof closesAtRaw === 'string' && closesAtRaw.trim() ? closesAtRaw.trim() : undefined
+  const tryoutStatus = typeof tryoutStatusRaw === 'string' && tryoutStatusRaw.trim() ? tryoutStatusRaw.trim() : undefined
+  const startDisabledReason =
+    typeof startReasonRaw === 'string' && startReasonRaw.trim() ? startReasonRaw.trim() : undefined
+
+  const canRegister = typeof canRegRaw === 'boolean' ? canRegRaw : undefined
+  const canStartExam = typeof canStartRaw === 'boolean' ? canStartRaw : undefined
 
   return {
     isRegistered,
     hasAttempted,
     canRetake,
     attemptCount: Number.isFinite(attemptCountNum as number) ? (attemptCountNum as number) : undefined,
-    lastAttemptId: typeof data.lastAttemptId === 'string'
-      ? data.lastAttemptId
-      : (typeof data.last_attempt_id === 'string' ? data.last_attempt_id : undefined),
+    lastAttemptId,
+    ...(opensAt != null ? { opensAt } : {}),
+    ...(closesAt != null ? { closesAt } : {}),
+    ...(tryoutStatus != null ? { tryoutStatus } : {}),
+    ...(startDisabledReason != null ? { startDisabledReason } : {}),
+    ...(canRegister !== undefined ? { canRegister } : {}),
+    ...(canStartExam !== undefined ? { canStartExam } : {}),
   }
 }
 
@@ -2516,12 +2908,13 @@ export async function getStudentTryoutHistory(): Promise<StudentTryoutHistoryRes
     : (Array.isArray(data) ? data : [])
 
   const rows = (listRaw as Record<string, unknown>[]).map((item) => ({
-    tryoutId: String(item.tryoutId ?? item.tryout_id ?? ''),
+    tryoutId: String(item.tryoutId ?? item.tryout_id ?? item.tryoutSessionId ?? item.tryout_session_id ?? ''),
     tryoutTitle: String(item.tryoutTitle ?? item.tryout_title ?? item.title ?? 'Tryout'),
     attemptId: item.attemptId != null ? String(item.attemptId) : (item.attempt_id != null ? String(item.attempt_id) : undefined),
-    score: toInt(item.score) ?? 0,
+    score: toFiniteNumber(item.score) ?? 0,
     submittedAt: String(item.submittedAt ?? item.submitted_at ?? item.finished_at ?? ''),
-    improvementFromPrevious: toInt(item.improvementFromPrevious ?? item.improvement_from_previous) ?? undefined,
+    improvementFromPrevious:
+      toFiniteNumber(item.improvementFromPrevious ?? item.improvement_from_previous) ?? undefined,
   } satisfies StudentTryoutHistoryItem))
   return { data: rows.filter((row) => row.tryoutId && row.submittedAt) }
 }

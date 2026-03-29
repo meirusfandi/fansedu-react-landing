@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../App.css'
 import { BACKEND_BASE } from '../lib/api-config'
+import { getUserFacingHttpMessage, USER_FACING_SYSTEM_ERROR } from '../lib/user-facing-error'
 import { useAuthStore } from '../store/auth'
 import { isLeaderboardRowCurrentUser } from '../utils/leaderboardUser'
 
@@ -71,14 +72,24 @@ export default function TryoutLeaderboardPage({ tryoutId = null }: TryoutLeaderb
     setError(null)
     fetch(leaderboardUrl)
       .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        if (!res.ok) {
+          const e = new Error() as Error & { status: number }
+          e.status = res.status
+          throw e
+        }
         return res.json()
       })
       .then((data: unknown) => {
         if (!cancelled) setEntries(parseLeaderboardResponse(data))
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Gagal memuat leaderboard')
+        if (!cancelled) {
+          const st =
+            err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number'
+              ? (err as { status: number }).status
+              : NaN
+          setError(Number.isFinite(st) ? getUserFacingHttpMessage(st) : USER_FACING_SYSTEM_ERROR)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
