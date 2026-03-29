@@ -3,6 +3,8 @@ import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { authUserFromApiResponse, type UserRole } from '../../types/auth'
 import { apiLogin, apiRegister, ApiError } from '../../lib/api'
+import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
+import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
 import { resolvePostAuthHash } from '../../lib/post-auth-redirect'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 
@@ -209,6 +211,7 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
 function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -220,13 +223,37 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   const login = useAuthStore((s) => s.login)
   const attempt = useSubmitAttemptLimit()
 
+  const phoneNorm = normalizeRegistrationPhone(phone)
+  const registerFormComplete =
+    isValidRegistrationName(name) &&
+    isValidEmail(email) &&
+    isValidRegistrationPhone(phoneNorm) &&
+    password.length >= 6 &&
+    password === confirmPassword
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccessMessage('')
     if (attempt.blocked) return
-    if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      setError('Nama, email, kata sandi, dan konfirmasi kata sandi wajib diisi.')
+    if (!isValidRegistrationName(name)) {
+      setError('Nama lengkap wajib diisi (minimal 2 karakter).')
+      return
+    }
+    if (!email.trim()) {
+      setError('Email wajib diisi.')
+      return
+    }
+    if (!isValidEmail(email)) {
+      setError('Format email tidak valid.')
+      return
+    }
+    if (!phone.trim()) {
+      setError('Nomor HP / WhatsApp wajib diisi.')
+      return
+    }
+    if (!isValidRegistrationPhone(phoneNorm)) {
+      setError('Masukkan nomor HP atau WhatsApp yang valid (minimal 10 digit).')
       return
     }
     if (password.length < 6) {
@@ -242,6 +269,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
       const res = await apiRegister({
         name: name.trim(),
         email: email.trim(),
+        phone: phoneNorm,
         password,
         role,
       })
@@ -262,13 +290,16 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
     <>
       <h2 className="text-xl font-bold text-gray-900 mb-1">Daftar</h2>
       <p className="text-gray-600 text-sm mb-6">
-        Buat akun untuk mengakses kursus dan dashboard. Setelah daftar, akun Anda langsung aktif dan bisa digunakan.
+        Lengkapi <strong className="text-gray-800">semua kolom</strong> yang bertanda <span className="text-red-600">*</span> — termasuk pilih
+        daftar sebagai Siswa atau Guru. Setelah daftar, akun langsung aktif.
       </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
         {successMessage && <div className="p-3 rounded-lg bg-emerald-50 text-emerald-700 text-sm">{successMessage}</div>}
         <div>
-          <label htmlFor="reg-name" className="block text-sm font-medium text-gray-700 mb-1">Nama lengkap</label>
+          <label htmlFor="reg-name" className="block text-sm font-medium text-gray-700 mb-1">
+            Nama lengkap <span className="text-red-600">*</span>
+          </label>
           <input
             id="reg-name"
             type="text"
@@ -280,7 +311,9 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
           />
         </div>
         <div>
-          <label htmlFor="reg-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label htmlFor="reg-email" className="block text-sm font-medium text-gray-700 mb-1">
+            Email <span className="text-red-600">*</span>
+          </label>
           <input
             id="reg-email"
             type="email"
@@ -292,7 +325,24 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
           />
         </div>
         <div>
-          <label htmlFor="reg-password" className="block text-sm font-medium text-gray-700 mb-1">Kata sandi</label>
+          <label htmlFor="reg-phone" className="block text-sm font-medium text-gray-700 mb-1">
+            Nomor HP / WhatsApp <span className="text-red-600">*</span>
+          </label>
+          <input
+            id="reg-phone"
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            placeholder="Contoh: 081234567890 atau +6281234567890"
+            autoComplete="tel"
+          />
+        </div>
+        <div>
+          <label htmlFor="reg-password" className="block text-sm font-medium text-gray-700 mb-1">
+            Kata sandi <span className="text-red-600">*</span>
+          </label>
           <div className="relative">
             <input
               id="reg-password"
@@ -308,7 +358,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
         </div>
         <div>
           <label htmlFor="reg-password-confirm" className="block text-sm font-medium text-gray-700 mb-1">
-            Konfirmasi kata sandi
+            Konfirmasi kata sandi <span className="text-red-600">*</span>
           </label>
           <div className="relative">
             <input
@@ -327,7 +377,9 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Daftar sebagai</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Daftar sebagai <span className="text-red-600">*</span>
+          </label>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="role" value="student" checked={role === 'student'} onChange={() => setRole('student')} className="text-primary" />
@@ -341,7 +393,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
         </div>
         <button
           type="submit"
-          disabled={loading || attempt.blocked}
+          disabled={loading || attempt.blocked || !registerFormComplete}
           className="w-full py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
         >
           {loading ? 'Memproses...' : 'Daftar'}

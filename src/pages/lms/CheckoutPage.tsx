@@ -17,6 +17,8 @@ import {
 import { formatRupiah } from '../../lib/currency'
 import { authUserFromApiResponse } from '../../types/auth'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
+import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
+import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
 
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
@@ -31,11 +33,6 @@ const BANK_ACCOUNTS = [
 /** Generate kode unik 3 digit (100–999) untuk verifikasi transfer */
 function generateUniqueCode(): number {
   return Math.floor(100 + Math.random() * 900)
-}
-
-/** Validasi format email sederhana */
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
 interface CollectiveStudentItem {
@@ -188,7 +185,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       return
     }
     if (user.name && user.email && !prefilledFromUser.current) {
-      setUserInfo({ name: user.name, email: user.email })
+      setUserInfo({
+        ...useCheckoutStore.getState().userInfo,
+        name: user.name,
+        email: user.email,
+      })
       prefilledFromUser.current = true
     }
   }, [user, setUserInfo])
@@ -337,12 +338,17 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     const currentUserInfo = useCheckoutStore.getState().userInfo
 
     if (!currentCourse) return
-    if (!currentUserInfo.name.trim()) {
-      setError('Nama harus diisi.')
+    if (!isValidRegistrationName(currentUserInfo.name)) {
+      setError('Nama lengkap wajib diisi (minimal 2 karakter).')
       return
     }
     if (!currentUserInfo.email.trim() || !isValidEmail(currentUserInfo.email.trim())) {
       setError('Masukkan alamat email yang valid.')
+      return
+    }
+    const phoneNorm = normalizeRegistrationPhone(currentUserInfo.phone ?? '')
+    if (!phoneNorm || !isValidRegistrationPhone(phoneNorm)) {
+      setError('Nomor HP / WhatsApp wajib diisi dengan benar (minimal 10 digit) untuk follow-up.')
       return
     }
     if (isGuruBuyer && isCollectivePurchase) {
@@ -386,6 +392,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         programId: currentCourse.id,
         name: currentUserInfo.name.trim(),
         email: currentUserInfo.email.trim(),
+        phone: phoneNorm,
         promoCode: currentPromoCode || '',
         expectedTotal: expectedTotalRupiah,
         normalPrice: normalPriceRupiah,
@@ -498,6 +505,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setSetPasswordError('Nama dan email harus diisi sebelum mengatur password.')
       return
     }
+    const regPhone = normalizeRegistrationPhone(currentInfo.phone ?? '')
+    if (!regPhone || !isValidRegistrationPhone(regPhone)) {
+      setSetPasswordError('Nomor HP / WhatsApp tidak valid. Ulangi dari langkah data diri.')
+      return
+    }
     if (newPassword.length < 6) {
       setSetPasswordError('Password minimal 6 karakter.')
       return
@@ -513,6 +525,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       const res = await apiRegister({
         name: currentInfo.name.trim(),
         email: currentInfo.email.trim(),
+        phone: regPhone,
         password: newPassword,
         role: 'student',
         slug: slug ?? undefined,
@@ -636,6 +649,10 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                   <input type="email" value={userInfo.email} readOnly className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm bg-gray-50 text-gray-600" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nomor HP / WhatsApp</label>
+                  <input type="tel" value={userInfo.phone} readOnly className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm bg-gray-50 text-gray-600" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password baru</label>
@@ -876,14 +893,34 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
               </section>
               <section className="border rounded-2xl p-6">
                 <h2 className="font-semibold text-gray-900 mb-4">Data Diri</h2>
+                <p className="text-xs text-gray-500 mb-3">Semua kolom di bawah wajib diisi dengan benar sebelum melanjutkan.</p>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nama</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nama lengkap <span className="text-red-600">*</span>
+                    </label>
                     <input type="text" value={userInfo.name} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="Nama lengkap" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email <span className="text-red-600">*</span>
+                    </label>
                     <input type="email" value={userInfo.email} onChange={(e) => setUserInfo({ ...userInfo, email: e.target.value })} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="email@contoh.com" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nomor HP / WhatsApp <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={userInfo.phone}
+                      onChange={(e) => setUserInfo({ ...userInfo, phone: e.target.value })}
+                      className="w-full rounded-lg border px-4 py-2.5 text-sm"
+                      placeholder="081234567890 atau +6281234567890"
+                      autoComplete="tel"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Wajib untuk konfirmasi dan follow-up pembayaran.</p>
                   </div>
                   {isGuruBuyer && (
                     <div className="rounded-xl border border-slate-200 p-4 bg-slate-50 space-y-3">
@@ -1014,7 +1051,16 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                     </div>
                   )}
                   {step === 'info' && (
-                    <button onClick={onContinue} disabled={!userInfo.name || !userInfo.email || loadingContinue} className="w-full py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50">
+                    <button
+                      onClick={onContinue}
+                      disabled={
+                        !isValidRegistrationName(userInfo.name)
+                        || !isValidEmail(userInfo.email)
+                        || !isValidRegistrationPhone(normalizeRegistrationPhone(userInfo.phone))
+                        || loadingContinue
+                      }
+                      className="w-full py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
+                    >
                       {loadingContinue ? 'Memproses...' : 'Lanjutkan'}
                     </button>
                   )}

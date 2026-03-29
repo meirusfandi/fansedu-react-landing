@@ -211,11 +211,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, email, password, role]
+              required: [name, email, password, role, phone, whatsapp]
               properties:
                 name: { type: string }
                 email: { type: string, format: email }
                 password: { type: string, minLength: 6 }
+                phone: { type: string, description: 'Nomor lokal Indonesia, contoh 081234567890' }
+                whatsapp: { type: string, description: 'Nomor tanpa +, contoh 6281234567890 (klien mengisi satu field lalu memecah)' }
                 role: { type: string, enum: [student, instructor] }
       responses:
         '201':

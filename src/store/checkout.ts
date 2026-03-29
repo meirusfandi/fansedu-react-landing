@@ -13,7 +13,7 @@ interface CheckoutStore {
   checkoutId: string | null
   /** Diisi setelah initiate berhasil (orderId, total, program dari API) */
   orderSummary: CheckoutOrderSummary | null
-  userInfo: { name: string; email: string }
+  userInfo: { name: string; email: string; phone: string }
   promoCode: string
   paymentMethod: 'bank_transfer' | null
   /** Step checkout saat ini */
@@ -23,7 +23,7 @@ interface CheckoutStore {
   setCourse: (c: Course | null) => void
   setCheckoutId: (id: string | null) => void
   setOrderSummary: (s: CheckoutOrderSummary | null) => void
-  setUserInfo: (i: { name: string; email: string }) => void
+  setUserInfo: (i: { name: string; email: string; phone: string }) => void
   setPromoCode: (s: string) => void
   setPaymentMethod: (m: 'bank_transfer' | null) => void
   setStep: (s: 'info' | 'payment' | 'set-password' | 'instructions') => void
@@ -35,7 +35,7 @@ const init = {
   course: null,
   checkoutId: null,
   orderSummary: null,
-  userInfo: { name: '', email: '' },
+  userInfo: { name: '', email: '', phone: '' },
   promoCode: '',
   paymentMethod: null,
   step: 'info' as const,

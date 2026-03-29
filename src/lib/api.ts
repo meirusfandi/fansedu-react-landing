@@ -9,6 +9,7 @@ import { recordApiClientFailure, recordHttpApiFailure } from './api-error-log'
 import { API_BASE, PACKAGES_API_URL } from './api-config'
 import type { Course } from '../types/course'
 import { decodeJwtPayload, normalizeAuthFields } from '../types/auth'
+import { splitPhoneForRegisterApi } from '../utils/phone'
 
 function getStoredToken(): string | null {
   try {
@@ -146,6 +147,8 @@ export interface RegisterRequest {
   name: string
   email: string
   password: string
+  /** Satu nomor dari form; dipecah jadi `phone` (0xx) + `whatsapp` (62xx) saat POST register. */
+  phone: string
   /** Default student jika tidak dikirim — gunakan `guru` untuk akun guru (dipetakan ke slug dari GET /roles). */
   role?: 'student' | 'guru'
   /** Slug role persis dari GET /api/v1/roles; jika diisi, mengalahkan `role`. */
@@ -322,10 +325,16 @@ export async function apiLogin(body: LoginRequest): Promise<AuthResponse> {
 
 export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> {
   const slugVal = (body.slug ?? body.program_slug)?.trim()
+  const phoneTrim = typeof body.phone === 'string' ? body.phone.replace(/\s+/g, ' ').trim() : ''
   const payload: Record<string, unknown> = {
     name: body.name,
     email: body.email,
     password: body.password,
+  }
+  if (phoneTrim) {
+    const { phone: phoneLocal, whatsapp: whatsappIntl } = splitPhoneForRegisterApi(phoneTrim)
+    if (phoneLocal) payload.phone = phoneLocal
+    if (whatsappIntl) payload.whatsapp = whatsappIntl
   }
   const explicitRoleSlug = body.roleSlug?.trim()
   if (explicitRoleSlug) {
@@ -606,6 +615,8 @@ export interface CheckoutInitiateRequest {
   programId?: string
   name: string
   email: string
+  /** Nomor HP / WhatsApp pembeli (wajib di checkout guest). */
+  phone?: string
   /** Id user yang login; jika ada, backend gunakan untuk cek order pending yang sama */
   userId?: string
   /** Kode promo (opsional) — BE juga terima di initiate */
@@ -671,6 +682,13 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
     name: payload.name,
     email: payload.email,
     promoCode: payload.promoCode ?? '',
+  }
+
+  const phoneInit = typeof payload.phone === 'string' ? payload.phone.replace(/\s+/g, ' ').trim() : ''
+  if (phoneInit) {
+    const { phone: phoneLocal, whatsapp: whatsappIntl } = splitPhoneForRegisterApi(phoneInit)
+    if (phoneLocal) body.phone = phoneLocal
+    if (whatsappIntl) body.whatsapp = whatsappIntl
   }
 
   if (payload.buyerRole) body.buyerRole = payload.buyerRole
