@@ -973,6 +973,35 @@ export interface TryoutAttemptPaper {
   questions: TryoutExamQuestion[]
 }
 
+/** Agregat per jenis soal di `overallAnalysis` (POST submit / GET attempt). */
+export interface TryoutOverallAnalysisByQuestionType {
+  /** Label tampilan, mis. "Pilihan ganda". */
+  questionTypeLabel?: string
+  total?: number
+  correct?: number
+  wrong?: number
+  unscored?: number
+  scoreGot?: number
+  maxScore?: number
+}
+
+/** Ringkasan numerik + narasi dari server setelah submit (alias `overall_analysis`). */
+export interface TryoutOverallAnalysis {
+  totalQuestions?: number
+  answeredCount?: number
+  unansweredCount?: number
+  correctCount?: number
+  wrongCount?: number
+  autoUngradedCount?: number
+  /** Persen capaian skor (0–100), dari server bila ada. */
+  scorePercent?: number
+  scoreGot?: number
+  maxScore?: number
+  /** Paragraf Bahasa Indonesia (sumber utama narasi; bisa dikirim ke AI untuk feedback). */
+  summary?: string
+  byQuestionType?: TryoutOverallAnalysisByQuestionType[]
+}
+
 export interface TryoutAttemptSubmitResult {
   score?: number
   /** Skor maksimum lembar (SubmitResponse); wajib di body submit bila tersedia. */
@@ -1000,6 +1029,8 @@ export interface TryoutAttemptSubmitResult {
   moduleAnalysis?: TryoutModuleStat[]
   /** Alias isi sama dengan `moduleAnalysis` (kompatibilitas kontrak backend). */
   moduleSummary?: TryoutModuleStat[]
+  /** Analisis agregat + narasi (POST submit / GET attempt). */
+  overallAnalysis?: TryoutOverallAnalysis
 }
 
 /** Satu baris pembahasan pasca-submit (GET …/review — opsional di backend). */
@@ -1016,6 +1047,12 @@ export interface TryoutAttemptReviewRow {
   /** Skor maks soal (bila dikirim per baris review). */
   maxScore?: number
   order?: number
+  /** Mis. "Pilihan ganda", "Benar / Salah", "Isian singkat". */
+  questionTypeLabel?: string
+  /** Satu kalimat ringkas dari server. */
+  analysisSummary?: string
+  /** Narasi per tipe soal (PG, isian, dll.). */
+  analysisDetail?: string
   prompt?: string
   yourAnswer?: string
   correctAnswer?: string
@@ -1061,6 +1098,7 @@ export interface StudentAttemptDetail {
   moduleAnalysis?: TryoutModuleStat[]
   /** Alias isi sama dengan `moduleAnalysis`. */
   moduleSummary?: TryoutModuleStat[]
+  overallAnalysis?: TryoutOverallAnalysis
 }
 
 export interface TryoutLeaderboardRankResponse {
@@ -1415,6 +1453,7 @@ export async function getStudentAttemptDetail(attemptId: string): Promise<Studen
   const layers: Record<string, unknown>[] = [o]
   const embeddedReview = pickEmbeddedReviewFromSubmit(o, layers)
   const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(o, layers)
+  const embeddedOverall = pickEmbeddedOverallAnalysisFromSubmit(o, layers)
   const maxScoreNum = toFiniteNumber(o.maxScore ?? o.max_score) ?? 0
   const pctRaw = o.percentile ?? o.percentileRank ?? o.percentile_rank
   const attemptPercentile =
@@ -1435,6 +1474,7 @@ export async function getStudentAttemptDetail(attemptId: string): Promise<Studen
       o.submittedAt != null ? String(o.submittedAt) : (o.submitted_at != null ? String(o.submitted_at) : undefined),
     ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
     ...(modAgg ? { moduleAnalysis: modAgg, moduleSummary: modAgg } : {}),
+    ...(embeddedOverall ? { overallAnalysis: embeddedOverall } : {}),
   }
 }
 
@@ -2102,6 +2142,11 @@ function parseAttemptReviewRowsFromPayload(raw: unknown): TryoutAttemptReviewRow
     const mt = String(o.moduleTitle ?? o.module_title ?? '').trim()
     const bid = typeof o.bidang === 'string' && o.bidang.trim() ? o.bidang.trim() : undefined
     const tags = normalizeTagsField(o.tags)
+    const questionTypeLabel = String(
+      o.questionTypeLabel ?? o.question_type_label ?? o.questionType ?? '',
+    ).trim()
+    const analysisSummary = String(o.analysisSummary ?? o.analysis_summary ?? '').trim()
+    const analysisDetail = String(o.analysisDetail ?? o.analysis_detail ?? '').trim()
     const scoreGot = tryParseNumberField(o.scoreGot ?? o.score_got ?? o.pointsEarned ?? o.points_earned)
     const rowMaxScore = tryParseNumberField(o.maxScore ?? o.max_score ?? o.questionMaxScore ?? o.question_max_score)
     const modKeyOut = mk || rowMod?.moduleKey
@@ -2114,6 +2159,9 @@ function parseAttemptReviewRowsFromPayload(raw: unknown): TryoutAttemptReviewRow
       ...(mt ? { moduleTitle: mt } : {}),
       ...(bid ? { bidang: bid } : {}),
       ...(tags?.length ? { tags } : {}),
+      ...(questionTypeLabel ? { questionTypeLabel } : {}),
+      ...(analysisSummary ? { analysisSummary } : {}),
+      ...(analysisDetail ? { analysisDetail } : {}),
       ...(scoreGot !== undefined ? { scoreGot } : {}),
       ...(rowMaxScore !== undefined ? { maxScore: rowMaxScore } : {}),
       ...(order != null && Number.isFinite(order) ? { order } : {}),
@@ -2393,6 +2441,123 @@ function pickEmbeddedModuleAnalysisFromSubmit(
   return undefined
 }
 
+function parseOverallAnalysisByQuestionTypeRow(
+  x: Record<string, unknown>,
+): TryoutOverallAnalysisByQuestionType | null {
+  const questionTypeLabel = String(
+    x.questionTypeLabel ?? x.question_type_label ?? x.label ?? '',
+  ).trim()
+  const total = tryParseNumberField(x.total ?? x.count)
+  const correct = tryParseNumberField(x.correct ?? x.correctCount ?? x.correct_count)
+  const wrong = tryParseNumberField(x.wrong ?? x.wrongCount ?? x.wrong_count)
+  const unscored = tryParseNumberField(
+    x.unscored ?? x.unscoredCount ?? x.unscored_count ?? x.autoUngraded ?? x.auto_ungraded,
+  )
+  const scoreGot = tryParseNumberField(x.scoreGot ?? x.score_got)
+  const maxScore = tryParseNumberField(x.maxScore ?? x.max_score)
+  if (
+    !questionTypeLabel &&
+    total === undefined &&
+    correct === undefined &&
+    wrong === undefined &&
+    unscored === undefined &&
+    scoreGot === undefined &&
+    maxScore === undefined
+  ) {
+    return null
+  }
+  return {
+    ...(questionTypeLabel ? { questionTypeLabel } : {}),
+    ...(total !== undefined ? { total: Math.max(0, Math.trunc(total)) } : {}),
+    ...(correct !== undefined ? { correct: Math.max(0, Math.trunc(correct)) } : {}),
+    ...(wrong !== undefined ? { wrong: Math.max(0, Math.trunc(wrong)) } : {}),
+    ...(unscored !== undefined ? { unscored: Math.max(0, Math.trunc(unscored)) } : {}),
+    ...(scoreGot !== undefined ? { scoreGot } : {}),
+    ...(maxScore !== undefined ? { maxScore } : {}),
+  }
+}
+
+function parseOverallAnalysisPayload(raw: unknown): TryoutOverallAnalysis | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const summary = String(
+    o.summary ?? o.overallSummary ?? o.overall_summary ?? '',
+  ).trim()
+  const totalQuestions = tryParseNumberField(
+    o.totalQuestions ?? o.total_questions ?? o.questionCount ?? o.question_count,
+  )
+  const answeredCount = tryParseNumberField(o.answeredCount ?? o.answered_count ?? o.answered)
+  const unansweredCount = tryParseNumberField(o.unansweredCount ?? o.unanswered_count ?? o.unanswered)
+  const correctCount = tryParseNumberField(o.correctCount ?? o.correct_count ?? o.correct)
+  const wrongCount = tryParseNumberField(o.wrongCount ?? o.wrong_count ?? o.wrong)
+  const autoUngradedCount = tryParseNumberField(
+    o.autoUngradedCount ?? o.auto_ungraded_count ?? o.autoUngraded ?? o.unscoredAuto,
+  )
+  const scorePercent = tryParseNumberField(
+    o.scorePercent ?? o.score_percent ?? o.percentScore ?? o.percent_score,
+  )
+  const scoreGot = tryParseNumberField(o.scoreGot ?? o.score_got)
+  const maxScore = tryParseNumberField(o.maxScore ?? o.max_score)
+
+  let byQuestionType: TryoutOverallAnalysisByQuestionType[] | undefined
+  const byQtRaw = o.byQuestionType ?? o.by_question_type
+  if (Array.isArray(byQtRaw) && byQtRaw.length > 0) {
+    const rows = byQtRaw
+      .map((item) =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? parseOverallAnalysisByQuestionTypeRow(item as Record<string, unknown>)
+          : null,
+      )
+      .filter((row): row is TryoutOverallAnalysisByQuestionType => row != null)
+    if (rows.length > 0) byQuestionType = rows
+  }
+
+  const hasAny =
+    Boolean(summary) ||
+    totalQuestions !== undefined ||
+    answeredCount !== undefined ||
+    unansweredCount !== undefined ||
+    correctCount !== undefined ||
+    wrongCount !== undefined ||
+    autoUngradedCount !== undefined ||
+    scorePercent !== undefined ||
+    scoreGot !== undefined ||
+    maxScore !== undefined ||
+    Boolean(byQuestionType?.length)
+
+  if (!hasAny) return undefined
+
+  const trunc = (n: number) => Math.max(0, Math.trunc(n))
+  return {
+    ...(summary ? { summary } : {}),
+    ...(totalQuestions !== undefined ? { totalQuestions: trunc(totalQuestions) } : {}),
+    ...(answeredCount !== undefined ? { answeredCount: trunc(answeredCount) } : {}),
+    ...(unansweredCount !== undefined ? { unansweredCount: trunc(unansweredCount) } : {}),
+    ...(correctCount !== undefined ? { correctCount: trunc(correctCount) } : {}),
+    ...(wrongCount !== undefined ? { wrongCount: trunc(wrongCount) } : {}),
+    ...(autoUngradedCount !== undefined ? { autoUngradedCount: trunc(autoUngradedCount) } : {}),
+    ...(scorePercent !== undefined ? { scorePercent } : {}),
+    ...(scoreGot !== undefined ? { scoreGot } : {}),
+    ...(maxScore !== undefined ? { maxScore } : {}),
+    ...(byQuestionType ? { byQuestionType } : {}),
+  }
+}
+
+function pickEmbeddedOverallAnalysisFromSubmit(
+  raw: Record<string, unknown>,
+  layers: Record<string, unknown>[],
+): TryoutOverallAnalysis | undefined {
+  const candidates: unknown[] = [raw.overallAnalysis, raw.overall_analysis]
+  for (const layer of layers) {
+    candidates.push(layer.overallAnalysis, layer.overall_analysis)
+  }
+  for (const c of candidates) {
+    const parsed = parseOverallAnalysisPayload(c)
+    if (parsed) return parsed
+  }
+  return undefined
+}
+
 function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAttemptSubmitResult {
   const layers = flattenTryoutSubmitPayloadLayers(raw)
   /** Nilai terakhir yang ditemukan di traversal DFS — mengalahkan placeholder 0 di root jika ada skor di objek dalam. */
@@ -2463,6 +2628,7 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
   }
   const embeddedReview = pickEmbeddedReviewFromSubmit(raw, layers)
   const embeddedModuleAnalysis = pickEmbeddedModuleAnalysisFromSubmit(raw, layers)
+  const embeddedOverall = pickEmbeddedOverallAnalysisFromSubmit(raw, layers)
   const modAgg = embeddedModuleAnalysis && embeddedModuleAnalysis.length > 0 ? embeddedModuleAnalysis : undefined
   return {
     score: score != null && Number.isFinite(score) ? score : undefined,
@@ -2475,6 +2641,7 @@ function parseTryoutSubmitResultPayload(raw: Record<string, unknown>): TryoutAtt
     gradingStatus,
     ...(embeddedReview && embeddedReview.length > 0 ? { review: embeddedReview } : {}),
     ...(modAgg ? { moduleAnalysis: modAgg, moduleSummary: modAgg } : {}),
+    ...(embeddedOverall ? { overallAnalysis: embeddedOverall } : {}),
   }
 }
 

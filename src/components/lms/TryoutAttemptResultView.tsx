@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { TryoutAttemptReviewRow } from '../../lib/api'
+import type { TryoutAttemptReviewRow, TryoutOverallAnalysis } from '../../lib/api'
 import { formatTryoutStatistic } from '../../utils/formatTryoutDisplay'
 import {
   buildTryoutModuleStats,
@@ -33,6 +33,10 @@ export interface TryoutAttemptResultViewProps {
   attemptHydrationModuleAnalysis?: TryoutModuleStat[] | null
   /** Dari body submit (halaman ujian) */
   submitModuleAnalysis?: TryoutModuleStat[] | null
+  /** Analisis agregat dari GET attempt (prioritas di atas submit). */
+  attemptHydrationOverallAnalysis?: TryoutOverallAnalysis | null
+  /** Analisis agregat dari respons submit. */
+  submitOverallAnalysis?: TryoutOverallAnalysis | null
   tryoutId: string
   backHref: string
   backLabel: string
@@ -57,6 +61,8 @@ export function TryoutAttemptResultView({
   paperQuestions = [],
   attemptHydrationModuleAnalysis,
   submitModuleAnalysis,
+  attemptHydrationOverallAnalysis,
+  submitOverallAnalysis,
   tryoutId,
   backHref,
   backLabel,
@@ -66,6 +72,29 @@ export function TryoutAttemptResultView({
     graded === false ||
     /\bpending\b/i.test(gradingStatus ?? '') ||
     /\bprocessing\b/i.test(gradingStatus ?? '')
+
+  const serverOverallAnalysis = useMemo((): TryoutOverallAnalysis | null => {
+    const has = (x: TryoutOverallAnalysis | null | undefined) =>
+      Boolean(x) &&
+      Boolean(
+        (x!.summary && x!.summary.trim()) ||
+          x!.totalQuestions != null ||
+          x!.answeredCount != null ||
+          x!.unansweredCount != null ||
+          x!.correctCount != null ||
+          x!.wrongCount != null ||
+          x!.autoUngradedCount != null ||
+          x!.scorePercent != null ||
+          x!.scoreGot != null ||
+          x!.maxScore != null ||
+          (x!.byQuestionType && x!.byQuestionType.length > 0),
+      )
+    const fromAttempt = attemptHydrationOverallAnalysis
+    const fromSubmit = submitOverallAnalysis
+    if (has(fromAttempt)) return fromAttempt!
+    if (has(fromSubmit)) return fromSubmit!
+    return null
+  }, [attemptHydrationOverallAnalysis, submitOverallAnalysis])
 
   const { moduleStats, replacedServerModuleWithClient } = useMemo(() => {
     const fromAttempt = attemptHydrationModuleAnalysis
@@ -168,6 +197,133 @@ export function TryoutAttemptResultView({
         </p>
       ) : null}
 
+      {serverOverallAnalysis ? (
+        <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-white px-4 py-3 text-sm text-gray-800 shadow-sm">
+          <p className="font-semibold text-gray-900 mb-2">Analisis keseluruhan</p>
+          {serverOverallAnalysis.summary ? (
+            <p className="text-gray-800 leading-relaxed whitespace-pre-wrap mb-3">{serverOverallAnalysis.summary}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mb-3">
+            {serverOverallAnalysis.totalQuestions != null ? (
+              <span>
+                Total soal:{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.totalQuestions)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.answeredCount != null ? (
+              <span>
+                Terjawab:{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.answeredCount)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.unansweredCount != null ? (
+              <span>
+                Tidak dijawab:{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.unansweredCount)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.correctCount != null ? (
+              <span>
+                Benar:{' '}
+                <span className="font-medium text-emerald-800 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.correctCount)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.wrongCount != null ? (
+              <span>
+                Salah:{' '}
+                <span className="font-medium text-rose-800 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.wrongCount)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.autoUngradedCount != null ? (
+              <span>
+                Belum dinilai otomatis:{' '}
+                <span className="font-medium text-amber-900 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.autoUngradedCount)}
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.scorePercent != null && Number.isFinite(serverOverallAnalysis.scorePercent) ? (
+              <span>
+                Persen skor:{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {formatTryoutStatistic(serverOverallAnalysis.scorePercent)}%
+                </span>
+              </span>
+            ) : null}
+            {serverOverallAnalysis.scoreGot != null || serverOverallAnalysis.maxScore != null ? (
+              <span>
+                Skor:{' '}
+                <span className="font-medium text-gray-900 tabular-nums">
+                  {serverOverallAnalysis.scoreGot != null ? formatTryoutStatistic(serverOverallAnalysis.scoreGot) : '—'}
+                  {serverOverallAnalysis.maxScore != null && serverOverallAnalysis.maxScore > 0 ? (
+                    <span className="text-gray-500 font-normal">
+                      {' '}
+                      / {formatTryoutStatistic(serverOverallAnalysis.maxScore)}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+            ) : null}
+          </div>
+          {serverOverallAnalysis.byQuestionType && serverOverallAnalysis.byQuestionType.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-emerald-100 bg-white/80">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-slate-50/80 text-left text-gray-600">
+                    <th className="py-2 px-3 font-medium">Jenis soal</th>
+                    <th className="py-2 px-2 font-medium text-right">Jumlah</th>
+                    <th className="py-2 px-2 font-medium text-right">Benar</th>
+                    <th className="py-2 px-2 font-medium text-right">Salah</th>
+                    <th className="py-2 px-2 font-medium text-right whitespace-nowrap">Belum nilai</th>
+                    <th className="py-2 px-3 font-medium text-right whitespace-nowrap">Skor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serverOverallAnalysis.byQuestionType.map((row, i) => (
+                    <tr key={`${row.questionTypeLabel ?? 't'}-${i}`} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2 px-3 font-medium text-gray-900">
+                        {row.questionTypeLabel?.trim() || '—'}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-700">
+                        {row.total != null ? formatTryoutStatistic(row.total) : '—'}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-emerald-700">
+                        {row.correct != null ? formatTryoutStatistic(row.correct) : '—'}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-rose-700">
+                        {row.wrong != null ? formatTryoutStatistic(row.wrong) : '—'}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-amber-800">
+                        {row.unscored != null ? formatTryoutStatistic(row.unscored) : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums text-gray-900">
+                        {row.scoreGot != null ? formatTryoutStatistic(row.scoreGot) : '—'}
+                        {row.maxScore != null && row.maxScore > 0 ? (
+                          <span className="text-gray-500 font-normal">
+                            {' '}
+                            / {formatTryoutStatistic(row.maxScore)}
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {overallHint ? (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-800">
           <p className="font-semibold text-gray-900 mb-1">Rekomendasi belajar</p>
@@ -258,6 +414,9 @@ export function TryoutAttemptResultView({
                 <li key={r.questionId} className="rounded-lg border border-gray-200 bg-white p-3">
                   <p className="font-semibold text-gray-900">
                     Soal {r.order ?? idx + 1}
+                    {r.questionTypeLabel ? (
+                      <span className="ml-2 text-gray-500 font-normal text-sm">({r.questionTypeLabel})</span>
+                    ) : null}
                     {disp.labelCorrect === true ? (
                       <span className="ml-2 text-emerald-600 font-normal">· Benar</span>
                     ) : disp.labelCorrect === false ? (
@@ -268,6 +427,14 @@ export function TryoutAttemptResultView({
                       <span className="ml-2 text-amber-700 font-normal">· Belum dinilai</span>
                     )}
                   </p>
+                  {r.analysisSummary ? (
+                    <p className="text-sm text-gray-700 mt-1 italic border-l-2 border-primary/30 pl-2">{r.analysisSummary}</p>
+                  ) : null}
+                  {r.analysisDetail ? (
+                    <p className="text-sm text-gray-800 mt-2 leading-relaxed whitespace-pre-wrap border-l-2 border-slate-200 pl-3">
+                      {r.analysisDetail}
+                    </p>
+                  ) : null}
                   {showScoreLine ? (
                     <p className="text-gray-700 mt-1 text-xs">
                       <span className="text-gray-500">Skor soal: </span>

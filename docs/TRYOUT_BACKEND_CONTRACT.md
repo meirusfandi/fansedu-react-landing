@@ -123,17 +123,20 @@ Frontend saat ini:
 
 ### `POST /api/v1/attempts/:attemptId/submit` (`SubmitResponse`)
 
+Alur submit di backend: membaca ulang jawaban tersimpan; jika agregasi internal (mis. daftar per attempt / sesi) **gagal**, respons **error** (bukan sukses dengan data kosong). Frontend menampilkan pesan error dari API (mis. lewat `ApiError` / alert).
+
 | Field JSON | Keterangan |
 |------------|------------|
 | `maxScore` | Total skor maksimum lembar — **ada di body submit** (number; `0` jika tidak ada di DB). Dipakai menampilkan `X / Y`. |
-| `review` | Array per soal: `questionId`, `scoreGot`, `maxScore`, **`isCorrect`: `true` \| `false` \| `null`** (`null` eksplisit jika belum dinilai). Pembahasan, metadata modul, dll. Boleh dibungkus `items` / `outcomes` / `questionReviewOutcomes`. |
+| `review` | Array per soal: `questionId`, `scoreGot`, `maxScore`, **`isCorrect`: `true` \| `false` \| `null`** (`null` eksplisit jika belum dinilai). Pembahasan, metadata modul, **`questionTypeLabel`** (mis. “Pilihan ganda”), **`analysisSummary`** (satu kalimat), **`analysisDetail`** (narasi sesuai tipe soal), sinonim snake_case. Boleh dibungkus `items` / `outcomes` / `questionReviewOutcomes`. |
+| **`overallAnalysis`** | Objek agregat + narasi (alias `overall_analysis`): hitungan (`totalQuestions`, `answeredCount`, `unansweredCount`, `correctCount`, `wrongCount`, `autoUngradedCount`, `scorePercent`, `scoreGot`, `maxScore`), **`summary`** (paragraf Bahasa Indonesia), **`byQuestionType[]`** (per jenis: `questionTypeLabel`, `total`, `correct`, `wrong`, `unscored`, `scoreGot`, `maxScore`). Ada di **POST submit** dan **GET** attempt (submitted). |
 | `percentile` | **Opsional.** Hilangkan field dari JSON jika belum bisa dihitung (bukan `0` palsu). Jika ada: angka **0–100** (persentil dalam peserta tryout yang sama; butuh minimal dua skor untuk makna statistik). |
 | `moduleAnalysis` | Agregat per modul (`totalCount`, `correctCount`, `wrongCount`, `unscoredCount` + sinonim snake_case). |
 | `moduleSummary` | **Isi sama dengan `moduleAnalysis`** (alias kompatibilitas); FE membaca keduanya. |
 
 ### `GET /api/v1/student/attempts/{attemptId}` (siswa, setelah submitted)
 
-Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`moduleAnalysis`**, **`moduleSummary`** (dihitung ulang di server, DTO sama dengan submit) agar **refresh halaman** atau buka **`#/student/tryout/attempts/:id`** tetap mendapat analisis tanpa menyimpan body submit di klien.
+Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`moduleAnalysis`**, **`moduleSummary`**, **`overallAnalysis`** (dihitung ulang di server, DTO selaras submit) agar **refresh halaman** atau buka **`#/student/tryout/attempts/:id`** tetap mendapat analisis tanpa menyimpan body submit di klien.
 
 **Lembar ujian siswa (`QuestionResponse`):** `moduleId`, `moduleTitle`, `bidang`, `tags` — **tanpa** `correctOption` / `correctText`.
 
@@ -147,8 +150,9 @@ Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`mod
 
 ### Perilaku frontend (ringkas)
 
-- Setelah submit: tetap **GET** `/student/attempts/:attemptId`; prioritas **`review` + `moduleAnalysis` / `moduleSummary`** dari GET; lalu isi submit; lalu endpoint review/breakdown.  
-- Tampilan per soal mengikuti kontrak: **`isCorrect === null` + `scoreGot === 0`** → **“Belum dinilai otomatis”** (bukan salah); penilaian biner dengan kunci → **0 atau penuh** saja.  
+- Setelah submit: tetap **GET** `/student/attempts/:attemptId`; prioritas **`review` + `moduleAnalysis` / `moduleSummary` + `overallAnalysis`** dari GET; lalu isi submit; lalu endpoint review/breakdown.  
+- Tampilan per soal: **`analysisDetail`** (dan opsional `questionTypeLabel` / `analysisSummary`); **`isCorrect === null` + `scoreGot === 0`** → **“Belum dinilai otomatis”** (bukan salah); penilaian biner dengan kunci → **0 atau penuh** saja.  
+- Blok **analisis keseluruhan**: `overallAnalysis.summary` + opsional tabel `byQuestionType`.  
 - Fallback agregat modul lokal hanya jika tabel server tidak informatif tetapi `review` punya skor.
 
 ---
@@ -166,7 +170,7 @@ Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`mod
 - [ ] **`GET …/status`** akurat untuk `isRegistered` / `hasAttempted` (dan tetap hidup untuk siswa login).  
 - [ ] **Leaderboard list** hanya (atau utamakan) peserta terdaftar.  
 - [ ] **`…/leaderboard/rank`** tidak mengexpose posisi “palsu” untuk user yang belum daftar.  
-- [ ] **Submit + GET attempt:** skor per soal biner dengan kunci; tanpa kunci → `isCorrect: null` eksplisit; **`percentile`** opsional tanpa placeholder 0; **`moduleSummary`** = **`moduleAnalysis`**.  
+- [ ] **Submit + GET attempt:** skor per soal biner dengan kunci; tanpa kunci → `isCorrect: null` eksplisit; **`percentile`** opsional tanpa placeholder 0; **`moduleSummary`** = **`moduleAnalysis`**; **`review`** memuat `questionTypeLabel` / `analysisSummary` / `analysisDetail` bila backend mengirim; **`overallAnalysis`** pada submit + GET attempt.  
 - [ ] **`GET /student/tryouts/history`:** kirim **`attemptId`** per baris untuk tautan detail hasil.  
 - [ ] Dokumentasi error untuk `start` / `register` (kode + pesan) untuk UX.
 
@@ -178,7 +182,7 @@ Untuk attempt berstatus **submitted**, respons dapat berisi **`review`**, **`mod
 - Alur tombol & copy: `src/pages/lms/StudentTryoutDetailPage.tsx`.  
 - Leaderboard + status: `src/pages/lms/TryoutLeaderboardPage.tsx`.  
 - Parsing field tryout: `src/lib/api.ts` — `parseOpenTryoutsResponse` / `OpenTryoutItem`.  
-- Submit + `review` / `moduleAnalysis` / `moduleSummary` / `maxScore` / `percentile` opsional: `parseTryoutSubmitResultPayload`, `pickEmbeddedReviewFromSubmit`, `pickEmbeddedModuleAnalysisFromSubmit` di `src/lib/api.ts`; **GET attempt**: `getStudentAttemptDetail`. Agregat fallback: `src/utils/tryoutModuleAnalysis.ts`.  
+- Submit + `review` / `moduleAnalysis` / `moduleSummary` / `overallAnalysis` / `maxScore` / `percentile` opsional: `parseTryoutSubmitResultPayload`, `pickEmbeddedReviewFromSubmit`, `pickEmbeddedModuleAnalysisFromSubmit`, `pickEmbeddedOverallAnalysisFromSubmit` di `src/lib/api.ts`; **GET attempt**: `getStudentAttemptDetail`. Agregat fallback modul: `src/utils/tryoutModuleAnalysis.ts`.  
 - Penilaian tampilan per soal: `src/utils/tryoutReviewGrading.ts` (`effectiveTryoutQuestionCorrect`, `resolveTryoutReviewDisplay`).  
 - UI hasil: `src/components/lms/TryoutAttemptResultView.tsx`; dipakai oleh `StudentTryoutExamPage` (submitted + hydrasi GET attempt) dan **`#/student/tryout/attempts/:attemptId`** (`StudentTryoutAttemptReviewPage`).
 - Riwayat: `GET /student/tryouts/history` harus mengirim **`attemptId`** per baris agar tautan “Detail hasil” memuat pembahasan attempt yang benar.

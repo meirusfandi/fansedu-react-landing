@@ -127,6 +127,8 @@ export default function StudentTryoutAttemptReviewPage({ attemptId }: { attemptI
         paperQuestions={[]}
         attemptHydrationModuleAnalysis={detail.moduleAnalysis ?? detail.moduleSummary}
         submitModuleAnalysis={null}
+        attemptHydrationOverallAnalysis={detail.overallAnalysis ?? null}
+        submitOverallAnalysis={null}
         tryoutId={tryoutId}
         backHref={backToTryoutHref}
         backLabel="Kembali ke detail tryout"

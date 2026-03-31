@@ -10,7 +10,9 @@ import {
   type TryoutAttemptReviewRow,
   type TryoutAttemptSubmitResult,
   type TryoutExamQuestion,
+  type TryoutOverallAnalysis,
 } from '../../lib/api'
+import type { TryoutModuleStat } from '../../utils/tryoutModuleAnalysis'
 import { flushTryoutAnswersToServer } from '../../lib/tryout-exam-flush'
 import {
   clearTryoutExamSession,
@@ -94,6 +96,7 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
   const [attemptHydration, setAttemptHydration] = useState<{
     moduleAnalysis: TryoutModuleStat[] | null
     maxScore: number | null
+    overallAnalysis: TryoutOverallAnalysis | null
   } | null>(null)
   const [remainingSec, setRemainingSec] = useState(0)
   const autoSubmitFired = useRef(false)
@@ -230,6 +233,7 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
             return mod && mod.length > 0 ? mod : null
           })(),
           maxScore: detail.maxScore,
+          overallAnalysis: detail.overallAnalysis ?? null,
         })
         if (detail.review && detail.review.length > 0) {
           setReviewRows(detail.review)
@@ -578,6 +582,8 @@ export default function StudentTryoutExamPage({ tryoutId }: { tryoutId: string }
         paperQuestions={paper?.questions ?? []}
         attemptHydrationModuleAnalysis={attemptHydration?.moduleAnalysis}
         submitModuleAnalysis={submitResult.moduleAnalysis ?? submitResult.moduleSummary}
+        attemptHydrationOverallAnalysis={attemptHydration?.overallAnalysis}
+        submitOverallAnalysis={submitResult.overallAnalysis}
         tryoutId={tryoutId}
         backHref={backHref}
         backLabel="Kembali ke detail tryout"
