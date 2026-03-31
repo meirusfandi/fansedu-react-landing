@@ -1,6 +1,90 @@
 /** Role di UI & Zustand — selalu `guru` atau `student` (bukan `instructor`). */
 export type UserRole = 'student' | 'guru'
 
+/** Portal ini hanya siswa & guru; admin/trainer harus memakai aplikasi lain. */
+export class LmsPortalAccessDeniedError extends Error {
+  override name = 'LmsPortalAccessDeniedError'
+  constructor(
+    message = 'Akun admin atau trainer tidak dapat mengakses portal ini. Gunakan aplikasi khusus admin/trainer.',
+  ) {
+    super(message)
+  }
+}
+
+function normRoleToken(s: string): string {
+  return s.trim().toLowerCase().replace(/-/g, '_')
+}
+
+/**
+ * True jika kode / label peran mengindikasikan admin, trainer, atau peran staf lain
+ * (bukan siswa / guru / instructor / pengajar).
+ */
+export function isForbiddenStaffPortalRoleSignal(raw: string | undefined): boolean {
+  const s = raw ? normRoleToken(raw) : ''
+  if (!s) return false
+
+  const allowedExact = new Set([
+    'student',
+    'learner',
+    'peserta',
+    'siswa',
+    'guru',
+    'teacher',
+    'user',
+    'member',
+  ])
+  if (allowedExact.has(s)) return false
+
+  const parts = s.split('_').filter(Boolean)
+  if (parts.length > 0 && parts.every((p) => allowedExact.has(p))) return false
+
+  const forbiddenSegment = new Set([
+    'admin',
+    'administrator',
+    'trainer',
+    'moderator',
+    'instructor',
+    'pengajar',
+    'root',
+    'owner',
+    'superadmin',
+    'superuser',
+  ])
+  if (parts.some((p) => forbiddenSegment.has(p))) return true
+  if (parts.includes('admin') || parts.includes('administrator')) return true
+
+  if (s === 'admin' || s === 'trainer' || s === 'moderator' || s === 'root' || s === 'owner') return true
+  if (s === 'trainer' || s.endsWith('_trainer') || s.startsWith('trainer_')) return true
+
+  return false
+}
+
+function forbiddenFromAuthSources(
+  roleCode: string | undefined,
+  displayRole: string | undefined,
+  jwt: Record<string, unknown> | null,
+): boolean {
+  const signals: string[] = []
+  if (roleCode) signals.push(roleCode)
+  if (displayRole) signals.push(displayRole)
+  if (jwt) {
+    const jr = pickStr(jwt.role)
+    const jc = pickStr(jwt.role_code) ?? pickStr(jwt.roleCode)
+    if (jc) signals.push(jc)
+    if (jr) signals.push(jr)
+  }
+  return signals.some((x) => isForbiddenStaffPortalRoleSignal(x))
+}
+
+export function assertAllowedOnLmsPortal(raw: RawApiUser, token?: string): void {
+  const jwt = token ? decodeJwtPayload(token) : null
+  const roleCodeRaw = pickStr(raw.role_code) ?? pickStr(raw.roleCode)
+  const displayRole = pickStr(raw.role)
+  if (forbiddenFromAuthSources(roleCodeRaw, displayRole, jwt)) {
+    throw new LmsPortalAccessDeniedError()
+  }
+}
+
 /** Payload user mentah dari API / register / login / me */
 export interface RawApiUser {
   id: unknown
@@ -34,7 +118,8 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
 function mapRoleCodeToUserRole(code: string): UserRole | null {
   const c = code.trim().toLowerCase().replace(/-/g, '_')
   if (['student', 'learner', 'peserta', 'siswa'].includes(c)) return 'student'
-  if (['guru', 'instructor', 'teacher', 'trainer', 'pengajar'].includes(c)) return 'guru'
+  /** `trainer` bukan guru — akses portal ini dilarang di `assertAllowedOnLmsPortal`. */
+  if (['guru', 'instructor', 'teacher', 'pengajar'].includes(c)) return 'guru'
   if (c.endsWith('_student')) return 'student'
   if (c.endsWith('_instructor') || c.endsWith('_guru')) return 'guru'
   return null
@@ -56,11 +141,11 @@ export function normalizeAuthFields(
     if (mapped) return mapped
   }
   const dr = displayRole?.trim().toLowerCase()
-  if (dr === 'guru' || dr === 'instructor') return 'guru'
+  if (dr === 'guru' || dr === 'instructor' || dr === 'teacher' || dr === 'pengajar') return 'guru'
   if (dr === 'student') return 'student'
   if (jwt) {
     const jr = pickStr(jwt.role)?.toLowerCase()
-    if (jr === 'guru' || jr === 'instructor') return 'guru'
+    if (jr === 'guru' || jr === 'instructor' || jr === 'teacher' || jr === 'pengajar') return 'guru'
     if (jr === 'student') return 'student'
   }
   return 'student'
@@ -68,6 +153,7 @@ export function normalizeAuthFields(
 
 /** Normalisasi dari respons API + opsional token JWT. */
 export function authUserFromApiResponse(raw: RawApiUser, token?: string): AuthUser {
+  assertAllowedOnLmsPortal(raw, token)
   const jwt = token ? decodeJwtPayload(token) : null
   const id = String(raw.id ?? '')
   const name = String(raw.name ?? '')
@@ -106,4 +192,9 @@ export interface AuthUser {
   role: UserRole
   /** Kode peran dari API/JWT (mis. STUDENT, INSTRUCTOR) — untuk otorisasi; tetap utuh walau `role` tampilan beda. */
   roleCode?: string
+}
+
+/** Sesi tersimpan: cegah admin/trainer jika `roleCode` / label masih ada di state. */
+export function isAuthUserBlockedFromLmsPortal(user: Pick<AuthUser, 'role' | 'roleCode'>): boolean {
+  return forbiddenFromAuthSources(user.roleCode, user.role, null)
 }

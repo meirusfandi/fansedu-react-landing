@@ -3,7 +3,7 @@ import { useAuthStore } from '../../store/auth'
 import { useNotificationsStore, type AppNotification } from '../../store/notifications'
 import { apiGetMe, getMyNotifications, type UserNotificationsResponse } from '../../lib/api'
 import { performFullLogoutAndRedirect } from '../../lib/full-logout'
-import { authUserFromApiResponse } from '../../types/auth'
+import { authUserFromApiResponse, LmsPortalAccessDeniedError } from '../../types/auth'
 
 function mapNotificationsFromApi(res: UserNotificationsResponse, defaultHref: string): AppNotification[] {
   return (res.data || []).map((item) => ({
@@ -52,8 +52,14 @@ export function LmsHeader({ layout = 'centered', appSidebarOpen = true, onAppSid
       apiGetMe()
         .then((me) => {
           if (cancelled) return
-          const authUser = authUserFromApiResponse(me, token)
-          setUser(authUser)
+          try {
+            const authUser = authUserFromApiResponse(me, token)
+            setUser(authUser)
+          } catch (e) {
+            if (e instanceof LmsPortalAccessDeniedError) {
+              void performFullLogoutAndRedirect()
+            }
+          }
         })
         .catch(() => {})
     }

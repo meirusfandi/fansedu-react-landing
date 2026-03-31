@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
-import type { UserRole } from '../../types/auth'
+import { isAuthUserBlockedFromLmsPortal, type UserRole } from '../../types/auth'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -11,10 +11,20 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children, role, currentPath, onRedirect }: AuthGuardProps) {
   const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated())
+
+  useLayoutEffect(() => {
+    if (!user) return
+    if (!isAuthUserBlockedFromLmsPortal(user)) return
+    logout()
+    onRedirect('#/auth?tab=login&reason=lms-only')
+  }, [user, logout, onRedirect])
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
+      const hash = typeof window !== 'undefined' ? window.location.hash : ''
+      if (hash.startsWith('#/auth')) return
       const returnPath = `#/${(currentPath || '').replace(/^\//, '')}`
       const toAuth = `#/auth?redirect=${encodeURIComponent(returnPath)}`
       onRedirect(toAuth)

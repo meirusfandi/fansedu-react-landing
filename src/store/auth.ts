@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
-import { normalizeAuthFields, type AuthUser } from '../types/auth'
+import { isAuthUserBlockedFromLmsPortal, normalizeAuthFields, type AuthUser } from '../types/auth'
 
 interface AuthStore {
   user: AuthUser | null
@@ -63,10 +63,18 @@ export const useAuthStore = create<AuthStore>()(
         if (!p.state?.user) return { ...p, version: 2 }
         const u = p.state.user
         const nextRole = normalizeAuthFields(u.role, u.roleCode, null)
+        const userPatched = { ...u, role: nextRole } as AuthUser
+        if (isAuthUserBlockedFromLmsPortal(userPatched)) {
+          return {
+            ...p,
+            version: 2,
+            state: { ...p.state, user: null, token: null, rememberMe: p.state.rememberMe ?? true },
+          }
+        }
         return {
           ...p,
           version: 2,
-          state: { ...p.state, user: { ...u, role: nextRole } },
+          state: { ...p.state, user: userPatched },
         }
       },
       storage: createJSONStorage(() => authStorage),

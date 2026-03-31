@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
-import { authUserFromApiResponse, type UserRole } from '../../types/auth'
+import { authUserFromApiResponse, LmsPortalAccessDeniedError, type UserRole } from '../../types/auth'
 import { apiLogin, apiRegister, ApiError } from '../../lib/api'
 import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
 import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
@@ -47,16 +47,33 @@ export default function AuthPage({
   tab?: string
 }) {
   const [tab, setTab] = useState<Tab>(tabParam === 'register' ? 'register' : 'login')
+  const [portalNotice, setPortalNotice] = useState<string | null>(null)
 
   useEffect(() => {
     setTab(tabParam === 'register' ? 'register' : 'login')
   }, [tabParam])
+
+  useEffect(() => {
+    const hash = window.location.hash.slice(1)
+    const qi = hash.indexOf('?')
+    const q = new URLSearchParams(qi >= 0 ? hash.slice(qi + 1) : '')
+    if (q.get('reason') === 'lms-only') {
+      setPortalNotice(
+        'Portal ini hanya untuk siswa dan guru. Akun admin atau trainer tidak dapat masuk di sini.',
+      )
+    }
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col">
       <LmsHeader />
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
+          {portalNotice ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {portalNotice}
+            </div>
+          ) : null}
           <div className="flex rounded-t-xl border border-b-0 border-gray-200 bg-slate-50 p-1">
             <button
               type="button"
@@ -131,11 +148,15 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
       login(authUser, res.token, rememberMe)
       window.location.hash = resolvePostAuthHash(redirect, authUser.role)
     } catch (err) {
-      recordLoginFailure()
-      if (err instanceof ApiError && err.status === 401) {
-        setError('email/password salah, silahkan coba lagi')
+      if (err instanceof LmsPortalAccessDeniedError) {
+        setError(err.message)
       } else {
-        setError(err instanceof ApiError ? err.message : 'Gagal masuk. Cek email dan kata sandi.')
+        recordLoginFailure()
+        if (err instanceof ApiError && err.status === 401) {
+          setError('email/password salah, silahkan coba lagi')
+        } else {
+          setError(err instanceof ApiError ? err.message : 'Gagal masuk. Cek email dan kata sandi.')
+        }
       }
     } finally {
       setLoading(false)
@@ -295,8 +316,12 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
       setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
       window.location.hash = resolvePostAuthHash(redirect, authUser.role)
     } catch (err) {
-      attempt.onFailure()
-      setError(err instanceof ApiError ? err.message : 'Gagal daftar. Coba lagi.')
+      if (err instanceof LmsPortalAccessDeniedError) {
+        setError(err.message)
+      } else {
+        attempt.onFailure()
+        setError(err instanceof ApiError ? err.message : 'Gagal daftar. Coba lagi.')
+      }
     } finally {
       setLoading(false)
     }

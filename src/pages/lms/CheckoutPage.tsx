@@ -15,7 +15,7 @@ import {
   type SchoolStudentItem,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
-import { authUserFromApiResponse } from '../../types/auth'
+import { authUserFromApiResponse, LmsPortalAccessDeniedError } from '../../types/auth'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
 import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
@@ -530,12 +530,17 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         role: 'student',
         slug: slug ?? undefined,
       })
+      const authUser = authUserFromApiResponse(res.user, res.token)
       registerAttempt.onSuccess()
-      login(authUserFromApiResponse(res.user, res.token), res.token)
+      login(authUser, res.token)
       setStep('instructions')
     } catch (err) {
-      registerAttempt.onFailure()
-      setSetPasswordError(err instanceof ApiError ? err.message : 'Gagal menyimpan password.')
+      if (err instanceof LmsPortalAccessDeniedError) {
+        setSetPasswordError(err.message)
+      } else {
+        registerAttempt.onFailure()
+        setSetPasswordError(err instanceof ApiError ? err.message : 'Gagal menyimpan password.')
+      }
     } finally {
       setLoadingSetPassword(false)
     }
