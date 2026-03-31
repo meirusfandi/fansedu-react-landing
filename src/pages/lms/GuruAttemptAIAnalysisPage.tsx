@@ -58,7 +58,7 @@ export default function GuruAttemptAIAnalysisPage({
       </a>
 
       <div className="rounded-2xl border bg-white p-6 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">Analisis AI — Attempt {data.attempt_id.slice(0, 8)}…</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Analisis AI — Attempt {data.attemptId.slice(0, 8)}…</h1>
 
         {data.summary && (
           <div>
@@ -74,22 +74,22 @@ export default function GuruAttemptAIAnalysisPage({
           </div>
         )}
 
-        {data.strength_areas && data.strength_areas.length > 0 && (
+        {data.strengthAreas && data.strengthAreas.length > 0 && (
           <div>
             <h2 className="font-semibold text-gray-900 mb-2">Area Kekuatan</h2>
             <ul className="list-disc list-inside text-gray-600 text-sm space-y-1">
-              {data.strength_areas.map((area, i) => (
+              {data.strengthAreas.map((area, i) => (
                 <li key={i}>{area}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {data.improvement_areas && data.improvement_areas.length > 0 && (
+        {data.improvementAreas && data.improvementAreas.length > 0 && (
           <div>
             <h2 className="font-semibold text-gray-900 mb-2">Area Perbaikan</h2>
             <ul className="list-disc list-inside text-gray-600 text-sm space-y-1">
-              {data.improvement_areas.map((area, i) => (
+              {data.improvementAreas.map((area, i) => (
                 <li key={i}>{area}</li>
               ))}
             </ul>

@@ -88,7 +88,7 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
         <p className="text-gray-500 text-sm">
           ID: {tryoutId} · Total siswa (tabel): {students.length}
           {aggregate ? (
-            <span> · Peserta tercatat analisis: {aggregate.participants_count}</span>
+            <span> · Peserta tercatat analisis: {aggregate.participantsCount}</span>
           ) : null}
         </p>
       </div>
@@ -115,13 +115,13 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
               </thead>
               <tbody>
                 {aggregate.questions.map((q) => (
-                  <tr key={q.question_id} className="border-b last:border-0">
-                    <td className="py-3 px-4 font-medium">{q.question_number}</td>
-                    <td className="py-3 px-4 text-gray-600 font-mono text-xs">{q.question_id}</td>
-                    <td className="py-3 px-4 text-gray-600">{q.question_type}</td>
-                    <td className="py-3 px-4 text-right">{q.answered_count}</td>
-                    <td className="py-3 px-4 text-right text-emerald-700">{q.correct_percent.toFixed(1)}</td>
-                    <td className="py-3 px-4 text-right text-rose-700">{q.wrong_percent.toFixed(1)}</td>
+                  <tr key={q.questionId} className="border-b last:border-0">
+                    <td className="py-3 px-4 font-medium">{q.questionNumber}</td>
+                    <td className="py-3 px-4 text-gray-600 font-mono text-xs">{q.questionId}</td>
+                    <td className="py-3 px-4 text-gray-600">{q.questionType}</td>
+                    <td className="py-3 px-4 text-right">{q.answeredCount}</td>
+                    <td className="py-3 px-4 text-right text-emerald-700">{q.correctPercent.toFixed(1)}</td>
+                    <td className="py-3 px-4 text-right text-rose-700">{q.wrongPercent.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -163,24 +163,24 @@ export default function GuruTryoutAnalysisPage({ tryoutId }: { tryoutId: string 
                 </tr>
               ) : (
                 students.map((s) => (
-                  <tr key={s.attempt_id} className="border-b last:border-0">
-                    <td className="py-3 px-4 font-medium">{s.user_name}</td>
-                    <td className="py-3 px-4 text-gray-600">{s.user_email}</td>
+                  <tr key={s.attemptId} className="border-b last:border-0">
+                    <td className="py-3 px-4 font-medium">{s.userName}</td>
+                    <td className="py-3 px-4 text-gray-600">{s.userEmail}</td>
                     <td className="py-3 px-4 text-right">
-                      {s.score} / {s.max_score}
+                      {s.score} / {s.maxScore}
                     </td>
                     <td className="py-3 px-4 text-right">{s.percentile?.toFixed(1) ?? '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{s.submitted_at ? new Date(s.submitted_at).toLocaleString('id-ID') : '-'}</td>
+                    <td className="py-3 px-4 text-gray-600">{s.submittedAt ? new Date(s.submittedAt).toLocaleString('id-ID') : '-'}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <a
-                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/students/${encodeURIComponent(s.user_id)}`}
+                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/students/${encodeURIComponent(s.userId)}`}
                           className="text-slate-700 font-medium hover:underline"
                         >
                           Detail siswa
                         </a>
                         <a
-                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(s.attempt_id)}/ai-analysis`}
+                          href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(s.attemptId)}/ai-analysis`}
                           className="text-primary font-medium hover:underline"
                         >
                           Analisis AI →

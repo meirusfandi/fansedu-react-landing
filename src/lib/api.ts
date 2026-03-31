@@ -3038,9 +3038,68 @@ export interface StudentCertificatesResponse {
   data: CertificateItem[]
 }
 
+function pickDashboardStr(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return undefined
+}
+
+function dashInt(v: unknown): number | undefined {
+  const n = toFiniteNumber(v)
+  return n !== undefined ? Math.trunc(n) : undefined
+}
+
+function normalizeStudentDashboard(data: unknown): StudentDashboardResponse {
+  const root = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {}
+  const base =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root
+
+  const trySrc = base.tryoutSummary ?? base.tryout_progress ?? base.tryoutProgress ?? base.tryouts ?? base.tryout
+  let tryoutSummary: StudentDashboardResponse['tryoutSummary']
+  if (trySrc && typeof trySrc === 'object' && !Array.isArray(trySrc)) {
+    const t = trySrc as Record<string, unknown>
+    tryoutSummary = {
+      attemptedCount: dashInt(
+        t.attemptedCount ?? t.attempted_count ?? t.totalAttempts ?? t.total_attempts ?? t.attemptCount ?? t.attempt_count,
+      ),
+      completedCount: dashInt(t.completedCount ?? t.completed_count ?? t.finishedCount ?? t.finished_count),
+      registeredCount: dashInt(t.registeredCount ?? t.registered_count ?? t.joinedCount ?? t.joined_count),
+      averageScore: toFiniteNumber(t.averageScore ?? t.average_score ?? t.avgScore ?? t.avg_score),
+      bestScore: toFiniteNumber(t.bestScore ?? t.best_score ?? t.highestScore ?? t.highest_score),
+      upcomingCount: dashInt(t.upcomingCount ?? t.upcoming_count ?? t.availableCount ?? t.available_count),
+      streakDays: dashInt(t.streakDays ?? t.streak_days),
+      lastAttemptAt: pickDashboardStr(t.lastAttemptAt, t.last_attempt_at),
+    }
+  }
+
+  const weekSrc = base.weeklyTarget ?? base.weekly_target
+  let weeklyTarget: StudentDashboardResponse['weeklyTarget']
+  if (weekSrc && typeof weekSrc === 'object' && !Array.isArray(weekSrc)) {
+    const w = weekSrc as Record<string, unknown>
+    weeklyTarget = {
+      targetLessons: dashInt(w.targetLessons ?? w.target_lessons),
+      targetTryouts: dashInt(w.targetTryouts ?? w.target_tryouts),
+      completedLessons: dashInt(w.completedLessons ?? w.completed_lessons),
+      completedTryouts: dashInt(w.completedTryouts ?? w.completed_tryouts),
+    }
+  }
+
+  return {
+    coursesCount: dashInt(base.coursesCount ?? base.courses_count),
+    recentCourses: (base.recentCourses ?? base.recent_courses) as MyCourseItem[] | undefined,
+    tryoutSummary,
+    weeklyTarget,
+    badges: base.badges as StudentDashboardResponse['badges'],
+  }
+}
+
 export async function getStudentDashboard(): Promise<StudentDashboardResponse> {
   const res = await apiFetch(`${API_BASE}/student/dashboard`, { headers: authHeaders() })
-  return handleResponse<StudentDashboardResponse>(res)
+  const raw = await handleResponse<unknown>(res)
+  return normalizeStudentDashboard(raw)
 }
 
 export async function getMyCourses(params?: StudentCoursesQuery): Promise<StudentCoursesResponse> {
@@ -3629,53 +3688,149 @@ export async function updateInstructorPassword(body: UpdateInstructorPasswordReq
 // --- Instructor / Trainer Tryout Analysis (Auth + role guru/instructor) ---
 
 export interface InstructorTryoutQuestionAnalysis {
-  question_number: number
-  question_id: string
-  question_type: string
-  answered_count: number
-  unanswered_count: number
-  correct_count: number
-  wrong_count: number
-  correct_percent: number
-  wrong_percent: number
-  option_distribution: Record<string, number>
+  questionNumber: number
+  questionId: string
+  questionType: string
+  answeredCount: number
+  unansweredCount: number
+  correctCount: number
+  wrongCount: number
+  correctPercent: number
+  wrongPercent: number
+  optionDistribution: Record<string, number>
 }
 
 export interface InstructorTryoutAnalysisResponse {
-  tryout_id: string
-  tryout_title: string
-  participants_count: number
+  tryoutId: string
+  tryoutTitle: string
+  participantsCount: number
   questions: InstructorTryoutQuestionAnalysis[]
 }
 
 export interface InstructorTryoutStudentItem {
-  user_id: string
-  user_name: string
-  user_email: string
-  attempt_id: string
+  userId: string
+  userName: string
+  userEmail: string
+  attemptId: string
   score: number
-  max_score: number
-  percentile: number
-  submitted_at: string
+  maxScore: number
+  percentile?: number
+  submittedAt: string
 }
 
 export interface InstructorAttemptAIAnalysisResponse {
-  attempt_id: string
+  attemptId: string
   summary: string
   recap: string
-  strength_areas: string[]
-  improvement_areas: string[]
+  strengthAreas: string[]
+  improvementAreas: string[]
   recommendation: string
+}
+
+function parseInstructorTryoutQuestionAnalysis(row: Record<string, unknown>): InstructorTryoutQuestionAnalysis {
+  const optRaw = row.option_distribution ?? row.optionDistribution
+  const optionDistribution: Record<string, number> = {}
+  if (optRaw && typeof optRaw === 'object' && !Array.isArray(optRaw)) {
+    for (const [k, v] of Object.entries(optRaw as Record<string, unknown>)) {
+      const n = toFiniteNumber(v)
+      if (n !== undefined) optionDistribution[k] = n
+    }
+  }
+  return {
+    questionNumber: Math.max(0, Math.trunc(toFiniteNumber(row.question_number ?? row.questionNumber) ?? 0)),
+    questionId: String(row.question_id ?? row.questionId ?? ''),
+    questionType: String(row.question_type ?? row.questionType ?? ''),
+    answeredCount: Math.max(0, Math.trunc(toFiniteNumber(row.answered_count ?? row.answeredCount) ?? 0)),
+    unansweredCount: Math.max(0, Math.trunc(toFiniteNumber(row.unanswered_count ?? row.unansweredCount) ?? 0)),
+    correctCount: Math.max(0, Math.trunc(toFiniteNumber(row.correct_count ?? row.correctCount) ?? 0)),
+    wrongCount: Math.max(0, Math.trunc(toFiniteNumber(row.wrong_count ?? row.wrongCount) ?? 0)),
+    correctPercent: toFiniteNumber(row.correct_percent ?? row.correctPercent) ?? 0,
+    wrongPercent: toFiniteNumber(row.wrong_percent ?? row.wrongPercent) ?? 0,
+    optionDistribution,
+  }
+}
+
+function parseInstructorTryoutAnalysisPayload(raw: unknown): InstructorTryoutAnalysisResponse {
+  const root =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const base =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root
+
+  const questionsRaw = base.questions
+  const questionsArr = Array.isArray(questionsRaw) ? questionsRaw : []
+
+  return {
+    tryoutId: String(base.tryout_id ?? base.tryoutId ?? ''),
+    tryoutTitle: String(base.tryout_title ?? base.tryoutTitle ?? ''),
+    participantsCount: Math.max(
+      0,
+      Math.trunc(toFiniteNumber(base.participants_count ?? base.participantsCount) ?? 0),
+    ),
+    questions: (questionsArr as Record<string, unknown>[]).map(parseInstructorTryoutQuestionAnalysis),
+  }
+}
+
+function parseInstructorTryoutStudentItem(row: Record<string, unknown>): InstructorTryoutStudentItem {
+  const percentileRaw = toFiniteNumber(row.percentile)
+  return {
+    userId: String(row.user_id ?? row.userId ?? ''),
+    userName: String(row.user_name ?? row.userName ?? ''),
+    userEmail: String(row.user_email ?? row.userEmail ?? ''),
+    attemptId: String(row.attempt_id ?? row.attemptId ?? ''),
+    score: toFiniteNumber(row.score) ?? 0,
+    maxScore: toFiniteNumber(row.max_score ?? row.maxScore) ?? 0,
+    ...(percentileRaw !== undefined ? { percentile: percentileRaw } : {}),
+    submittedAt: String(row.submitted_at ?? row.submittedAt ?? ''),
+  }
+}
+
+function parseInstructorTryoutStudentsPayload(raw: unknown): InstructorTryoutStudentItem[] {
+  if (Array.isArray(raw)) {
+    return (raw as Record<string, unknown>[]).map(parseInstructorTryoutStudentItem)
+  }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const r = raw as Record<string, unknown>
+    const arr = Array.isArray(r.data) ? r.data : Array.isArray(r.students) ? r.students : []
+    return (arr as Record<string, unknown>[]).map(parseInstructorTryoutStudentItem)
+  }
+  return []
+}
+
+function parseStringArrayField(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.map((x) => String(x)).filter((s) => s.length > 0)
+}
+
+function parseInstructorAttemptAIAnalysisPayload(raw: unknown): InstructorAttemptAIAnalysisResponse {
+  const root =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const base =
+    root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root
+
+  return {
+    attemptId: String(base.attempt_id ?? base.attemptId ?? ''),
+    summary: String(base.summary ?? ''),
+    recap: String(base.recap ?? ''),
+    strengthAreas: parseStringArrayField(base.strength_areas ?? base.strengthAreas),
+    improvementAreas: parseStringArrayField(base.improvement_areas ?? base.improvementAreas),
+    recommendation: String(base.recommendation ?? ''),
+  }
 }
 
 export async function getInstructorTryoutAnalysis(tryoutId: string): Promise<InstructorTryoutAnalysisResponse> {
   const res = await apiFetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/analysis`, { headers: authHeaders() })
-  return handleResponse<InstructorTryoutAnalysisResponse>(res)
+  const raw = await handleResponse<unknown>(res)
+  return parseInstructorTryoutAnalysisPayload(raw)
 }
 
 export async function getInstructorTryoutStudents(tryoutId: string): Promise<InstructorTryoutStudentItem[]> {
   const res = await apiFetch(`${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/students`, { headers: authHeaders() })
-  return handleResponse<InstructorTryoutStudentItem[]>(res)
+  const raw = await handleResponse<unknown>(res)
+  return parseInstructorTryoutStudentsPayload(raw)
 }
 
 export async function getInstructorAttemptAIAnalysis(
@@ -3686,7 +3841,8 @@ export async function getInstructorAttemptAIAnalysis(
     `${API_BASE}/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attemptId)}/ai-analysis`,
     { headers: authHeaders() }
   )
-  return handleResponse<InstructorAttemptAIAnalysisResponse>(res)
+  const raw = await handleResponse<unknown>(res)
+  return parseInstructorAttemptAIAnalysisPayload(raw)
 }
 
 // --- Analytics (Visitor Tracking) ---

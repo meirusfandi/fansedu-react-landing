@@ -40,90 +40,28 @@ function extractTryoutProgressSummary(
   dashboard: StudentDashboardResponse | null,
   fallbackUpcoming: number
 ): TryoutProgressSummary {
-  const source = asRecord(
-    dashboard?.tryoutSummary ??
-      dashboard?.tryout_progress ??
-      dashboard?.tryoutProgress ??
-      dashboard?.tryouts ??
-      dashboard?.tryout
-  ) ?? {}
+  const source = asRecord(dashboard?.tryoutSummary) ?? {}
 
-  const attemptedCount = Math.max(
-    0,
-    Math.trunc(
-      toNumber(
-        source.attemptedCount ??
-          source.attempted_count ??
-          source.totalAttempts ??
-          source.total_attempts ??
-          source.attemptCount ??
-          source.attempt_count
-      )
-    )
-  )
-  const completedCount = Math.max(
-    0,
-    Math.trunc(
-      toNumber(
-        source.completedCount ??
-          source.completed_count ??
-          source.finishedCount ??
-          source.finished_count
-      )
-    )
-  )
+  const attemptedCount = Math.max(0, Math.trunc(toNumber(source.attemptedCount)))
+  const completedCount = Math.max(0, Math.trunc(toNumber(source.completedCount)))
   const registeredCount = Math.max(
     completedCount,
-    Math.trunc(
-      toNumber(
-        source.registeredCount ??
-          source.registered_count ??
-          source.joinedCount ??
-          source.joined_count ??
-          completedCount
-      )
-    )
+    Math.trunc(toNumber(source.registeredCount ?? completedCount)),
   )
   const averageScore = Math.max(
     0,
-    Math.min(
-      100,
-      Math.round(
-        toNumber(
-          source.averageScore ??
-            source.average_score ??
-            source.avgScore ??
-            source.avg_score
-        )
-      )
-    )
+    Math.min(100, Math.round(toNumber(source.averageScore))),
   )
   const bestScore = Math.max(
     averageScore,
     Math.min(
       100,
-      Math.round(
-        toNumber(
-          source.bestScore ??
-            source.best_score ??
-            source.highestScore ??
-            source.highest_score ??
-            averageScore
-        )
-      )
-    )
+      Math.round(toNumber(source.bestScore ?? averageScore)),
+    ),
   )
   const upcomingCount = Math.max(
     0,
-    Math.trunc(
-      toNumber(
-        source.upcomingCount ??
-          source.upcoming_count ??
-          source.availableCount ??
-          source.available_count ??
-          fallbackUpcoming
-      )
-    )
+    Math.trunc(toNumber(source.upcomingCount ?? fallbackUpcoming)),
   )
   const completionRate =
     attemptedCount > 0

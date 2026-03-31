@@ -48,7 +48,7 @@ export default function GuruStudentDetailPage({ studentId }: { studentId: string
           try {
             const participants = await getInstructorTryoutStudents(tryout.id)
             return participants
-              .filter((item) => item.user_id === studentId)
+              .filter((item) => item.userId === studentId)
               .map((item) => ({
                 ...item,
                 tryoutId: tryout.id,
@@ -60,8 +60,8 @@ export default function GuruStudentDetailPage({ studentId }: { studentId: string
         })
         const allTryoutRows = (await Promise.all(tryoutRequests)).flat()
         allTryoutRows.sort((a, b) => {
-          const aTs = a.submitted_at ? Date.parse(a.submitted_at) : 0
-          const bTs = b.submitted_at ? Date.parse(b.submitted_at) : 0
+          const aTs = a.submittedAt ? Date.parse(a.submittedAt) : 0
+          const bTs = b.submittedAt ? Date.parse(b.submittedAt) : 0
           return bTs - aTs
         })
         setTryoutRows(allTryoutRows)
@@ -75,11 +75,11 @@ export default function GuruStudentDetailPage({ studentId }: { studentId: string
   }, [studentId])
 
   const studentName = useMemo(
-    () => coursesRows[0]?.name ?? tryoutRows[0]?.user_name ?? 'Siswa',
+    () => coursesRows[0]?.name ?? tryoutRows[0]?.userName ?? 'Siswa',
     [coursesRows, tryoutRows]
   )
   const studentEmail = useMemo(
-    () => coursesRows[0]?.email ?? tryoutRows[0]?.user_email ?? '-',
+    () => coursesRows[0]?.email ?? tryoutRows[0]?.userEmail ?? '-',
     [coursesRows, tryoutRows]
   )
   const avgCourseProgress = useMemo(() => {
@@ -173,15 +173,15 @@ export default function GuruStudentDetailPage({ studentId }: { studentId: string
                 </tr>
               ) : (
                 tryoutRows.map((row) => (
-                  <tr key={row.attempt_id} className="border-b last:border-0">
+                  <tr key={row.attemptId} className="border-b last:border-0">
                     <td className="py-3 px-4">{row.tryoutTitle}</td>
-                    <td className="py-3 px-4 text-right">{row.score} / {row.max_score}</td>
-                    <td className="py-3 px-4 text-right">{toPercent(row.score, row.max_score)}</td>
+                    <td className="py-3 px-4 text-right">{row.score} / {row.maxScore}</td>
+                    <td className="py-3 px-4 text-right">{toPercent(row.score, row.maxScore)}</td>
                     <td className="py-3 px-4 text-right">{row.percentile?.toFixed(1) ?? '-'}</td>
-                    <td className="py-3 px-4 text-gray-600">{formatDateTime(row.submitted_at)}</td>
+                    <td className="py-3 px-4 text-gray-600">{formatDateTime(row.submittedAt)}</td>
                     <td className="py-3 px-4">
                       <a
-                        href={`#/guru/tryouts/${encodeURIComponent(row.tryoutId)}/attempts/${encodeURIComponent(row.attempt_id)}/ai-analysis?redirect=${encodeURIComponent(`#/guru/students/${studentId}`)}`}
+                        href={`#/guru/tryouts/${encodeURIComponent(row.tryoutId)}/attempts/${encodeURIComponent(row.attemptId)}/ai-analysis?redirect=${encodeURIComponent(`#/guru/students/${studentId}`)}`}
                         className="text-primary font-medium hover:underline"
                       >
                         Analisis AI →

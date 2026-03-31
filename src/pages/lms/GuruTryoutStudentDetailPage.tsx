@@ -29,7 +29,7 @@ export default function GuruTryoutStudentDetailPage({
     setError(null)
     Promise.all([getInstructorTryoutAnalysis(tryoutId), getInstructorTryoutStudents(tryoutId)])
       .then(([analysis, rows]) => {
-        setTryoutTitle(analysis?.tryout_title ?? '')
+        setTryoutTitle(analysis?.tryoutTitle ?? '')
         setStudents(Array.isArray(rows) ? rows : [])
       })
       .catch((err) => {
@@ -40,7 +40,7 @@ export default function GuruTryoutStudentDetailPage({
   }, [tryoutId, studentId])
 
   const studentAttempts = useMemo(
-    () => students.filter((item) => item.user_id === studentId),
+    () => students.filter((item) => item.userId === studentId),
     [students, studentId]
   )
 
@@ -55,8 +55,8 @@ export default function GuruTryoutStudentDetailPage({
   const latestAttempt = useMemo(
     () => studentAttempts.reduce<InstructorTryoutStudentItem | null>((latest, item) => {
       if (!latest) return item
-      const latestTime = latest.submitted_at ? Date.parse(latest.submitted_at) : 0
-      const itemTime = item.submitted_at ? Date.parse(item.submitted_at) : 0
+      const latestTime = latest.submittedAt ? Date.parse(latest.submittedAt) : 0
+      const itemTime = item.submittedAt ? Date.parse(item.submittedAt) : 0
       return itemTime > latestTime ? item : latest
     }, null),
     [studentAttempts]
@@ -103,9 +103,9 @@ export default function GuruTryoutStudentDetailPage({
       </a>
 
       <div className="rounded-2xl border bg-white p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">{studentMeta.user_name}</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">{studentMeta.userName}</h1>
         <p className="text-gray-500 text-sm">
-          {studentMeta.user_email} {tryoutTitle ? `· ${tryoutTitle}` : ''}
+          {studentMeta.userEmail} {tryoutTitle ? `· ${tryoutTitle}` : ''}
         </p>
       </div>
 
@@ -117,14 +117,14 @@ export default function GuruTryoutStudentDetailPage({
         <div className="rounded-2xl border bg-white p-4">
           <p className="text-xs text-gray-500 mb-1">Skor Tertinggi</p>
           <p className="text-2xl font-bold text-gray-900">
-            {bestAttempt ? `${bestAttempt.score}/${bestAttempt.max_score}` : '-'}
+            {bestAttempt ? `${bestAttempt.score}/${bestAttempt.maxScore}` : '-'}
           </p>
         </div>
         <div className="rounded-2xl border bg-white p-4">
           <p className="text-xs text-gray-500 mb-1">Attempt Terakhir</p>
           <p className="text-sm font-semibold text-gray-900">
-            {latestAttempt?.submitted_at
-              ? new Date(latestAttempt.submitted_at).toLocaleString('id-ID')
+            {latestAttempt?.submittedAt
+              ? new Date(latestAttempt.submittedAt).toLocaleString('id-ID')
               : '-'}
           </p>
         </div>
@@ -148,21 +148,21 @@ export default function GuruTryoutStudentDetailPage({
             </thead>
             <tbody>
               {studentAttempts.map((attempt) => (
-                <tr key={attempt.attempt_id} className="border-b last:border-0">
-                  <td className="py-3 px-4 font-medium text-gray-800">{attempt.attempt_id}</td>
+                <tr key={attempt.attemptId} className="border-b last:border-0">
+                  <td className="py-3 px-4 font-medium text-gray-800">{attempt.attemptId}</td>
                   <td className="py-3 px-4 text-right">
-                    {attempt.score} / {attempt.max_score}
+                    {attempt.score} / {attempt.maxScore}
                   </td>
                   <td className="py-3 px-4 text-right">
-                    {scorePercent(attempt.score, attempt.max_score).toFixed(1)}%
+                    {scorePercent(attempt.score, attempt.maxScore).toFixed(1)}%
                   </td>
                   <td className="py-3 px-4 text-right">{attempt.percentile?.toFixed(1) ?? '-'}</td>
                   <td className="py-3 px-4 text-gray-600">
-                    {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString('id-ID') : '-'}
+                    {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '-'}
                   </td>
                   <td className="py-3 px-4">
                     <a
-                      href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attempt.attempt_id)}/ai-analysis`}
+                      href={`#/guru/tryouts/${encodeURIComponent(tryoutId)}/attempts/${encodeURIComponent(attempt.attemptId)}/ai-analysis`}
                       className="text-primary font-medium hover:underline"
                     >
                       Lihat Analisis AI →

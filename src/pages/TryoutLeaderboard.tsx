@@ -21,35 +21,26 @@ export interface LeaderboardEntry {
   hasAttempt: boolean
 }
 
-/** API row shape: GET /api/v1/tryouts/{id}/leaderboard → { rank, user_id, user_name, school_name, has_attempt } */
-interface LeaderboardApiRow {
-  rank?: number
-  user_id?: string
-  user_name?: string
-  school_name?: string
-  has_attempt?: boolean
-  [key: string]: unknown
-}
-
-function normalizeEntry(raw: LeaderboardApiRow, index: number): LeaderboardEntry {
-  const rank = raw.rank ?? index + 1
-  const userId = typeof raw.user_id === 'string' ? raw.user_id : ''
-  const name = typeof raw.user_name === 'string' ? raw.user_name : '—'
-  const school = typeof raw.school_name === 'string' ? raw.school_name : '—'
-  const hasAttempt = raw.has_attempt === true
+/** Normalisasi baris leaderboard: API bisa mengirim camelCase atau snake_case. */
+function normalizeEntry(raw: Record<string, unknown>, index: number): LeaderboardEntry {
+  const rank = (typeof raw.rank === 'number' ? raw.rank : undefined) ?? index + 1
+  const userId = String(raw.userId ?? raw.user_id ?? '')
+  const name = String(raw.userName ?? raw.user_name ?? '—')
+  const school = String(raw.schoolName ?? raw.school_name ?? '—')
+  const hasAttempt = raw.hasAttempt === true || raw.has_attempt === true
   return { rank, userId, name, school, hasAttempt }
 }
 
 function parseLeaderboardResponse(data: unknown): LeaderboardEntry[] {
-  if (Array.isArray(data)) return data.map((row, i) => normalizeEntry(row as LeaderboardApiRow, i))
+  if (Array.isArray(data)) return data.map((row, i) => normalizeEntry(row as Record<string, unknown>, i))
   if (data && typeof data === 'object' && 'leaderboard' in data && Array.isArray((data as { leaderboard: unknown }).leaderboard)) {
-    return ((data as { leaderboard: LeaderboardApiRow[] }).leaderboard).map((row, i) => normalizeEntry(row, i))
+    return ((data as { leaderboard: Record<string, unknown>[] }).leaderboard).map((row, i) => normalizeEntry(row, i))
   }
   if (data && typeof data === 'object' && 'data' in data) {
     const inner = (data as { data: unknown }).data
-    if (Array.isArray(inner)) return inner.map((row: LeaderboardApiRow, i: number) => normalizeEntry(row, i))
+    if (Array.isArray(inner)) return inner.map((row, i: number) => normalizeEntry(row as Record<string, unknown>, i))
     if (inner && typeof inner === 'object' && 'leaderboard' in inner && Array.isArray((inner as { leaderboard: unknown }).leaderboard)) {
-      return ((inner as { leaderboard: LeaderboardApiRow[] }).leaderboard).map((row, i) => normalizeEntry(row, i))
+      return ((inner as { leaderboard: Record<string, unknown>[] }).leaderboard).map((row, i) => normalizeEntry(row, i))
     }
   }
   return []
