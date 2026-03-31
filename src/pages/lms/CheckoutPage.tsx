@@ -1052,6 +1052,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   )}
                   {step === 'info' && (
                     <button
+                      type="button"
                       onClick={onContinue}
                       disabled={
                         !isValidRegistrationName(userInfo.name)
@@ -1145,6 +1146,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 </div>
                 {step === 'payment' && (
                   <button
+                    type="button"
                     onClick={onPay}
                     disabled={loadingPay || !paymentMethod}
                     className="mt-6 w-full py-3.5 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"

@@ -503,7 +503,7 @@ function App() {
             <div className="order-1">
               <div className="reveal flex flex-wrap items-center gap-2 mb-4">
                 <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
-                  <span aria-hidden>⚠️</span>
+                  <span aria-hidden={true}>⚠️</span>
                   Batch April hampir penuh
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold bg-[var(--card)] text-[var(--fg)] border-2 border-[var(--fg)]/15 shadow-sm">
@@ -716,7 +716,7 @@ function App() {
                   key={item.title}
                   className="feature-card rounded-2xl p-5 lg:p-6 flex gap-4 border border-[var(--border)]"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0" aria-hidden>
+                  <div className="w-10 h-10 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0" aria-hidden={true}>
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
@@ -920,7 +920,7 @@ function App() {
             {promoCountdown.ended ? (
               <>
                 <span className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-[var(--fg)] bg-[var(--card)] border-2 border-[var(--border)] shadow-sm mb-4 reveal">
-                  <span aria-hidden>📌</span>
+                  <span aria-hidden={true}>📌</span>
                   <span>{URGENCY.promoLabel} sudah berakhir</span>
                 </span>
                 <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">
@@ -942,7 +942,7 @@ function App() {
             ) : (
               <>
                 <span className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 shadow-md ring-1 ring-black/15 dark:ring-white/25 mb-4 reveal">
-                  <span className="text-base leading-none" aria-hidden>⏳</span>
+                  <span className="text-base leading-none" aria-hidden={true}>⏳</span>
                   <span>{URGENCY.promoLabel} · slot terbatas</span>
                 </span>
                 <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6 reveal reveal-delay-1">

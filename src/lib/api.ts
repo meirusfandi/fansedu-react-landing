@@ -3187,24 +3187,56 @@ export async function getSchools(): Promise<SchoolsResponse> {
 export async function getSchoolById(schoolId: string): Promise<SchoolDetailResponse> {
   const res = await apiFetch(`${API_BASE}/schools/${encodeURIComponent(schoolId)}`, { headers: authHeaders() })
   const raw = await handleResponse<unknown>(res)
-  const payload = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  return parseSchoolDetailFromApiPayload(raw, schoolId, 'Sekolah')
+}
+
+/** Respons POST/GET sekolah: root, `data`, atau `school` + sinonim id snake_case. */
+function parseSchoolDetailFromApiPayload(
+  raw: unknown,
+  fallbackId: string,
+  fallbackName: string,
+): SchoolDetailResponse {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      id: fallbackId.trim() ? fallbackId : '',
+      name: fallbackName,
+    }
+  }
+  const root = raw as Record<string, unknown>
+  const nested =
+    root.data != null && typeof root.data === 'object' && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : null
+  const fromSchoolKey =
+    root.school != null && typeof root.school === 'object' && !Array.isArray(root.school)
+      ? (root.school as Record<string, unknown>)
+      : null
+  const o = nested ?? fromSchoolKey ?? root
+  const idRaw = o.id ?? o.school_id ?? o.schoolId
+  const id = idRaw != null && String(idRaw).trim() ? String(idRaw).trim() : fallbackId.trim() ? fallbackId : ''
+  const name = String(o.name ?? o.nama ?? fallbackName).trim() || fallbackName
   return {
-    id: String(payload.id ?? schoolId),
-    name: String(payload.name ?? 'Sekolah'),
-    slug: payload.slug != null ? String(payload.slug) : undefined,
-    description: payload.description != null ? String(payload.description) : undefined,
-    address: payload.address != null ? String(payload.address) : undefined,
-    logoUrl: payload.logo_url != null ? String(payload.logo_url) : (payload.logoUrl != null ? String(payload.logoUrl) : undefined),
+    id,
+    name,
+    slug: o.slug != null ? String(o.slug) : undefined,
+    description: o.description != null ? String(o.description) : undefined,
+    address: o.address != null ? String(o.address) : undefined,
+    logoUrl:
+      o.logo_url != null ? String(o.logo_url) : o.logoUrl != null ? String(o.logoUrl) : undefined,
   }
 }
 
 export async function createSchool(body: CreateSchoolRequest): Promise<SchoolDetailResponse> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     name: body.name,
-    slug: body.slug ?? undefined,
-    description: body.description ?? undefined,
-    address: body.address ?? undefined,
-    logoUrl: body.logoUrl ?? undefined,
+  }
+  if (body.slug?.trim()) payload.slug = body.slug.trim()
+  if (body.description?.trim()) payload.description = body.description.trim()
+  if (body.address?.trim()) payload.address = body.address.trim()
+  if (body.logoUrl?.trim()) {
+    const u = body.logoUrl.trim()
+    payload.logoUrl = u
+    payload.logo_url = u
   }
   const res = await apiFetch(`${API_BASE}/schools`, {
     method: 'POST',
@@ -3212,15 +3244,7 @@ export async function createSchool(body: CreateSchoolRequest): Promise<SchoolDet
     body: JSON.stringify(payload),
   })
   const raw = await handleResponse<unknown>(res)
-  const data = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
-  return {
-    id: String(data.id ?? ''),
-    name: String(data.name ?? body.name),
-    slug: data.slug != null ? String(data.slug) : body.slug,
-    description: data.description != null ? String(data.description) : body.description,
-    address: data.address != null ? String(data.address) : body.address,
-    logoUrl: data.logo_url != null ? String(data.logo_url) : (data.logoUrl != null ? String(data.logoUrl) : body.logoUrl),
-  }
+  return parseSchoolDetailFromApiPayload(raw, '', body.name)
 }
 
 export async function getCertificates(): Promise<StudentCertificatesResponse> {

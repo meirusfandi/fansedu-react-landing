@@ -22,9 +22,13 @@ export type LmsHeaderLayout = 'centered' | 'app'
 interface LmsHeaderProps {
   /** `app`: baris header selaras dengan sidebar (kolom kiri w-56). `centered`: konten dibatasi max-w-6xl (katalog, auth, checkout). */
   layout?: LmsHeaderLayout
+  /** Layout `app`: sidebar navigasi terbuka (selaras dengan aside w-56). */
+  appSidebarOpen?: boolean
+  /** Layout `app`: toggle sembunyikan / tampilkan sidebar. */
+  onAppSidebarToggle?: () => void
 }
 
-export function LmsHeader({ layout = 'centered' }: LmsHeaderProps) {
+export function LmsHeader({ layout = 'centered', appSidebarOpen = true, onAppSidebarToggle }: LmsHeaderProps) {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const token = useAuthStore((s) => s.token)
@@ -219,13 +223,56 @@ export function LmsHeader({ layout = 'centered' }: LmsHeaderProps) {
   )
 
   if (layout === 'app') {
+    const collapsible = typeof onAppSidebarToggle === 'function'
+    const sidebarOpen = collapsible ? appSidebarOpen : true
+
+    const collapseBtn = (
+      <button
+        type="button"
+        onClick={onAppSidebarToggle}
+        className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-slate-100 hover:text-gray-800"
+        aria-label="Sembunyikan menu navigasi"
+        aria-expanded={sidebarOpen}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden={true}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+    )
+
+    const expandBtn = (
+      <button
+        type="button"
+        onClick={onAppSidebarToggle}
+        className="rounded-lg p-2 text-gray-600 hover:bg-slate-100 hover:text-primary"
+        aria-label="Tampilkan menu navigasi"
+        aria-expanded={sidebarOpen}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden={true}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    )
+
     return (
       <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
         <div className="flex h-14 min-h-[3.5rem] w-full items-stretch">
-          <div className="flex w-56 shrink-0 items-center border-r border-gray-200 px-4 bg-white/95">
-            {brand}
-          </div>
-          <nav className="flex min-w-0 flex-1 items-center justify-end gap-4 px-4 bg-white/95" aria-label="Menu akun">
+          {sidebarOpen ? (
+            <div className="flex w-56 shrink-0 items-center gap-2 border-r border-gray-200 bg-white/95 px-3 sm:px-4">
+              <div className="min-w-0 flex-1">{brand}</div>
+              {collapsible ? collapseBtn : null}
+            </div>
+          ) : (
+            <div className="flex w-12 shrink-0 items-center justify-center border-r border-gray-200 bg-white/95 sm:w-14">
+              {collapsible ? expandBtn : null}
+            </div>
+          )}
+          <nav
+            className="flex min-w-0 flex-1 items-center gap-3 bg-white/95 px-3 sm:px-4"
+            aria-label="Menu akun"
+          >
+            {!sidebarOpen ? <div className="min-w-0 shrink">{brand}</div> : null}
+            <div className="min-w-0 flex-1" />
             {actions}
           </nav>
         </div>

@@ -1,5 +1,6 @@
 import { LmsHeader } from '../../components/lms/Header'
 import { AuthGuard } from '../../components/lms/AuthGuard'
+import { useLmsSidebarVisible } from '../../hooks/useLmsSidebarVisible'
 
 const MENU = [
   { href: '#/guru', label: 'Dashboard' },
@@ -10,15 +11,21 @@ const MENU = [
 ]
 
 export function GuruLayout({ children, currentPath }: { children: React.ReactNode; currentPath: string }) {
+  const { sidebarVisible, toggleSidebar } = useLmsSidebarVisible('guru')
   const onRedirect = (path: string) => {
     window.location.hash = path.replace('#', '')
   }
   return (
     <AuthGuard role="guru" currentPath={currentPath} onRedirect={onRedirect}>
       <div className="min-h-screen flex flex-col">
-        <LmsHeader layout="app" />
-        <div className="flex-1 flex">
-          <aside className="w-56 border-r bg-white min-h-[calc(100vh-3.5rem)] py-6 px-4">
+        <LmsHeader layout="app" appSidebarOpen={sidebarVisible} onAppSidebarToggle={toggleSidebar} />
+        <div className="flex flex-1 min-h-0">
+          <aside
+            className={`shrink-0 border-r border-gray-200 bg-white transition-[width,opacity,padding] duration-200 ease-out min-h-[calc(100vh-3.5rem)] ${
+              sidebarVisible ? 'w-56 py-6 px-4 opacity-100' : 'w-0 overflow-hidden border-0 py-0 px-0 opacity-0 pointer-events-none'
+            }`}
+            inert={!sidebarVisible ? true : undefined}
+          >
             <nav className="flex flex-col gap-1">
               {MENU.map((item) => (
                 <a
@@ -35,7 +42,7 @@ export function GuruLayout({ children, currentPath }: { children: React.ReactNod
               ))}
             </nav>
           </aside>
-          <main className="flex-1 p-8 bg-slate-50">{children}</main>
+          <main className="min-w-0 flex-1 p-8 bg-slate-50">{children}</main>
         </div>
       </div>
     </AuthGuard>

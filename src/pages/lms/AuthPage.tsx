@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { authUserFromApiResponse, type UserRole } from '../../types/auth'
@@ -89,6 +89,10 @@ export default function AuthPage({
   )
 }
 
+function loginCredentialKey(email: string, password: string): string {
+  return `${email.trim().toLowerCase()}\n${password}`
+}
+
 function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -98,6 +102,17 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
   const [loading, setLoading] = useState(false)
   const login = useAuthStore((s) => s.login)
   const attempt = useSubmitAttemptLimit()
+  /** Pasangan kredensial terakhir yang dipakai untuk menumpuk hitungan gagal; beda email/password → counter mulai dari 1 lagi. */
+  const lastFailedCredentialKeyRef = useRef<string | null>(null)
+
+  const recordLoginFailure = () => {
+    const k = loginCredentialKey(email, password)
+    if (lastFailedCredentialKeyRef.current !== k) {
+      attempt.resetLimit()
+      lastFailedCredentialKeyRef.current = k
+    }
+    attempt.onFailure()
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -111,11 +126,12 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
     try {
       const res = await apiLogin({ email: email.trim(), password })
       const authUser = authUserFromApiResponse(res.user, res.token)
+      lastFailedCredentialKeyRef.current = null
       attempt.onSuccess()
       login(authUser, res.token, rememberMe)
       window.location.hash = resolvePostAuthHash(redirect, authUser.role)
     } catch (err) {
-      attempt.onFailure()
+      recordLoginFailure()
       if (err instanceof ApiError && err.status === 401) {
         setError('email/password salah, silahkan coba lagi')
       } else {
