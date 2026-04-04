@@ -35,7 +35,10 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
     case 'student-course-learn':
       return (
         <StudentLayout currentPath="/student/courses">
-          <StudentCourseLearnPage courseSlug={route.courseSlug ?? ''} />
+          <StudentCourseLearnPage
+            courseSlug={route.courseSlug ?? ''}
+            initialLessonId={route.journeyLessonId}
+          />
         </StudentLayout>
       )
     case 'student-tryout':

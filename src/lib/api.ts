@@ -4028,4 +4028,326 @@ export async function getMyNotifications(): Promise<UserNotificationsResponse> {
   return { data }
 }
 
+// --- Course journey & admin program (API_BASE = /api/v1) ---
+
+export interface LearningJourneyLessonOutline {
+  id: string
+  sectionId: string
+  type: string
+  title: string
+  sortOrder: number
+  completed: boolean
+  locked: boolean
+  progressPercent: number
+  tryoutSessionId?: string
+}
+
+export interface LearningJourneySection {
+  id: string
+  courseId: string
+  title: string
+  sortOrder: number
+  progressPercent: number
+  lessons: LearningJourneyLessonOutline[]
+}
+
+export interface LearningJourneyCourseDetailPayload {
+  course: { id: string; slug: string; title: string; description?: string }
+  trackType?: 'meetings' | 'tryout'
+  progressPercent: number
+  completedLessons: number
+  totalLessons: number
+  sections: LearningJourneySection[]
+}
+
+export interface LearningJourneyLessonDetail {
+  id: string
+  sectionId: string
+  courseId: string
+  type: string
+  title: string
+  content?: string
+  detailText?: string
+  videoUrl?: string
+  pdfUrl?: string
+  liveClassUrl?: string
+  tryoutSessionId?: string
+  locked: boolean
+  completed: boolean
+}
+
+function parseCourseJourneyPayload(raw: unknown): LearningJourneyCourseDetailPayload | null {
+  if (!raw || typeof raw !== 'object') return null
+  const root = raw as Record<string, unknown>
+  const data = (root.data ?? root) as Record<string, unknown>
+  const sectionsRaw = data.sections
+  if (!Array.isArray(sectionsRaw)) return null
+
+  let course: { id: string; slug: string; title: string; description?: string }
+  const courseRaw = data.course
+  if (courseRaw && typeof courseRaw === 'object') {
+    const c = courseRaw as Record<string, unknown>
+    course = {
+      id: String(c.id ?? ''),
+      slug: String(c.slug ?? ''),
+      title: String(c.title ?? ''),
+      description: c.description != null ? String(c.description) : undefined,
+    }
+  } else {
+    course = {
+      id: String(data.courseId ?? data.course_id ?? data.id ?? ''),
+      slug: String(data.slug ?? ''),
+      title: String(data.title ?? ''),
+      description: data.description != null ? String(data.description) : undefined,
+    }
+  }
+
+  const trackRaw = data.trackType ?? data.track_type
+  const trackType =
+    trackRaw === 'tryout' || trackRaw === 'meetings' ? (trackRaw as 'meetings' | 'tryout') : undefined
+
+  const sections: LearningJourneySection[] = []
+  for (const s of sectionsRaw) {
+    if (!s || typeof s !== 'object') continue
+    const sec = s as Record<string, unknown>
+    const lessonsRaw = sec.lessons
+    const lessons: LearningJourneyLessonOutline[] = []
+    if (Array.isArray(lessonsRaw)) {
+      for (const l of lessonsRaw) {
+        if (!l || typeof l !== 'object') continue
+        const x = l as Record<string, unknown>
+        const tid = x.tryoutSessionId ?? x.tryout_session_id
+        lessons.push({
+          id: String(x.id ?? ''),
+          sectionId: String(x.sectionId ?? x.section_id ?? ''),
+          type: String(x.type ?? 'text'),
+          title: String(x.title ?? ''),
+          sortOrder: Number(x.sortOrder ?? x.sort_order ?? 0),
+          completed: Boolean(x.completed),
+          locked: Boolean(x.locked),
+          progressPercent: Number(x.progressPercent ?? x.progress_percent ?? 0),
+          ...(typeof tid === 'string' && tid ? { tryoutSessionId: tid } : {}),
+        })
+      }
+    }
+    sections.push({
+      id: String(sec.id ?? ''),
+      courseId: String(sec.courseId ?? sec.course_id ?? ''),
+      title: String(sec.title ?? ''),
+      sortOrder: Number(sec.sortOrder ?? sec.sort_order ?? 0),
+      progressPercent: Number(sec.progressPercent ?? sec.progress_percent ?? 0),
+      lessons,
+    })
+  }
+
+  return {
+    course,
+    trackType,
+    progressPercent: Number(data.progressPercent ?? data.progress_percent ?? 0),
+    completedLessons: Number(data.completedLessons ?? data.completed_lessons ?? 0),
+    totalLessons: Number(data.totalLessons ?? data.total_lessons ?? 0),
+    sections,
+  }
+}
+
+
+export async function getCourseJourney(courseIdOrSlug: string): Promise<LearningJourneyCourseDetailPayload | null> {
+  const res = await apiFetch(
+    `${API_BASE}/courses/${encodeURIComponent(courseIdOrSlug)}/journey`,
+    { headers: authHeaders() },
+  )
+  if (res.status === 404) return null
+  const raw = await handleResponse<unknown>(res)
+  return parseCourseJourneyPayload(raw)
+}
+
+export async function getLearningJourneyCourse(idOrSlug: string): Promise<LearningJourneyCourseDetailPayload | null> {
+  return getCourseJourney(idOrSlug)
+}
+
+export async function getCourseLessonDetail(lessonId: string): Promise<LearningJourneyLessonDetail | null> {
+  const res = await apiFetch(`${API_BASE}/courses/lessons/${encodeURIComponent(lessonId)}`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) return null
+  const raw = await handleResponse<unknown>(res)
+  const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const d = (root.data ?? root) as Record<string, unknown>
+  if (!d || typeof d !== 'object') return null
+  const tryoutId = d.tryoutSessionId ?? d.tryout_session_id
+  return {
+    id: String(d.id ?? ''),
+    sectionId: String(d.sectionId ?? d.section_id ?? ''),
+    courseId: String(d.courseId ?? d.course_id ?? ''),
+    type: String(d.type ?? 'text'),
+    title: String(d.title ?? ''),
+    content: d.content != null ? String(d.content) : undefined,
+    detailText:
+      d.detailText != null
+        ? String(d.detailText)
+        : d.detail_text != null
+          ? String(d.detail_text)
+          : undefined,
+    videoUrl:
+      d.videoUrl != null ? String(d.videoUrl) : d.video_url != null ? String(d.video_url) : undefined,
+    pdfUrl: d.pdfUrl != null ? String(d.pdfUrl) : d.pdf_url != null ? String(d.pdf_url) : undefined,
+    liveClassUrl:
+      d.liveClassUrl != null
+        ? String(d.liveClassUrl)
+        : d.live_class_url != null
+          ? String(d.live_class_url)
+          : undefined,
+    ...(typeof tryoutId === 'string' && tryoutId ? { tryoutSessionId: tryoutId } : {}),
+    locked: Boolean(d.locked),
+    completed: Boolean(d.completed),
+  }
+}
+
+export async function getLearningJourneyLesson(lessonId: string): Promise<LearningJourneyLessonDetail | null> {
+  return getCourseLessonDetail(lessonId)
+}
+
+export async function completeCourseLesson(lessonId: string): Promise<{
+  lessonId: string
+  completedAt: string
+  nextLessonId?: string
+}> {
+  const res = await apiFetch(`${API_BASE}/courses/lessons/${encodeURIComponent(lessonId)}/complete`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: '{}',
+  })
+  const raw = await handleResponse<unknown>(res)
+  const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const data = (root.data ?? root) as Record<string, unknown>
+  const next = data.nextLessonId ?? data.next_lesson_id
+  return {
+    lessonId: String(data.lessonId ?? data.lesson_id ?? lessonId),
+    completedAt: String(data.completedAt ?? data.completed_at ?? ''),
+    ...(typeof next === 'string' && next ? { nextLessonId: next } : {}),
+  }
+}
+
+export async function completeLearningJourneyLesson(lessonId: string): Promise<{
+  lessonId: string
+  completedAt: string
+  nextLessonId?: string
+}> {
+  return completeCourseLesson(lessonId)
+}
+
+export interface AdminCourseListItem {
+  id: string
+  title: string
+  slug?: string
+  trackType?: 'meetings' | 'tryout'
+}
+
+export interface CourseMeetingProgramInput {
+  meetingNumber: number
+  title: string
+  detailText?: string | null
+  pdfUrl?: string | null
+  prTitle?: string | null
+  prDescription?: string | null
+  liveClassUrl?: string | null
+}
+
+export interface CourseProgramResponse {
+  trackType: 'meetings' | 'tryout'
+  meetings: CourseMeetingProgramInput[]
+  pretestTryoutSessionId?: string | null
+}
+
+function parseCourseProgramData(raw: unknown): CourseProgramResponse | null {
+  if (!raw || typeof raw !== 'object') return null
+  const root = raw as Record<string, unknown>
+  const data = (root.data ?? root) as Record<string, unknown>
+  const trackRaw = data.trackType ?? data.track_type
+  const trackType = trackRaw === 'tryout' ? 'tryout' : 'meetings'
+  const meetingsRaw = data.meetings
+  const meetings: CourseMeetingProgramInput[] = []
+  if (Array.isArray(meetingsRaw)) {
+    for (const m of meetingsRaw) {
+      if (!m || typeof m !== 'object') continue
+      const x = m as Record<string, unknown>
+      meetings.push({
+        meetingNumber: Number(x.meetingNumber ?? x.meeting_number ?? 0),
+        title: String(x.title ?? ''),
+        detailText: x.detailText != null ? String(x.detailText) : (x.detail_text != null ? String(x.detail_text) : null),
+        pdfUrl: x.pdfUrl != null ? String(x.pdfUrl) : (x.pdf_url != null ? String(x.pdf_url) : null),
+        prTitle: x.prTitle != null ? String(x.prTitle) : (x.pr_title != null ? String(x.pr_title) : null),
+        prDescription:
+          x.prDescription != null
+            ? String(x.prDescription)
+            : x.pr_description != null
+              ? String(x.pr_description)
+              : null,
+        liveClassUrl:
+          x.liveClassUrl != null
+            ? String(x.liveClassUrl)
+            : x.live_class_url != null
+              ? String(x.live_class_url)
+              : null,
+      })
+    }
+  }
+  const pre = data.pretestTryoutSessionId ?? data.pretest_tryout_session_id
+  return {
+    trackType,
+    meetings,
+    pretestTryoutSessionId: typeof pre === 'string' && pre ? pre : pre === null ? null : undefined,
+  }
+}
+
+export async function listAdminCourses(): Promise<AdminCourseListItem[]> {
+  const res = await apiFetch(`${API_BASE}/admin/courses`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(res)
+  const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const list = Array.isArray(root.data) ? root.data : Array.isArray(raw) ? (raw as unknown[]) : []
+  return (list as Record<string, unknown>[]).map((row) => {
+    const tt = row.trackType ?? row.track_type
+    return {
+      id: String(row.id ?? ''),
+      title: String(row.title ?? ''),
+      slug: row.slug != null ? String(row.slug) : undefined,
+      trackType: tt === 'tryout' || tt === 'meetings' ? (tt as 'meetings' | 'tryout') : undefined,
+    }
+  }).filter((x) => x.id)
+}
+
+export async function getAdminCourseProgram(courseId: string): Promise<CourseProgramResponse | null> {
+  const res = await apiFetch(`${API_BASE}/admin/courses/${encodeURIComponent(courseId)}/program`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) return null
+  const raw = await handleResponse<unknown>(res)
+  return parseCourseProgramData(raw)
+}
+
+export async function putAdminCourseProgram(
+  courseId: string,
+  body: {
+    trackType: 'meetings' | 'tryout'
+    meetings: CourseMeetingProgramInput[]
+    pretestTryoutSessionId?: string | null
+  },
+): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/admin/courses/${encodeURIComponent(courseId)}/program`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  await handleResponse<unknown>(res)
+}
+
+export async function putAdminCourseLinkedTryouts(courseId: string, tryoutIds: string[]): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/admin/courses/${encodeURIComponent(courseId)}/linked-tryouts`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ tryoutIds }),
+  })
+  await handleResponse<unknown>(res)
+}
+
 export { clearApiErrorLog, getApiErrorLog } from './api-error-log'

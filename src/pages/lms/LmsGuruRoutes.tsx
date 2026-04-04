@@ -14,6 +14,8 @@ import GuruTryoutQuestionsEditorPage from './GuruTryoutQuestionsEditorPage'
 import GuruAttemptAIAnalysisPage from './GuruAttemptAIAnalysisPage'
 import GuruTryoutStudentDetailPage from './GuruTryoutStudentDetailPage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
+import GuruCourseJourneyLearnPage from './GuruCourseJourneyLearnPage'
+import GuruCourseProgramPage from './GuruCourseProgramPage'
 
 /** Dashboard & halaman guru — chunk terpisah, tidak diunduh di landing. */
 export default function LmsGuruRoutes({ route }: { route: LmsRoute }) {
@@ -28,6 +30,21 @@ export default function LmsGuruRoutes({ route }: { route: LmsRoute }) {
       return (
         <GuruLayout currentPath="/guru/courses">
           <GuruCoursesPage />
+        </GuruLayout>
+      )
+    case 'guru-course-learn':
+      return (
+        <GuruLayout currentPath="/guru/courses">
+          <GuruCourseJourneyLearnPage
+            courseId={route.guruCourseId ?? ''}
+            initialLessonId={route.guruJourneyLessonId}
+          />
+        </GuruLayout>
+      )
+    case 'guru-course-program':
+      return (
+        <GuruLayout currentPath="/guru/courses">
+          <GuruCourseProgramPage courseId={route.guruCourseId ?? ''} />
         </GuruLayout>
       )
     case 'guru-students':
