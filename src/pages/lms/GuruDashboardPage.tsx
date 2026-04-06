@@ -58,6 +58,10 @@ export default function GuruDashboardPage() {
         </div>
       </div>
       <div className="grid sm:grid-cols-2 gap-6">
+        <a href="#/guru/assignments" className="block p-6 rounded-2xl bg-white border-2 border-primary/20 hover:border-primary/40 hover:shadow-md">
+          <h2 className="font-semibold text-gray-900 mb-1">Tugas & Leaderboard</h2>
+          <p className="text-sm text-gray-500">Generate soal kelas, assign siswa, dan download laporan.</p>
+        </a>
         <a href="#/guru/courses" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">Kursus Saya</h2>
           <p className="text-sm text-gray-500">Kelola materi dan modul kursus</p>

@@ -16,6 +16,7 @@ import GuruTryoutStudentDetailPage from './GuruTryoutStudentDetailPage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
 import GuruCourseJourneyLearnPage from './GuruCourseJourneyLearnPage'
 import GuruCourseProgramPage from './GuruCourseProgramPage'
+import GuruAssignmentsPage from './GuruAssignmentsPage'
 
 /** Dashboard & halaman guru — chunk terpisah, tidak diunduh di landing. */
 export default function LmsGuruRoutes({ route }: { route: LmsRoute }) {
@@ -30,6 +31,12 @@ export default function LmsGuruRoutes({ route }: { route: LmsRoute }) {
       return (
         <GuruLayout currentPath="/guru/courses">
           <GuruCoursesPage />
+        </GuruLayout>
+      )
+    case 'guru-assignments':
+      return (
+        <GuruLayout currentPath="/guru/assignments">
+          <GuruAssignmentsPage />
         </GuruLayout>
       )
     case 'guru-course-learn':

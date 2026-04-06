@@ -5,6 +5,7 @@ import { useLmsSidebarVisible } from '../../hooks/useLmsSidebarVisible'
 const MENU = [
   { href: '#/guru', label: 'Dashboard' },
   { href: '#/guru/courses', label: 'Kursus Saya' },
+  { href: '#/guru/assignments', label: 'Tugas & Leaderboard' },
   { href: '#/guru/students', label: 'Siswa' },
   { href: '#/guru/transactions', label: 'Transaksi' },
   { href: '#/guru/profile', label: 'Profile' },

@@ -222,6 +222,104 @@ export interface RegisterMasterDataResponse {
   levels: RegisterLevelOption[]
 }
 
+export interface AiGeneratedQuestion {
+  id: string
+  subject: string
+  grade: string
+  topic: string
+  difficulty: string
+  questionText: string
+  choices: string[]
+  correctAnswer?: string
+  explanation?: string
+  solutionSteps: string[]
+  conceptTags: string[]
+  estimatedSec?: number
+}
+
+export interface GenerateQuestionsRequest {
+  subject: string
+  grade: string
+  topic: string
+  difficulty: string
+  count: number
+}
+
+export interface SubmitAiAnswerRequest {
+  questionId: string
+  answer: string
+  timeSpentMs: number
+}
+
+export interface SubmitAiAnswerResponse {
+  questionId: string
+  isCorrect: boolean
+  correctAnswer?: string
+  explanation?: string
+}
+
+export interface AiAnalysisResponse {
+  accuracyPercent: number
+  totalAttempts: number
+  correctAttempts: number
+  avgTimeMs: number
+  weakTopic?: string
+  recommendations: AiGeneratedQuestion[]
+}
+
+export interface AiRankingItem {
+  userId: string
+  score: number
+  accuracyPct: number
+}
+
+export interface CreateSubscriptionRequest {
+  planCode: string
+  startAt?: string
+  endAt?: string
+}
+
+export interface SubscriptionRecord {
+  id: string
+  userId: string
+  planCode: string
+  status: string
+  startAt: string
+  endAt: string
+  createdAt: string
+}
+
+function parseAiGeneratedQuestion(raw: unknown): AiGeneratedQuestion | null {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+  if (!o) return null
+  const id = String(o.id ?? o.ID ?? '')
+  const questionText = String(o.questionText ?? o.QuestionText ?? '')
+  if (!id || !questionText) return null
+  const choicesRaw = o.choices ?? o.choicesJson ?? o.ChoicesJSON
+  const stepsRaw = o.solutionSteps ?? o.SolutionSteps
+  const tagsRaw = o.conceptTags ?? o.ConceptTags
+  return {
+    id,
+    subject: String(o.subject ?? o.Subject ?? ''),
+    grade: String(o.grade ?? o.Grade ?? ''),
+    topic: String(o.topic ?? o.Topic ?? ''),
+    difficulty: String(o.difficulty ?? o.Difficulty ?? ''),
+    questionText,
+    choices: Array.isArray(choicesRaw) ? choicesRaw.map((c) => String(c)).filter(Boolean) : [],
+    correctAnswer:
+      o.correctAnswer != null
+        ? String(o.correctAnswer)
+        : (o.CorrectAnswer != null ? String(o.CorrectAnswer) : undefined),
+    explanation:
+      o.explanation != null
+        ? String(o.explanation)
+        : (o.Explanation != null ? String(o.Explanation) : undefined),
+    solutionSteps: Array.isArray(stepsRaw) ? stepsRaw.map((s) => String(s)).filter(Boolean) : [],
+    conceptTags: Array.isArray(tagsRaw) ? tagsRaw.map((t) => String(t)).filter(Boolean) : [],
+    estimatedSec: toFiniteNumber(o.estimatedSec ?? o.EstimatedSec) ?? undefined,
+  }
+}
+
 function parseRegisterMasterData(raw: unknown): RegisterMasterDataResponse {
   const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
   const levelsRaw = Array.isArray(root.levels)
@@ -337,6 +435,131 @@ export async function getRegisterMasterData(): Promise<RegisterMasterDataRespons
   }
   const raw = await res.json().catch(() => ({}))
   return parseRegisterMasterData(raw)
+}
+
+export async function generateQuestions(payload: GenerateQuestionsRequest): Promise<AiGeneratedQuestion[]> {
+  const body = {
+    subject: payload.subject,
+    grade: payload.grade,
+    topic: payload.topic,
+    difficulty: payload.difficulty,
+    count: payload.count,
+  }
+  const res = await apiFetch(`${API_BASE}/generate-questions`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'POST' })
+  const rowsRaw = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : [])
+  return (rowsRaw as unknown[])
+    .map((row) => parseAiGeneratedQuestion(row))
+    .filter((row): row is AiGeneratedQuestion => Boolean(row))
+}
+
+export async function submitAnswer(payload: SubmitAiAnswerRequest): Promise<SubmitAiAnswerResponse> {
+  const res = await apiFetch(`${API_BASE}/submit-answer`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'POST' })
+  return {
+    questionId: String(data.questionId ?? data.question_id ?? ''),
+    isCorrect: Boolean(data.isCorrect ?? data.is_correct),
+    correctAnswer:
+      data.correctAnswer != null
+        ? String(data.correctAnswer)
+        : (data.correct_answer != null ? String(data.correct_answer) : undefined),
+    explanation: data.explanation != null ? String(data.explanation) : undefined,
+  }
+}
+
+export async function getQuestionAnalysis(params: {
+  topic?: string
+  grade?: string
+}): Promise<AiAnalysisResponse> {
+  const q = new URLSearchParams()
+  if (params.topic) q.set('topic', params.topic)
+  if (params.grade) q.set('grade', params.grade)
+  const query = q.toString()
+  const res = await apiFetch(`${API_BASE}/analysis${query ? `?${query}` : ''}`, { headers: authHeaders() })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'GET' })
+  const recRaw = Array.isArray(data.recommendations) ? data.recommendations : []
+  return {
+    accuracyPercent: toFiniteNumber(data.accuracyPercent) ?? 0,
+    totalAttempts: toInt(data.totalAttempts) ?? 0,
+    correctAttempts: toInt(data.correctAttempts) ?? 0,
+    avgTimeMs: toInt(data.avgTimeMs) ?? 0,
+    weakTopic: data.weakTopic != null ? String(data.weakTopic) : undefined,
+    recommendations: recRaw
+      .map((row) => parseAiGeneratedQuestion(row))
+      .filter((row): row is AiGeneratedQuestion => Boolean(row)),
+  }
+}
+
+export async function getNationalRanking(limit = 20): Promise<AiRankingItem[]> {
+  const q = new URLSearchParams()
+  q.set('limit', String(Math.max(1, Math.min(100, limit))))
+  const res = await apiFetch(`${API_BASE}/ranking?${q.toString()}`, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'GET' })
+  const rowsRaw = Array.isArray(data.data) ? data.data : []
+  return (rowsRaw as Record<string, unknown>[]).map((row) => ({
+    userId: String(row.userId ?? row.user_id ?? ''),
+    score: toFiniteNumber(row.score) ?? 0,
+    accuracyPct: toFiniteNumber(row.accuracyPct ?? row.accuracy_pct) ?? 0,
+  })).filter((row) => row.userId)
+}
+
+export async function listGeneratedQuestions(params: {
+  subject?: string
+  grade?: string
+  topic?: string
+  difficulty?: string
+  limit?: number
+}): Promise<AiGeneratedQuestion[]> {
+  const q = new URLSearchParams()
+  if (params.subject) q.set('subject', params.subject)
+  if (params.grade) q.set('grade', params.grade)
+  if (params.topic) q.set('topic', params.topic)
+  if (params.difficulty) q.set('difficulty', params.difficulty)
+  if (params.limit != null) q.set('limit', String(Math.max(1, Math.min(100, params.limit))))
+  const query = q.toString()
+  const res = await apiFetch(`${API_BASE}/questions${query ? `?${query}` : ''}`, {
+    headers: authHeaders(),
+  })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'GET' })
+  const rowsRaw = Array.isArray(data.data) ? data.data : []
+  return (rowsRaw as unknown[])
+    .map((row) => parseAiGeneratedQuestion(row))
+    .filter((row): row is AiGeneratedQuestion => Boolean(row))
+}
+
+export async function createSubscription(payload: CreateSubscriptionRequest): Promise<SubscriptionRecord> {
+  const body: Record<string, unknown> = { planCode: payload.planCode }
+  if (payload.startAt) body.startAt = payload.startAt
+  if (payload.endAt) body.endAt = payload.endAt
+  const res = await apiFetch(`${API_BASE}/subscription`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  const data = await handleResponse<Record<string, unknown>>(res, { method: 'POST' })
+  const root =
+    data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+      ? (data.data as Record<string, unknown>)
+      : data
+  return {
+    id: String(root.id ?? root.ID ?? ''),
+    userId: String(root.userId ?? root.UserID ?? ''),
+    planCode: String(root.planCode ?? root.PlanCode ?? ''),
+    status: String(root.status ?? root.Status ?? ''),
+    startAt: String(root.startAt ?? root.StartAt ?? ''),
+    endAt: String(root.endAt ?? root.EndAt ?? ''),
+    createdAt: String(root.createdAt ?? root.CreatedAt ?? ''),
+  }
 }
 
 export function invalidateRolesCache(): void {

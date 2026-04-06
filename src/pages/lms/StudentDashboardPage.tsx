@@ -478,6 +478,10 @@ export default function StudentDashboardPage() {
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <a href="#/student/practice" className="block p-6 rounded-2xl bg-white border-2 border-primary/20 hover:border-primary/40 hover:shadow-md">
+          <h2 className="font-semibold text-gray-900 mb-1">Practice Arena</h2>
+          <p className="text-sm text-gray-500">Generate soal by topic/level, jaga streak harian, dan kejar badge.</p>
+        </a>
         <a href="#/student/courses" className="block p-6 rounded-2xl bg-white border hover:border-primary/30 hover:shadow-md">
           <h2 className="font-semibold text-gray-900 mb-1">My Courses</h2>
           <p className="text-sm text-gray-500">Lanjutkan belajar dan lihat progress</p>

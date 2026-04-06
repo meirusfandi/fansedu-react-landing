@@ -3,6 +3,7 @@ import type { LmsRoute } from './lmsRoutes'
 import { StudentLayout } from './StudentLayout'
 import StudentDashboardPage from './StudentDashboardPage'
 import StudentCoursesPage from './StudentCoursesPage'
+import StudentPracticePage from './StudentPracticePage'
 import StudentCourseLearnPage from './StudentCourseLearnPage'
 import StudentCodingPage from './StudentCodingPage'
 import StudentTryoutPage from './StudentTryoutPage'
@@ -30,6 +31,12 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/courses">
           <StudentCoursesPage />
+        </StudentLayout>
+      )
+    case 'student-practice':
+      return (
+        <StudentLayout currentPath="/student/practice">
+          <StudentPracticePage />
         </StudentLayout>
       )
     case 'student-course-learn':

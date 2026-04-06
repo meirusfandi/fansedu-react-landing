@@ -4,6 +4,7 @@ import { useLmsSidebarVisible } from '../../hooks/useLmsSidebarVisible'
 
 const MENU = [
   { href: '#/student', label: 'Dashboard' },
+  { href: '#/student/practice', label: 'Practice Arena' },
   { href: '#/student/courses', label: 'My Courses' },
   { href: '#/student/tryout', label: 'Tryout' },
   { href: '#/student/transactions', label: 'Transactions' },

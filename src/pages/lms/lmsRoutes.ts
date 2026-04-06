@@ -9,6 +9,7 @@ export interface LmsRoute {
     | 'checkout-success'
     | 'student'
     | 'student-courses'
+    | 'student-practice'
     | 'student-course-learn'
     | 'student-tryout'
     | 'student-tryout-history'
@@ -23,6 +24,7 @@ export interface LmsRoute {
     | 'student-profile'
     | 'guru'
     | 'guru-courses'
+    | 'guru-assignments'
     | 'guru-students'
     | 'guru-student-detail'
     | 'guru-transactions'
@@ -85,6 +87,7 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   }
   if (pathOnly === '/student') return { type: 'student', studentPath: '/student' }
   if (pathOnly === '/student/courses') return { type: 'student-courses', studentPath: '/student/courses' }
+  if (pathOnly === '/student/practice') return { type: 'student-practice', studentPath: '/student/practice' }
   const studentCourseLessonMatch = pathOnly.match(/^\/student\/courses\/([^/]+)\/lessons\/([^/]+)\/?$/)
   if (studentCourseLessonMatch) {
     return {
@@ -133,6 +136,7 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
 
   if (gp === '/guru') return { type: 'guru', guruPath: '/guru' }
   if (gp === '/guru/courses') return { type: 'guru-courses', guruPath: '/guru/courses' }
+  if (gp === '/guru/assignments') return { type: 'guru-assignments', guruPath: '/guru/assignments' }
   const guruCourseProgramMatch = gp.match(/^\/guru\/courses\/([^/]+)\/program\/?$/)
   if (guruCourseProgramMatch) {
     return {
