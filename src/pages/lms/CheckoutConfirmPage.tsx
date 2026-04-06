@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
-import { submitPaymentProof, ApiError, getTransactions } from '../../lib/api'
+import { submitPaymentProof, ApiError, getTransactions, createPaymentSession } from '../../lib/api'
 
 /** Rekening untuk transfer (sama dengan CheckoutPage) */
 const BANK_ACCOUNTS = [
@@ -50,6 +50,7 @@ export default function CheckoutConfirmPage({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [transferAmount, setTransferAmount] = useState<number | null>(null)
+  const [midtransLoading, setMidtransLoading] = useState(false)
   const transactionsHref = scope === 'guru' ? '#/guru/transactions' : '#/student/transactions'
 
   useEffect(() => {
@@ -61,6 +62,29 @@ export default function CheckoutConfirmPage({
       })
       .catch(() => {})
   }, [orderId])
+
+  const onPayMidtrans = async () => {
+    if (!orderId) return
+    setMidtransLoading(true)
+    setError(null)
+    try {
+      const session = await createPaymentSession({
+        orderId,
+        paymentMethod: 'midtrans',
+        ...(transferAmount != null && transferAmount > 0 ? { amount: transferAmount } : {}),
+      })
+      const url = session.redirectUrl ?? session.paymentUrl
+      if (url) {
+        window.location.assign(url)
+        return
+      }
+      setError('Tidak ada URL pembayaran Midtrans dari server.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal membuka pembayaran Midtrans.')
+    } finally {
+      setMidtransLoading(false)
+    }
+  }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,6 +138,27 @@ export default function CheckoutConfirmPage({
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Upload Bukti Pembayaran</h1>
       <p className="text-gray-600 mb-6">Transaksi dengan Order ID <strong className="font-mono">{orderId}</strong> menunggu bukti transfer. Isi data pengirim dan upload bukti.</p>
 
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5">
+        <p className="text-sm font-medium text-gray-900 mb-2">Bayar dengan Midtrans</p>
+        <p className="text-xs text-gray-600 mb-3">
+          Buka halaman pembayaran Midtrans (Snap). Setelah pembayaran, status akan terupdate otomatis lewat webhook.
+        </p>
+        <button
+          type="button"
+          onClick={onPayMidtrans}
+          disabled={midtransLoading}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+        >
+          {midtransLoading ? 'Membuka Midtrans...' : 'Lanjut ke Midtrans'}
+        </button>
+      </div>
+
       <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
         <p className="text-sm font-medium text-slate-700 mb-3">Pastikan Anda sudah transfer ke rekening berikut dengan nominal yang sesuai:</p>
         <div className="space-y-3 text-sm">
@@ -140,9 +185,6 @@ export default function CheckoutConfirmPage({
 
       <section className="border rounded-2xl p-6 bg-white">
         <form onSubmit={onSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
-          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Bukti transfer <span className="text-red-500">*</span></label>
             <input type="file" accept="image/*,.pdf" onChange={(e) => { setProofFile(e.target.files?.[0] ?? null); setError(null) }} className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:bg-gray-50 file:font-medium" />

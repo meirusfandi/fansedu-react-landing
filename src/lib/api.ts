@@ -989,7 +989,7 @@ export interface PaymentSessionRequest {
   orderId: string
   /** checkoutId (alias, beberapa BE pakai ini) */
   checkoutId?: string
-  paymentMethod: 'bank_transfer' | 'virtual_account' | 'ewallet'
+  paymentMethod: 'bank_transfer' | 'virtual_account' | 'ewallet' | 'midtrans'
   promoCode?: string
   /** Kode unik 3 digit (100–999) */
   uniqueCode?: number
@@ -998,11 +998,61 @@ export interface PaymentSessionRequest {
 }
 
 export interface PaymentSessionResponse {
+  /** URL Snap / redirect Midtrans (alias lama) */
   paymentUrl?: string
+  /** URL redirect dari Midtrans Snap */
+  redirectUrl?: string
   orderId: string
   expiry?: string
   virtualAccountNumber?: string
   amount: number
+  snapToken?: string
+  transactionId?: string
+}
+
+function pickPaymentSessionString(root: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = root[k]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return undefined
+}
+
+function parsePaymentSessionResponse(raw: Record<string, unknown>, fallbackOrderId: string): PaymentSessionResponse {
+  const root =
+    raw.data != null && typeof raw.data === 'object' && !Array.isArray(raw.data)
+      ? (raw.data as Record<string, unknown>)
+      : raw
+  const redirectUrl = pickPaymentSessionString(root, ['redirectUrl', 'redirect_url'])
+  const paymentUrl =
+    pickPaymentSessionString(root, ['paymentUrl', 'payment_url']) ?? redirectUrl
+  const orderId = String(root.orderId ?? root.order_id ?? fallbackOrderId)
+  const amountRaw = root.amount ?? root.total ?? root.grossAmount ?? root.gross_amount
+  let amountNum = 0
+  if (typeof amountRaw === 'number' && Number.isFinite(amountRaw)) amountNum = amountRaw
+  else if (typeof amountRaw === 'string' && amountRaw.trim()) {
+    const n = Number(amountRaw)
+    if (Number.isFinite(n)) amountNum = n
+  }
+  return {
+    orderId,
+    amount: amountNum,
+    ...(paymentUrl ? { paymentUrl } : {}),
+    ...(redirectUrl ? { redirectUrl } : {}),
+    expiry: root.expiry != null ? String(root.expiry) : (root.expiresAt != null ? String(root.expiresAt) : undefined),
+    virtualAccountNumber:
+      root.virtualAccountNumber != null
+        ? String(root.virtualAccountNumber)
+        : (root.virtual_account_number != null ? String(root.virtual_account_number) : undefined),
+    snapToken:
+      root.snapToken != null
+        ? String(root.snapToken)
+        : (root.snap_token != null ? String(root.snap_token) : undefined),
+    transactionId:
+      root.transactionId != null
+        ? String(root.transactionId)
+        : (root.transaction_id != null ? String(root.transaction_id) : undefined),
+  }
 }
 
 export interface ClaimedVoucherItem {
@@ -1167,7 +1217,8 @@ export async function createPaymentSession(payload: PaymentSessionRequest): Prom
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
-  return handleResponse<PaymentSessionResponse>(res)
+  const raw = (await handleResponse<Record<string, unknown>>(res)) as Record<string, unknown>
+  return parsePaymentSessionResponse(raw, payload.orderId)
 }
 
 

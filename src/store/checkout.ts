@@ -15,7 +15,7 @@ interface CheckoutStore {
   orderSummary: CheckoutOrderSummary | null
   userInfo: { name: string; email: string; phone: string }
   promoCode: string
-  paymentMethod: 'bank_transfer' | null
+  paymentMethod: 'bank_transfer' | 'midtrans' | null
   /** Step checkout saat ini */
   step: 'info' | 'payment' | 'set-password' | 'instructions'
   /** Kode unik 3 digit untuk verifikasi transfer */
@@ -25,7 +25,7 @@ interface CheckoutStore {
   setOrderSummary: (s: CheckoutOrderSummary | null) => void
   setUserInfo: (i: { name: string; email: string; phone: string }) => void
   setPromoCode: (s: string) => void
-  setPaymentMethod: (m: 'bank_transfer' | null) => void
+  setPaymentMethod: (m: 'bank_transfer' | 'midtrans' | null) => void
   setStep: (s: 'info' | 'payment' | 'set-password' | 'instructions') => void
   setUniqueCode: (c: number | null) => void
   reset: () => void

@@ -29,6 +29,7 @@ import { getRegisterLevelById, validateRegisterSelection } from '../../utils/reg
 
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
+  { id: 'midtrans', label: 'Midtrans (Snap — kartu, e-wallet, VA, dll.)' },
 ] as const
 
 /** Rekening untuk transfer */
@@ -498,8 +499,28 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     // Gunakan uniqueCode dari backend (confirmationCode) jika tersedia, else generate baru
     const code = uniqueCode ?? generateUniqueCode()
     const transferAmount = totalBeforeUniqueCode + code
+    const backendTotal =
+      orderSummary != null && orderSummary.total > 0 ? orderSummary.total : 0
+    const midtransAmount = backendTotal > 0 ? backendTotal : totalBeforeUniqueCode
 
     try {
+      if (paymentMethod === 'midtrans') {
+        const session = await createPaymentSession({
+          orderId: paymentOrderId,
+          checkoutId: checkoutId ?? undefined,
+          paymentMethod: 'midtrans',
+          promoCode: promoCode.trim() || '',
+          amount: midtransAmount,
+        })
+        const payUrl = session.redirectUrl ?? session.paymentUrl
+        if (payUrl) {
+          window.location.assign(payUrl)
+          return
+        }
+        setError('Server tidak mengembalikan URL pembayaran Midtrans. Coba lagi atau pilih transfer bank.')
+        return
+      }
+
       await createPaymentSession({
         orderId: paymentOrderId,
         checkoutId: checkoutId ?? undefined,
@@ -519,7 +540,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     } finally {
       setLoadingPay(false)
     }
-  }, [checkoutId, orderSummary?.orderId, totalBeforeUniqueCode, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
+  }, [checkoutId, orderSummary?.orderId, orderSummary?.total, totalBeforeUniqueCode, paymentMethod, promoCode, uniqueCode, setUniqueCode, setStep])
 
   const onSetPassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -949,6 +970,30 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
 
   // Halaman instruksi transfer + slip setelah user klik Bayar & Daftar Program
   if (step === 'instructions') {
+    if (paymentMethod === 'midtrans') {
+      return (
+        <div className="min-h-screen flex flex-col">
+          <LmsHeader />
+          <main className="flex-1 py-10">
+            <div className="max-w-lg mx-auto px-4">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Pembayaran Midtrans</h1>
+              <p className="text-gray-600 mb-6">
+                Jika Anda tidak diarahkan ke halaman Midtrans, buka kembali dari Riwayat Transaksi dan pilih bayar dengan Midtrans, atau hubungi admin.
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Order ID: <span className="font-mono">{orderSummary?.orderId ?? '—'}</span>
+              </p>
+              <a
+                href={user?.role === 'guru' ? '#/guru/transactions' : '#/student/transactions'}
+                className="inline-block py-3 px-6 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90"
+              >
+                Ke Riwayat Transaksi
+              </a>
+            </div>
+          </main>
+        </div>
+      )
+    }
     const transferAmount = totalBeforeUniqueCode + (uniqueCode ?? 0)
     const transferAmountFormatted = `Rp${transferAmount.toLocaleString('id-ID')}`
     // Copy hanya nominal angka (tanpa "Rp") agar saat paste di bank/transfer yang terisi angka saja
@@ -1322,9 +1367,14 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                     <h2 className="font-semibold text-gray-900 mb-4">Metode Pembayaran</h2>
                     <div className="space-y-3">
                       {PAYMENT_METHODS.map((pm) => (
-                        <label key={pm.id} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer ${paymentMethod === pm.id ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
-                          <input type="radio" name="pay" checked={paymentMethod === pm.id} onChange={() => setPaymentMethod(pm.id)} />
-                          <span className="font-medium">{pm.label}</span>
+                        <label key={pm.id} className={`flex flex-col gap-1 p-4 rounded-xl border cursor-pointer ${paymentMethod === pm.id ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
+                          <div className="flex items-center gap-3">
+                            <input type="radio" name="pay" checked={paymentMethod === pm.id} onChange={() => setPaymentMethod(pm.id)} />
+                            <span className="font-medium">{pm.label}</span>
+                          </div>
+                          {pm.id === 'midtrans' ? (
+                            <p className="text-xs text-gray-500 pl-7">Anda akan diarahkan ke halaman pembayaran Midtrans (Snap). Nominal mengikuti total pesanan.</p>
+                          ) : null}
                         </label>
                       ))}
                     </div>
@@ -1396,7 +1446,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                     disabled={loadingPay || !paymentMethod}
                     className="mt-6 w-full py-3.5 rounded-xl bg-primary text-white font-semibold disabled:opacity-50"
                   >
-                    {loadingPay ? 'Memproses...' : 'Bayar & Daftar Program'}
+                    {loadingPay ? 'Memproses...' : paymentMethod === 'midtrans' ? 'Lanjut ke Midtrans' : 'Bayar & Daftar Program'}
                   </button>
                 )}
               </div>

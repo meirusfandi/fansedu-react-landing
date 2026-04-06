@@ -4,12 +4,16 @@ import {
   createSubscription,
   extractApiErrorCode,
   generateQuestions,
+  getQuestionAnalysis,
   getNationalRanking,
   getInstructorCourses,
   getInstructorStudents,
   listGeneratedQuestions,
+  submitAnswer,
+  type AiAnalysisResponse,
   type AiGeneratedQuestion,
   type AiRankingItem,
+  type SubmitAiAnswerResponse,
   type InstructorCourseItem,
   type InstructorStudentItem,
 } from '../../lib/api'
@@ -72,9 +76,14 @@ export default function GuruAssignmentsPage() {
   const [topic, setTopic] = useState('graph')
   const [difficulty, setDifficulty] = useState('medium')
   const [questions, setQuestions] = useState<AiGeneratedQuestion[]>([])
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0)
+  const [selectedAnswer, setSelectedAnswer] = useState('')
+  const [submitResult, setSubmitResult] = useState<SubmitAiAnswerResponse | null>(null)
+  const [analysis, setAnalysis] = useState<AiAnalysisResponse | null>(null)
   const [ranking, setRanking] = useState<AiRankingItem[]>([])
   const [loadingQuestions, setLoadingQuestions] = useState(false)
   const [subscribing, setSubscribing] = useState(false)
+  const [submittingAnswer, setSubmittingAnswer] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -127,6 +136,11 @@ export default function GuruAssignmentsPage() {
         count: 10,
       })
       setQuestions(rows)
+      setActiveQuestionIndex(0)
+      setSelectedAnswer('')
+      setSubmitResult(null)
+      const stats = await getQuestionAnalysis({ topic, grade })
+      setAnalysis(stats)
     } catch (err) {
       setError(getFriendlyAiError(err, 'Gagal generate soal assignment.'))
     } finally {
@@ -146,10 +160,38 @@ export default function GuruAssignmentsPage() {
         limit: 15,
       })
       setQuestions(rows)
+      setActiveQuestionIndex(0)
+      setSelectedAnswer('')
+      setSubmitResult(null)
     } catch (err) {
       setError(getFriendlyAiError(err, 'Gagal memuat pool soal.'))
     } finally {
       setLoadingQuestions(false)
+    }
+  }
+
+  const activeQuestion = questions[activeQuestionIndex] ?? null
+
+  const onSubmitDemoAnswer = async () => {
+    if (!activeQuestion || !selectedAnswer) return
+    setSubmittingAnswer(true)
+    setError(null)
+    try {
+      const res = await submitAnswer({
+        questionId: activeQuestion.id,
+        answer: selectedAnswer,
+        timeSpentMs: Math.max(1000, (activeQuestion.estimatedSec ?? 90) * 1000),
+      })
+      setSubmitResult(res)
+      const stats = await getQuestionAnalysis({
+        topic: activeQuestion.topic || topic,
+        grade: activeQuestion.grade || grade,
+      })
+      setAnalysis(stats)
+    } catch (err) {
+      setError(getFriendlyAiError(err, 'Gagal submit jawaban demo.'))
+    } finally {
+      setSubmittingAnswer(false)
     }
   }
 
@@ -350,13 +392,88 @@ export default function GuruAssignmentsPage() {
         {questions.length > 0 ? (
           <div className="mt-4 rounded-xl border border-slate-200 p-3 space-y-2 max-h-56 overflow-auto">
             {questions.slice(0, 8).map((q) => (
-              <div key={q.id} className="rounded-lg bg-slate-50 border border-slate-200 p-2.5">
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => {
+                  const idx = questions.findIndex((item) => item.id === q.id)
+                  setActiveQuestionIndex(Math.max(0, idx))
+                  setSelectedAnswer('')
+                  setSubmitResult(null)
+                }}
+                className={`w-full text-left rounded-lg bg-slate-50 border p-2.5 ${
+                  activeQuestion?.id === q.id ? 'border-primary/40' : 'border-slate-200'
+                }`}
+              >
                 <p className="text-xs text-gray-500 mb-1">{q.topic} - {q.difficulty}</p>
                 <p className="text-sm text-gray-900">{q.questionText}</p>
-              </div>
+              </button>
             ))}
           </div>
         ) : null}
+        {activeQuestion ? (
+          <div className="mt-4 rounded-xl border border-slate-200 p-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-900">Demo submit jawaban (akun guru)</p>
+            <p className="text-xs text-gray-500">{activeQuestion.questionText}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {activeQuestion.choices.map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  onClick={() => setSelectedAnswer(choice)}
+                  className={`rounded-lg border px-3 py-2 text-sm text-left ${
+                    selectedAnswer === choice ? 'border-primary bg-primary/5 text-primary' : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onSubmitDemoAnswer}
+                disabled={!selectedAnswer || submittingAnswer}
+                className="px-3 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-60"
+              >
+                {submittingAnswer ? 'Mengirim...' : 'Submit Jawaban Demo'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedAnswer('')
+                  setSubmitResult(null)
+                  setActiveQuestionIndex((prev) => Math.min(prev + 1, Math.max(0, questions.length - 1)))
+                }}
+                disabled={activeQuestionIndex >= questions.length - 1}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Soal Berikutnya
+              </button>
+            </div>
+            {submitResult ? (
+              <div className={`rounded-lg p-3 text-sm ${submitResult.isCorrect ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+                <p className="font-semibold mb-1">{submitResult.isCorrect ? 'Jawaban benar' : 'Jawaban belum tepat'}</p>
+                {submitResult.correctAnswer ? <p>Kunci jawaban: {submitResult.correctAnswer}</p> : null}
+                {submitResult.explanation ? <p className="mt-1 whitespace-pre-line">{submitResult.explanation}</p> : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border bg-white p-6">
+        <h2 className="font-semibold text-gray-900 mb-3">Analisis Performa Guru (Akun Sendiri)</h2>
+        {!analysis ? (
+          <p className="text-sm text-gray-500">Belum ada analisis. Generate/submit soal untuk melihat statistik.</p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <p className="text-gray-700">Akurasi: <span className="font-semibold text-gray-900">{analysis.accuracyPercent.toFixed(1)}%</span></p>
+            <p className="text-gray-700">Total attempt: <span className="font-semibold text-gray-900">{analysis.totalAttempts}</span></p>
+            <p className="text-gray-700">Rata-rata waktu: <span className="font-semibold text-gray-900">{Math.round(analysis.avgTimeMs / 1000)} detik</span></p>
+            <p className="text-gray-700">Weak topic: <span className="font-semibold text-gray-900">{analysis.weakTopic || '-'}</span></p>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border bg-white p-6">
