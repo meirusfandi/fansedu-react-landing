@@ -11,18 +11,21 @@ import {
   claimVoucher,
   getMyClaimedVouchers,
   apiRegister,
+  getRegisterMasterData,
   getInstructorProfile,
   getStudentsBySchool,
   ApiError,
   extractApiErrorCode,
   type SchoolStudentItem,
   type ClaimedVoucherItem,
+  type RegisterLevelOption,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
 import { authUserFromApiResponse, LmsPortalAccessDeniedError } from '../../types/auth'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
 import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
+import { getRegisterLevelById, validateRegisterSelection } from '../../utils/registerMasterValidation'
 
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer (Mandiri / BCA)' },
@@ -122,6 +125,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loadingSetPassword, setLoadingSetPassword] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
+  const [registerLevels, setRegisterLevels] = useState<RegisterLevelOption[]>([])
+  const [loadingRegisterMaster, setLoadingRegisterMaster] = useState(false)
+  const [selectedLevelId, setSelectedLevelId] = useState('')
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedClassLevel, setSelectedClassLevel] = useState('')
   const [claimCodeInput, setClaimCodeInput] = useState('')
   const [claimingVoucher, setClaimingVoucher] = useState(false)
   const [claimVoucherMessage, setClaimVoucherMessage] = useState<string | null>(null)
@@ -535,6 +543,17 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       setSetPasswordError('Konfirmasi password tidak sama.')
       return
     }
+    const masterSelectionError = validateRegisterSelection({
+      levels: registerLevels,
+      levelId: selectedLevelId,
+      subjectId: selectedSubjectId,
+      classLevel: selectedClassLevel,
+      requireClass: true,
+    })
+    if (masterSelectionError) {
+      setSetPasswordError(masterSelectionError)
+      return
+    }
 
     setSetPasswordError(null)
     setLoadingSetPassword(true)
@@ -546,6 +565,9 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
         password: newPassword,
         role: 'student',
         slug: slug ?? undefined,
+        ...(selectedLevelId ? { levelId: selectedLevelId } : {}),
+        ...(selectedSubjectId ? { subjectId: selectedSubjectId } : {}),
+        ...(selectedClassLevel ? { classLevel: selectedClassLevel } : {}),
       })
       const authUser = authUserFromApiResponse(res.user, res.token)
       registerAttempt.onSuccess()
@@ -570,7 +592,53 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
     registerAttempt.blocked,
     registerAttempt.onSuccess,
     registerAttempt.onFailure,
+    registerLevels,
+    selectedLevelId,
+    selectedSubjectId,
+    selectedClassLevel,
   ])
+
+  useEffect(() => {
+    if (step !== 'set-password') return
+    let cancelled = false
+    setLoadingRegisterMaster(true)
+    getRegisterMasterData()
+      .then((res) => {
+        if (cancelled) return
+        const levels = res.levels ?? []
+        setRegisterLevels(levels)
+        if (levels.length > 0) {
+          setSelectedLevelId((prev) => prev || levels[0].id)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRegisterLevels([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRegisterMaster(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [step])
+
+  const selectedRegisterLevel = getRegisterLevelById(registerLevels, selectedLevelId)
+
+  useEffect(() => {
+    if (!selectedRegisterLevel) {
+      setSelectedSubjectId('')
+      setSelectedClassLevel('')
+      return
+    }
+    setSelectedSubjectId((prev) => {
+      if (prev && selectedRegisterLevel.subjects.some((s) => s.id === prev)) return prev
+      return selectedRegisterLevel.subjects[0]?.id ?? ''
+    })
+    setSelectedClassLevel((prev) => {
+      if (prev && selectedRegisterLevel.classes.some((c) => c.value === prev)) return prev
+      return selectedRegisterLevel.classes[0]?.value ?? ''
+    })
+  }, [selectedLevelId, selectedRegisterLevel])
 
   const onLeaveTransfer = () => {
     window.location.hash = user?.role === 'guru' ? '#/guru' : '#/student'
@@ -721,6 +789,67 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nomor HP / WhatsApp</label>
                   <input type="tel" value={userInfo.phone} readOnly className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm bg-gray-50 text-gray-600" />
                 </div>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Jenjang <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={selectedLevelId}
+                      onChange={(e) => setSelectedLevelId(e.target.value)}
+                      disabled={loadingRegisterMaster || registerLevels.length === 0}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white disabled:bg-gray-50"
+                    >
+                      {registerLevels.length === 0 ? <option value="">Belum tersedia</option> : null}
+                      {registerLevels.map((lv) => (
+                        <option key={lv.id} value={lv.id}>
+                          {lv.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Bidang <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={selectedSubjectId}
+                      onChange={(e) => setSelectedSubjectId(e.target.value)}
+                      disabled={loadingRegisterMaster || !selectedRegisterLevel || selectedRegisterLevel.subjects.length === 0}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white disabled:bg-gray-50"
+                    >
+                      {!selectedRegisterLevel || selectedRegisterLevel.subjects.length === 0 ? <option value="">Belum tersedia</option> : null}
+                      {selectedRegisterLevel?.subjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Kelas <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={selectedClassLevel}
+                      onChange={(e) => setSelectedClassLevel(e.target.value)}
+                      disabled={loadingRegisterMaster || !selectedRegisterLevel || selectedRegisterLevel.classes.length === 0}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white disabled:bg-gray-50"
+                    >
+                      {!selectedRegisterLevel || selectedRegisterLevel.classes.length === 0 ? <option value="">Belum tersedia</option> : null}
+                      {selectedRegisterLevel?.classes.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {registerLevels.length === 0 && !loadingRegisterMaster ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Master data register belum tersedia. Pendaftaran dari checkout belum dapat dilanjutkan.
+                  </p>
+                ) : null}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password baru</label>
                   <div className="relative">
@@ -783,7 +912,7 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                 </div>
                 <button
                   type="submit"
-                  disabled={loadingSetPassword || registerAttempt.blocked}
+                  disabled={loadingSetPassword || registerAttempt.blocked || loadingRegisterMaster || registerLevels.length === 0}
                   className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover disabled:opacity-50"
                 >
                   {loadingSetPassword ? 'Menyimpan...' : 'Simpan Password & Lanjut Upload Bukti'}
