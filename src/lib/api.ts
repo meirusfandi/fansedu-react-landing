@@ -183,6 +183,12 @@ export interface RegisterRequest {
   slug?: string
   /** Alias lama untuk `slug` (nilai yang sama dikirim sebagai `programSlug` ke API). */
   program_slug?: string
+  /** Master data registrasi: jenjang pendidikan */
+  levelId?: string
+  /** Master data registrasi: bidang pelajaran */
+  subjectId?: string
+  /** Master data registrasi: kelas (1-12, mengikuti jenjang) */
+  classLevel?: string
 }
 
 export interface RoleListItem {
@@ -190,6 +196,60 @@ export interface RoleListItem {
   name?: string
   code?: string
   id?: string
+}
+
+export interface RegisterClassOption {
+  value: string
+  label: string
+}
+
+export interface RegisterSubjectOption {
+  id: string
+  name: string
+  slug: string
+}
+
+export interface RegisterLevelOption {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  classes: RegisterClassOption[]
+  subjects: RegisterSubjectOption[]
+}
+
+export interface RegisterMasterDataResponse {
+  levels: RegisterLevelOption[]
+}
+
+function parseRegisterMasterData(raw: unknown): RegisterMasterDataResponse {
+  const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const levelsRaw = Array.isArray(root.levels)
+    ? root.levels
+    : (root.data && typeof root.data === 'object' && Array.isArray((root.data as Record<string, unknown>).levels)
+      ? (root.data as Record<string, unknown>).levels
+      : [])
+  const levels = (levelsRaw as Record<string, unknown>[]).map((lv) => {
+    const classesRaw = Array.isArray(lv.classes) ? lv.classes : []
+    const subjectsRaw = Array.isArray(lv.subjects) ? lv.subjects : []
+    return {
+      id: String(lv.id ?? ''),
+      name: String(lv.name ?? ''),
+      slug: String(lv.slug ?? ''),
+      description: lv.description != null ? String(lv.description) : undefined,
+      classes: (classesRaw as Record<string, unknown>[]).map((c) => ({
+        value: String(c.value ?? ''),
+        label: String(c.label ?? c.value ?? ''),
+      })).filter((c) => c.value),
+      subjects: (subjectsRaw as Record<string, unknown>[]).map((s) => ({
+        id: String(s.id ?? ''),
+        name: String(s.name ?? ''),
+        slug: String(s.slug ?? ''),
+      })).filter((s) => s.id),
+    } satisfies RegisterLevelOption
+  }).filter((lv) => lv.id && lv.slug)
+
+  return { levels }
 }
 
 function parseRolesResponse(raw: unknown): RoleListItem[] {
@@ -262,6 +322,21 @@ export async function apiGetRoles(options?: { force?: boolean }): Promise<RoleLi
   })()
 
   return rolesInFlight
+}
+
+/** Data master publik untuk form register: jenjang + kelas + bidang. */
+export async function getRegisterMasterData(): Promise<RegisterMasterDataResponse> {
+  const res = await apiFetch(`${API_BASE}/auth/register/master-data`, {
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    const technical = extractApiErrorMessage(data, res.statusText)
+    recordHttpApiFailure(res, data, { method: 'GET', message: technical })
+    throw new ApiError(res.status, getUserFacingHttpMessage(res.status), data as { error?: string; message?: string })
+  }
+  const raw = await res.json().catch(() => ({}))
+  return parseRegisterMasterData(raw)
 }
 
 export function invalidateRolesCache(): void {
@@ -370,6 +445,9 @@ export async function apiRegister(body: RegisterRequest): Promise<AuthResponse> 
     payload.slug = slugVal
     payload.programSlug = slugVal
   }
+  if (body.levelId?.trim()) payload.levelId = body.levelId.trim()
+  if (body.subjectId?.trim()) payload.subjectId = body.subjectId.trim()
+  if (body.classLevel?.trim()) payload.classLevel = body.classLevel.trim()
   const res = await apiFetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -704,6 +782,19 @@ export interface PaymentSessionResponse {
   amount: number
 }
 
+export interface ClaimedVoucherItem {
+  claimId: string
+  promoId: string
+  code: string
+  discountType?: string
+  discountValue?: number
+  validUntil?: string
+}
+
+export interface MyClaimedVouchersResponse {
+  data: ClaimedVoucherItem[]
+}
+
 export async function initiateCheckout(payload: CheckoutInitiateRequest): Promise<CheckoutInitiateResponse> {
   const body: Record<string, unknown> = {
     programSlug: payload.programSlug,
@@ -796,6 +887,40 @@ export async function initiateCheckout(payload: CheckoutInitiateRequest): Promis
       ? { ...data.program, priceDisplay: priceDisplayOut || data.program.priceDisplay }
       : data.program,
     confirmationCode: (confirmationCode != null && !Number.isNaN(confirmationCode)) ? confirmationCode : undefined,
+  }
+}
+
+/** Klaim voucher user login (siswa/guru): POST /vouchers/claim, sukses 204 no content. */
+export async function claimVoucher(code: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/vouchers/claim`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ code: code.trim() }),
+  })
+  if (res.status === 204) return
+  await handleResponse<unknown>(res)
+}
+
+/** Daftar voucher yang sudah diklaim user login: GET /vouchers/mine */
+export async function getMyClaimedVouchers(): Promise<MyClaimedVouchersResponse> {
+  const res = await apiFetch(`${API_BASE}/vouchers/mine`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(res)
+  const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
+  const arr = Array.isArray(root.data) ? root.data : (Array.isArray(raw) ? raw : [])
+  return {
+    data: (arr as Record<string, unknown>[]).map((item) => ({
+      claimId: String(item.claimId ?? item.claim_id ?? ''),
+      promoId: String(item.promoId ?? item.promo_id ?? ''),
+      code: String(item.code ?? ''),
+      discountType: item.discountType != null
+        ? String(item.discountType)
+        : (item.discount_type != null ? String(item.discount_type) : undefined),
+      discountValue:
+        toFiniteNumber(item.discountValue ?? item.discount_value),
+      validUntil: item.validUntil != null
+        ? String(item.validUntil)
+        : (item.valid_until != null ? String(item.valid_until) : undefined),
+    })).filter((v) => v.code),
   }
 }
 
@@ -1702,7 +1827,7 @@ function optionsFromQuestionItem(item: Record<string, unknown>): { key: string; 
 function normalizeTagsField(raw: unknown): string[] | undefined {
   if (Array.isArray(raw)) {
     const out = raw
-      .filter((t): t is string => typeof t === 'string' && t.trim())
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
       .map((t) => t.trim())
     return out.length ? out : undefined
   }
@@ -1711,7 +1836,7 @@ function normalizeTagsField(raw: unknown): string[] | undefined {
       const p = JSON.parse(raw) as unknown
       if (Array.isArray(p)) {
         const out = p
-          .filter((t): t is string => typeof t === 'string' && t.trim())
+          .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
           .map((t) => t.trim())
         return out.length ? out : undefined
       }
@@ -3339,6 +3464,7 @@ export interface UserProfileResponse {
   schoolName?: string
   /** Nama sekolah untuk form/tampilan (dari string API atau school.name) */
   school?: string
+  levelId?: string
   subjectId?: string
   classLevel?: string
   birthDate?: string
@@ -3358,6 +3484,8 @@ export interface UpdateStudentProfileRequest {
   whatsapp?: string
   school?: string
   schoolId?: string
+  levelId?: string
+  subjectId?: string
   classLevel?: string
   city?: string
   province?: string
@@ -3437,6 +3565,7 @@ export function normalizeUserProfile(raw: unknown): UserProfileResponse {
     schoolId,
     schoolName,
     school: schoolDisplay,
+    levelId: firstProfileStr(inner.levelId, inner.level_id),
     subjectId: firstProfileStr(inner.subjectId, inner.subject_id),
     classLevel: firstProfileStr(inner.classLevel, inner.class_level, inner.class, inner.grade),
     birthDate: firstProfileStr(inner.birthDate, inner.birth_date),
@@ -3629,6 +3758,7 @@ export interface UpdateInstructorProfileRequest {
   whatsapp?: string
   school?: string
   schoolId?: string
+  levelId?: string
   subjectId?: string
   classLevel?: string
   city?: string
@@ -3648,18 +3778,29 @@ export interface UpdateInstructorPasswordRequest {
 }
 
 export async function getInstructorProfile(): Promise<InstructorProfileResponse> {
-  const res = await apiFetch(`${API_BASE}/guru/profile`, { headers: authHeaders() })
-  const raw = await handleResponse<unknown>(res)
+  const primary = await apiFetch(`${API_BASE}/guru/profile`, { headers: authHeaders() })
+  if (primary.status !== 404) {
+    const raw = await handleResponse<unknown>(primary)
+    return normalizeUserProfile(raw)
+  }
+  const fallback = await apiFetch(`${API_BASE}/trainer/profile`, { headers: authHeaders() })
+  const raw = await handleResponse<unknown>(fallback)
   return normalizeUserProfile(raw)
 }
 
 export async function updateInstructorProfile(body: UpdateInstructorProfileRequest): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/guru/profile`, {
+  const primary = await apiFetch(`${API_BASE}/guru/profile`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(body),
   })
-  return handleResponse<void>(res)
+  if (primary.status !== 404) return handleResponse<void>(primary)
+  const fallback = await apiFetch(`${API_BASE}/trainer/profile`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<void>(fallback)
 }
 
 export async function updateInstructorPassword(body: UpdateInstructorPasswordRequest): Promise<void> {

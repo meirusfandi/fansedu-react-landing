@@ -8,11 +8,15 @@ import {
   initiateCheckout,
   createPaymentSession,
   submitPaymentProof,
+  claimVoucher,
+  getMyClaimedVouchers,
   apiRegister,
   getInstructorProfile,
   getStudentsBySchool,
   ApiError,
+  extractApiErrorCode,
   type SchoolStudentItem,
+  type ClaimedVoucherItem,
 } from '../../lib/api'
 import { formatRupiah } from '../../lib/currency'
 import { authUserFromApiResponse, LmsPortalAccessDeniedError } from '../../types/auth'
@@ -118,6 +122,11 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loadingSetPassword, setLoadingSetPassword] = useState(false)
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null)
+  const [claimCodeInput, setClaimCodeInput] = useState('')
+  const [claimingVoucher, setClaimingVoucher] = useState(false)
+  const [claimVoucherMessage, setClaimVoucherMessage] = useState<string | null>(null)
+  const [claimedVouchers, setClaimedVouchers] = useState<ClaimedVoucherItem[]>([])
+  const [loadingClaimedVouchers, setLoadingClaimedVouchers] = useState(false)
   const registerAttempt = useSubmitAttemptLimit()
   const [isCollectivePurchase, setIsCollectivePurchase] = useState(false)
   const [collectiveStudents, setCollectiveStudents] = useState<CollectiveStudentItem[]>([
@@ -441,6 +450,14 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
 
       setStep('payment')
     } catch (err) {
+      if (err instanceof ApiError) {
+        const code = extractApiErrorCode(err.data)
+        if (code === 'voucher_requires_claim') {
+          const currentPromoCode = useCheckoutStore.getState().promoCode.trim()
+          setClaimVoucherMessage('Voucher ini harus diklaim dulu. Klik tombol "Klaim voucher" di bawah Kode Promo.')
+          if (currentPromoCode) setClaimCodeInput(currentPromoCode)
+        }
+      }
       setError(err instanceof ApiError ? err.message : 'Gagal memulai checkout.')
     } finally {
       setLoadingContinue(false)
@@ -558,6 +575,51 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
   const onLeaveTransfer = () => {
     window.location.hash = user?.role === 'guru' ? '#/guru' : '#/student'
   }
+
+  const loadClaimedVouchers = useCallback(async () => {
+    if (!user) {
+      setClaimedVouchers([])
+      return
+    }
+    setLoadingClaimedVouchers(true)
+    try {
+      const res = await getMyClaimedVouchers()
+      setClaimedVouchers(res.data ?? [])
+    } catch {
+      setClaimedVouchers([])
+    } finally {
+      setLoadingClaimedVouchers(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadClaimedVouchers().catch(() => {})
+  }, [loadClaimedVouchers])
+
+  const onClaimVoucher = useCallback(async () => {
+    const code = claimCodeInput.trim()
+    if (!code) {
+      setClaimVoucherMessage('Masukkan kode voucher terlebih dahulu.')
+      return
+    }
+    if (!user) {
+      setClaimVoucherMessage('Silakan login dulu untuk klaim voucher.')
+      return
+    }
+    setClaimingVoucher(true)
+    setClaimVoucherMessage(null)
+    try {
+      await claimVoucher(code)
+      setPromoCode(code)
+      setClaimCodeInput('')
+      await loadClaimedVouchers()
+      setClaimVoucherMessage('Voucher berhasil diklaim dan dipasang ke promo code.')
+    } catch (err) {
+      setClaimVoucherMessage(err instanceof ApiError ? err.message : 'Gagal klaim voucher.')
+    } finally {
+      setClaimingVoucher(false)
+    }
+  }, [claimCodeInput, user, setPromoCode, loadClaimedVouchers])
 
   const onSubmitPaymentProof = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1072,12 +1134,61 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
                   )}
                 </div>
               </section>
+              <section className="border rounded-2xl p-6">
+                <h2 className="font-semibold text-gray-900 mb-4">Kode Promo</h2>
+                <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="Kode kupon (opsional)" />
+                <div className="mt-3 p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-3">
+                  <p className="text-xs text-gray-600">
+                    Klaim voucher untuk akun {isGuruBuyer ? 'guru' : 'siswa'} (jika backend mewajibkan claim sebelum checkout).
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={claimCodeInput}
+                      onChange={(e) => setClaimCodeInput(e.target.value)}
+                      className="flex-1 rounded-lg border px-3 py-2 text-sm"
+                      placeholder="Masukkan kode voucher untuk klaim"
+                    />
+                    <button
+                      type="button"
+                      disabled={claimingVoucher || !user}
+                      onClick={onClaimVoucher}
+                      className="rounded-lg border border-primary text-primary px-4 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      {claimingVoucher ? 'Mengklaim…' : 'Klaim voucher'}
+                    </button>
+                  </div>
+                  {claimVoucherMessage ? (
+                    <p className={`text-xs ${claimVoucherMessage.includes('berhasil') ? 'text-green-700' : 'text-amber-700'}`}>
+                      {claimVoucherMessage}
+                    </p>
+                  ) : null}
+                  <div>
+                    <p className="text-xs font-medium text-gray-700 mb-1">Voucher saya</p>
+                    {loadingClaimedVouchers ? (
+                      <p className="text-xs text-gray-500">Memuat voucher...</p>
+                    ) : claimedVouchers.length === 0 ? (
+                      <p className="text-xs text-gray-500">Belum ada voucher yang diklaim.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {claimedVouchers.map((v) => (
+                          <button
+                            key={v.claimId || v.code}
+                            type="button"
+                            onClick={() => setPromoCode(v.code)}
+                            className="text-xs rounded-full border border-slate-300 px-3 py-1 hover:border-primary hover:text-primary"
+                            title={v.validUntil ? `Valid hingga ${new Date(v.validUntil).toLocaleString('id-ID')}` : undefined}
+                          >
+                            {v.code}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
               {step === 'payment' && (
                 <>
-                  <section className="border rounded-2xl p-6">
-                    <h2 className="font-semibold text-gray-900 mb-4">Kode Promo</h2>
-                    <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" placeholder="Kode kupon (opsional)" />
-                  </section>
                   <section className="border rounded-2xl p-6">
                     <h2 className="font-semibold text-gray-900 mb-4">Metode Pembayaran</h2>
                     <div className="space-y-3">

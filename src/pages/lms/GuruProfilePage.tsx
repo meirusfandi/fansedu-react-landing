@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
   createSchool,
+  getRegisterMasterData,
+  type RegisterLevelOption,
   getInstructorProfile,
   getSchools,
   updateInstructorPassword,
@@ -14,6 +16,10 @@ import {
   type GeoCityItem,
   type GeoProvinceItem,
 } from '../../lib/geo-wilayah'
+import {
+  getRegisterLevelById,
+  validateRegisterSelection,
+} from '../../utils/registerMasterValidation'
 
 export default function GuruProfilePage() {
   const setUser = useAuthStore((s) => s.setUser)
@@ -33,6 +39,11 @@ export default function GuruProfilePage() {
   const [newSchoolAddress, setNewSchoolAddress] = useState('')
   const [newSchoolLogoUrl, setNewSchoolLogoUrl] = useState('')
   const [city, setCity] = useState('')
+  const [levelId, setLevelId] = useState('')
+  const [subjectId, setSubjectId] = useState('')
+  const [classLevel, setClassLevel] = useState('')
+  const [registerLevels, setRegisterLevels] = useState<RegisterLevelOption[]>([])
+  const [loadingRegisterMaster, setLoadingRegisterMaster] = useState(false)
   const [cityOptions, setCityOptions] = useState<GeoCityItem[]>([])
   const [loadingSchoolOptions, setLoadingSchoolOptions] = useState(false)
   const [provinces, setProvinces] = useState<GeoProvinceItem[]>([])
@@ -81,6 +92,9 @@ export default function GuruProfilePage() {
         setWhatsapp(String((res.whatsapp ?? res.whatsappNumber ?? '') as string))
         setSchoolId(String(res.schoolId ?? ''))
         setSchoolNameFallback(String(res.schoolName ?? res.school ?? ''))
+        setLevelId(String((res.levelId ?? '') as string))
+        setSubjectId(String((res.subjectId ?? '') as string))
+        setClassLevel(String((res.classLevel ?? '') as string))
         setCity(String((res.city ?? '') as string))
         setProvince(String((res.province ?? '') as string))
         setGender(String((res.gender ?? '') as string))
@@ -88,6 +102,38 @@ export default function GuruProfilePage() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingRegisterMaster(true)
+    getRegisterMasterData()
+      .then((res) => {
+        if (cancelled) return
+        setRegisterLevels(res.levels ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRegisterLevels([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRegisterMaster(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const selectedRegisterLevel = getRegisterLevelById(registerLevels, levelId)
+
+  useEffect(() => {
+    if (!selectedRegisterLevel) return
+    if (subjectId && !selectedRegisterLevel.subjects.some((s) => s.id === subjectId)) {
+      setSubjectId('')
+    }
+    if (classLevel && !selectedRegisterLevel.classes.some((c) => c.value === classLevel)) {
+      setClassLevel('')
+    }
+  }, [levelId, selectedRegisterLevel, subjectId, classLevel])
 
   useEffect(() => {
     setLoadingSchoolOptions(true)
@@ -163,6 +209,17 @@ export default function GuruProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
+    const masterSelectionError = validateRegisterSelection({
+      levels: registerLevels,
+      levelId,
+      subjectId,
+      classLevel,
+      requireClass: false,
+    })
+    if (masterSelectionError) {
+      setMessage(masterSelectionError)
+      return
+    }
     setSaving(true)
     try {
       const selectedSchool = schoolOptions.find((item) => item.id === schoolId)
@@ -172,7 +229,10 @@ export default function GuruProfilePage() {
         phone: phone.trim(),
         whatsapp: whatsapp.trim(),
         schoolId: schoolId || undefined,
-        school: selectedSchool?.name ?? undefined,
+        school: (selectedSchool?.name ?? schoolNameFallback.trim()) || undefined,
+        levelId: levelId || undefined,
+        subjectId: subjectId || undefined,
+        classLevel: classLevel.trim() || undefined,
         city: city.trim(),
         province: province.trim(),
         gender: gender.trim(),
@@ -327,6 +387,41 @@ export default function GuruProfilePage() {
               <input type="text" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
             </div>
           </div>
+          {registerLevels.length === 0 && !loadingRegisterMaster ? (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Master data jenjang/bidang/kelas belum tersedia dari server. Simpan profil tetap bisa dilakukan.
+            </p>
+          ) : null}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Jenjang</label>
+              <select
+                value={levelId}
+                onChange={(e) => setLevelId(e.target.value)}
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                disabled={loadingRegisterMaster}
+              >
+                <option value="">Pilih jenjang</option>
+                {registerLevels.map((lv) => (
+                  <option key={lv.id} value={lv.id}>{lv.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bidang Pelajaran</label>
+              <select
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+                className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                disabled={loadingRegisterMaster || !selectedRegisterLevel}
+              >
+                <option value="">Pilih bidang</option>
+                {selectedRegisterLevel?.subjects.map((sbj) => (
+                  <option key={sbj.id} value={sbj.id}>{sbj.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
@@ -412,6 +507,24 @@ export default function GuruProfilePage() {
                     {creatingSchool ? 'Menyimpan...' : 'Simpan sekolah'}
                   </button>
                 </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kelas (opsional)</label>
+              {selectedRegisterLevel ? (
+                <select
+                  value={classLevel}
+                  onChange={(e) => setClassLevel(e.target.value)}
+                  className="w-full rounded-lg border px-4 py-2.5 pr-10 text-sm bg-white"
+                  disabled={loadingRegisterMaster}
+                >
+                  <option value="">Tidak diisi</option>
+                  {selectedRegisterLevel.classes.map((cls) => (
+                    <option key={cls.value} value={cls.value}>{cls.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type="text" value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className="w-full rounded-lg border px-4 py-2.5 text-sm" />
               )}
             </div>
           </div>

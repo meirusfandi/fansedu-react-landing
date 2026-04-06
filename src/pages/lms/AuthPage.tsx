@@ -2,9 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { authUserFromApiResponse, LmsPortalAccessDeniedError, type UserRole } from '../../types/auth'
-import { apiLogin, apiRegister, ApiError } from '../../lib/api'
+import {
+  apiLogin,
+  apiRegister,
+  ApiError,
+  getRegisterMasterData,
+  type RegisterLevelOption,
+} from '../../lib/api'
 import { isValidRegistrationPhone, normalizeRegistrationPhone } from '../../utils/phone'
 import { isValidEmail, isValidRegistrationName } from '../../utils/validation'
+import {
+  getRegisterLevelById,
+  isRegisterSelectionComplete,
+  validateRegisterSelection,
+} from '../../utils/registerMasterValidation'
 import { resolvePostAuthHash } from '../../lib/post-auth-redirect'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 
@@ -257,8 +268,57 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [levels, setLevels] = useState<RegisterLevelOption[]>([])
+  const [masterLoading, setMasterLoading] = useState(true)
+  const [selectedLevelId, setSelectedLevelId] = useState('')
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedClassLevel, setSelectedClassLevel] = useState('')
   const login = useAuthStore((s) => s.login)
   const attempt = useSubmitAttemptLimit()
+
+  useEffect(() => {
+    let cancelled = false
+    setMasterLoading(true)
+    getRegisterMasterData()
+      .then((res) => {
+        if (cancelled) return
+        const rows = res.levels ?? []
+        setLevels(rows)
+        if (rows.length > 0) setSelectedLevelId((prev) => prev || rows[0].id)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLevels([])
+      })
+      .finally(() => {
+        if (!cancelled) setMasterLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const selectedLevel = getRegisterLevelById(levels, selectedLevelId)
+
+  useEffect(() => {
+    if (!selectedLevel) {
+      setSelectedSubjectId('')
+      setSelectedClassLevel('')
+      return
+    }
+    setSelectedSubjectId((prev) => {
+      if (prev && selectedLevel.subjects.some((s) => s.id === prev)) return prev
+      return selectedLevel.subjects[0]?.id ?? ''
+    })
+    setSelectedClassLevel((prev) => {
+      if (prev && selectedLevel.classes.some((c) => c.value === prev)) return prev
+      return selectedLevel.classes[0]?.value ?? ''
+    })
+  }, [selectedLevelId, selectedLevel])
+
+  useEffect(() => {
+    if (role === 'guru') setSelectedClassLevel('')
+  }, [role])
 
   const phoneNorm = normalizeRegistrationPhone(phone)
   const registerFormComplete =
@@ -266,7 +326,14 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
     isValidEmail(email) &&
     isValidRegistrationPhone(phoneNorm) &&
     password.length >= 6 &&
-    password === confirmPassword
+    password === confirmPassword &&
+    isRegisterSelectionComplete({
+      levels,
+      levelId: selectedLevelId,
+      subjectId: selectedSubjectId,
+      classLevel: selectedClassLevel,
+      requireClass: role === 'student',
+    })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -293,6 +360,17 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
       setError('Masukkan nomor HP atau WhatsApp yang valid (minimal 10 digit).')
       return
     }
+    const masterSelectionError = validateRegisterSelection({
+      levels,
+      levelId: selectedLevelId,
+      subjectId: selectedSubjectId,
+      classLevel: selectedClassLevel,
+      requireClass: role === 'student',
+    })
+    if (masterSelectionError) {
+      setError(masterSelectionError)
+      return
+    }
     if (password.length < 6) {
       setError('Kata sandi minimal 6 karakter.')
       return
@@ -309,6 +387,9 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
         phone: phoneNorm,
         password,
         role,
+        ...(selectedLevelId ? { levelId: selectedLevelId } : {}),
+        ...(selectedSubjectId ? { subjectId: selectedSubjectId } : {}),
+        ...(role === 'student' && selectedClassLevel ? { classLevel: selectedClassLevel } : {}),
       })
       const authUser = authUserFromApiResponse(res.user, res.token)
       attempt.onSuccess()
@@ -432,6 +513,73 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
             </label>
           </div>
         </div>
+        <div className={`grid gap-3 ${role === 'guru' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+          <div>
+            <label htmlFor="reg-level" className="block text-sm font-medium text-gray-700 mb-1">
+              Jenjang <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="reg-level"
+              value={selectedLevelId}
+              onChange={(e) => setSelectedLevelId(e.target.value)}
+              disabled={masterLoading || levels.length === 0}
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-100"
+            >
+              {levels.length === 0 ? <option value="">Belum tersedia</option> : null}
+              {levels.map((lv) => (
+                <option key={lv.id} value={lv.id}>
+                  {lv.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="reg-subject" className="block text-sm font-medium text-gray-700 mb-1">
+              Bidang pelajaran <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="reg-subject"
+              value={selectedSubjectId}
+              onChange={(e) => setSelectedSubjectId(e.target.value)}
+              disabled={masterLoading || !selectedLevel || selectedLevel.subjects.length === 0}
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-100"
+            >
+              {!selectedLevel || selectedLevel.subjects.length === 0 ? <option value="">Belum tersedia</option> : null}
+              {selectedLevel?.subjects.map((sbj) => (
+                <option key={sbj.id} value={sbj.id}>
+                  {sbj.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {role === 'student' ? (
+            <div>
+              <label htmlFor="reg-class" className="block text-sm font-medium text-gray-700 mb-1">
+                Kelas <span className="text-red-600">*</span>
+              </label>
+              <select
+                id="reg-class"
+                value={selectedClassLevel}
+                onChange={(e) => setSelectedClassLevel(e.target.value)}
+                disabled={masterLoading || !selectedLevel || selectedLevel.classes.length === 0}
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:bg-slate-100"
+              >
+                {!selectedLevel || selectedLevel.classes.length === 0 ? <option value="">Belum tersedia</option> : null}
+                {selectedLevel?.classes.map((cls) => (
+                  <option key={cls.value} value={cls.value}>
+                    {cls.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+        </div>
+        {levels.length === 0 ? (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Master data registrasi belum tersedia dari server. Pendaftaran tetap dapat dilanjutkan, tetapi jenjang/bidang/kelas
+            tidak dikirim.
+          </p>
+        ) : null}
         <button
           type="submit"
           disabled={loading || attempt.blocked || !registerFormComplete}
