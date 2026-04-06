@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getOpenTryouts, type OpenTryoutItem } from '../../lib/api'
+import { ApiError, getGuruTryouts, type OpenTryoutItem } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
 
 export default function GuruTryoutsPage() {
@@ -8,7 +8,7 @@ export default function GuruTryoutsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    getOpenTryouts()
+    getGuruTryouts()
       .then((list) => {
         setTryouts(list)
         setError(null)

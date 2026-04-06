@@ -408,10 +408,12 @@ export default function CheckoutPage({ programSlug }: { programSlug: string | nu
       const res = await initiateCheckout({
         programSlug: currentCourse.slug,
         programId: currentCourse.id,
+        packageId: currentCourse.id,
         name: currentUserInfo.name.trim(),
         email: currentUserInfo.email.trim(),
         phone: phoneNorm,
         promoCode: currentPromoCode || '',
+        voucherCode: currentPromoCode || undefined,
         expectedTotal: expectedTotalRupiah,
         normalPrice: normalPriceRupiah,
         buyerRole: isGuruBuyer ? 'guru' : 'student',

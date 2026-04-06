@@ -9,7 +9,8 @@ import { recordApiClientFailure, recordHttpApiFailure } from './api-error-log'
 import { API_BASE, PACKAGES_API_URL } from './api-config'
 import { getUserFacingHttpMessage, USER_FACING_SYSTEM_ERROR } from './user-facing-error'
 import type { Course } from '../types/course'
-import { decodeJwtPayload, normalizeAuthFields } from '../types/auth'
+import { decodeJwtPayload, normalizeAuthFields, type UserRole } from '../types/auth'
+import { hashWithPasswordSetupQuery } from './post-auth-redirect'
 import { splitPhoneForRegisterApi } from '../utils/phone'
 import tryoutExamSampleExport from '../data/tryoutExamSampleExport.json'
 import { extractModuleFromPayload, type TryoutModuleStat } from '../utils/tryoutModuleAnalysis'
@@ -106,6 +107,11 @@ export class ApiError extends Error {
 /** Cek /auth/me: jangan biarkan UI menggantung jika server tidak jawab */
 const AUTH_ME_TIMEOUT_MS = 6000
 
+function responseIndicatesPasswordSetupRequired(data: unknown): boolean {
+  const d = data as { error?: string; code?: string }
+  return d.error === 'password_setup_required' || d.code === 'password_setup_required'
+}
+
 async function handleResponse<T>(
   res: Response,
   meta?: { method?: string; on401?: 'session-expired' | 'credentials' },
@@ -127,13 +133,8 @@ async function handleResponse<T>(
     throw new ApiError(401, 'Sesi berakhir. Silakan masuk kembali.', {})
   }
 
-  if (
-    res.status === 403 &&
-    typeof window !== 'undefined' &&
-    ((data as { error?: string }).error === 'password_setup_required' ||
-      (data as { code?: string }).code === 'password_setup_required')
-  ) {
-    const role = (() => {
+  if (res.status === 403 && typeof window !== 'undefined' && responseIndicatesPasswordSetupRequired(data)) {
+    const role: UserRole = (() => {
       try {
         const raw = localStorage.getItem('fansedu-auth') ?? sessionStorage.getItem('fansedu-auth')
         if (!raw) return 'student'
@@ -149,8 +150,7 @@ async function handleResponse<T>(
       }
     })()
     const current = window.location.hash || '#/'
-    const target = role === 'guru' ? '#/guru/profile' : '#/student/profile'
-    window.location.hash = `${target}?password_setup_required=1&redirect=${encodeURIComponent(current)}`
+    window.location.hash = hashWithPasswordSetupQuery(role, current)
   }
 
   if (!res.ok) {
@@ -619,11 +619,15 @@ export interface AuthResponseUser {
   role?: string
   role_code?: string
   roleCode?: string
+  mustSetPassword?: boolean
+  must_set_password?: boolean
 }
 
 export interface AuthResponse {
   user: AuthResponseUser
   token: string
+  mustSetPassword?: boolean
+  nextAction?: string
 }
 
 export interface MeResponse {
@@ -689,6 +693,16 @@ export async function apiLogout(): Promise<void> {
     const data = await res.json().catch(() => ({}))
     recordHttpApiFailure(res, data, { method: 'POST' })
   }
+}
+
+/** Password pertama setelah login/register bila `mustSetPassword` / `nextAction: SET_PASSWORD`. */
+export async function authSetPassword(newPassword: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/auth/set-password`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ newPassword: newPassword.trim() }),
+  })
+  await handleResponse<void>(res, { method: 'POST' })
 }
 
 export async function apiGetMe(): Promise<MeResponse> {
@@ -943,6 +957,8 @@ export async function getProgramBySlug(slug: string): Promise<ProgramDetailRespo
 export interface CheckoutInitiateRequest {
   programSlug?: string
   programId?: string
+  /** Alias backend (paket) — jika kosong, client bisa mengisi `programId` yang sama. */
+  packageId?: string
   name: string
   email: string
   /** Nomor HP / WhatsApp pembeli (wajib di checkout guest). */
@@ -951,6 +967,8 @@ export interface CheckoutInitiateRequest {
   userId?: string
   /** Kode promo (opsional) — BE juga terima di initiate */
   promoCode?: string
+  /** Alias `promoCode` untuk voucher checkout (POST body `voucherCode`). */
+  voucherCode?: string
   /** Harga yang diharapkan (dari packages), rupiah integer */
   expectedTotal?: number
   /** Harga normal program, rupiah integer */
@@ -1069,12 +1087,21 @@ export interface MyClaimedVouchersResponse {
 }
 
 export async function initiateCheckout(payload: CheckoutInitiateRequest): Promise<CheckoutInitiateResponse> {
+  const packageId = (payload.packageId ?? payload.programId)?.trim()
+  const voucherOrPromo = (payload.voucherCode ?? payload.promoCode)?.trim() ?? ''
   const body: Record<string, unknown> = {
     programSlug: payload.programSlug,
     programId: payload.programId,
     name: payload.name,
     email: payload.email,
     promoCode: payload.promoCode ?? '',
+  }
+  if (packageId) {
+    body.packageId = packageId
+    if (!body.programId) body.programId = packageId
+  }
+  if (voucherOrPromo) {
+    body.voucherCode = voucherOrPromo
   }
 
   const phoneInit = typeof payload.phone === 'string' ? payload.phone.replace(/\s+/g, ' ').trim() : ''
@@ -1771,6 +1798,16 @@ export async function getStudentTryouts(): Promise<OpenTryoutItem[]> {
 /** GET /student/tryouts/open — TO buka (open + closes_at belum lewat), filter bidang */
 export async function getStudentTryoutsOpen(): Promise<OpenTryoutItem[]> {
   const res = await apiFetch(`${API_BASE}/student/tryouts/open`, { headers: authHeaders() })
+  const data = await handleResponse<unknown>(res)
+  return parseOpenTryoutsResponse(data)
+}
+
+/** GET /guru/tryouts — daftar tryout untuk guru (JWT). Fallback ke tryout publik jika route belum ada. */
+export async function getGuruTryouts(): Promise<OpenTryoutItem[]> {
+  const res = await apiFetch(`${API_BASE}/guru/tryouts`, { headers: authHeaders() })
+  if (res.status === 404 || res.status === 405) {
+    return getOpenTryouts()
+  }
   const data = await handleResponse<unknown>(res)
   return parseOpenTryoutsResponse(data)
 }

@@ -16,7 +16,7 @@ import {
   isRegisterSelectionComplete,
   validateRegisterSelection,
 } from '../../utils/registerMasterValidation'
-import { resolvePostAuthHash } from '../../lib/post-auth-redirect'
+import { navigationHashAfterAuth } from '../../lib/post-auth-redirect'
 import { MAX_SUBMIT_ATTEMPTS, useSubmitAttemptLimit } from '../../hooks/useSubmitAttemptLimit'
 
 type Tab = 'login' | 'register'
@@ -157,7 +157,7 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
       lastFailedCredentialKeyRef.current = null
       attempt.onSuccess()
       login(authUser, res.token, rememberMe)
-      window.location.hash = resolvePostAuthHash(redirect, authUser.role)
+      window.location.hash = navigationHashAfterAuth(res, authUser.role, redirect)
     } catch (err) {
       if (err instanceof LmsPortalAccessDeniedError) {
         setError(err.message)
@@ -395,7 +395,7 @@ function RegisterSection({ redirect, onSwitch }: { redirect: string; onSwitch: (
       attempt.onSuccess()
       login(authUser, res.token)
       setSuccessMessage('Pendaftaran berhasil. Anda langsung masuk ke akun Anda.')
-      window.location.hash = resolvePostAuthHash(redirect, authUser.role)
+      window.location.hash = navigationHashAfterAuth(res, authUser.role, redirect)
     } catch (err) {
       if (err instanceof LmsPortalAccessDeniedError) {
         setError(err.message)

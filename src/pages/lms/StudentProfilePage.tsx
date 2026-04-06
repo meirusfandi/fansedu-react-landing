@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   ApiError,
+  authSetPassword,
   createSchool,
   getRegisterMasterData,
   type RegisterLevelOption,
@@ -9,6 +10,8 @@ import {
   updateStudentPassword,
   updateStudentProfile,
 } from '../../lib/api'
+import { applyPasswordSetupRedirect, hashRequiresPasswordSetup } from '../../lib/post-auth-redirect'
+import { validateLmsPasswordChange } from '../../utils/lmsPasswordForm'
 import {
   fetchProvinces,
   fetchRegenciesByProvince,
@@ -67,6 +70,7 @@ export default function StudentProfilePage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null)
+  const [firstPasswordMode, setFirstPasswordMode] = useState(false)
 
   useEffect(() => {
     if (!message) return
@@ -81,14 +85,15 @@ export default function StudentProfilePage() {
   }, [passwordMessage])
 
   useEffect(() => {
-    const currentHash = window.location.hash || ''
-    if (!currentHash.includes('password_setup_required=1')) return
-    setPasswordRequiredBanner('Akses dibatasi sementara. Silakan ubah password dulu untuk melanjutkan.')
-  }, [])
-
-  useEffect(() => {
+    const fromHash = hashRequiresPasswordSetup(window.location.hash)
+    if (fromHash) {
+      setPasswordRequiredBanner(
+        'Akses dibatasi sementara. Silakan ubah password dulu untuk melanjutkan.',
+      )
+    }
     getStudentProfile()
       .then((res) => {
+        setFirstPasswordMode(fromHash || res.mustSetPassword === true)
         setName(String(res.name ?? ''))
         setEmail(String(res.email ?? ''))
         setPhone(String((res.phone ?? res.phoneNumber ?? '') as string))
@@ -314,30 +319,39 @@ export default function StudentProfilePage() {
     e.preventDefault()
     setPasswordMessage(null)
 
-    if (!currentPassword.trim()) {
-      setPasswordMessage('Password saat ini wajib diisi.')
-      return
-    }
-    if (newPassword.length < 6) {
-      setPasswordMessage('Password baru minimal 6 karakter.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordMessage('Konfirmasi password tidak sama.')
+    const validationError = validateLmsPasswordChange({
+      newPassword,
+      confirmPassword,
+      firstPasswordMode,
+      currentPassword,
+    })
+    if (validationError) {
+      setPasswordMessage(validationError)
       return
     }
 
     setSavingPassword(true)
     try {
-      await updateStudentPassword({
-        currentPassword: currentPassword.trim(),
-        newPassword: newPassword.trim(),
-        confirmPassword: confirmPassword.trim(),
-      })
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-      setPasswordMessage('Password berhasil diperbarui.')
+      if (firstPasswordMode) {
+        await authSetPassword(newPassword.trim())
+        setFirstPasswordMode(false)
+        setPasswordRequiredBanner(null)
+        setNewPassword('')
+        setConfirmPassword('')
+        setPasswordMessage('Password berhasil diatur.')
+        applyPasswordSetupRedirect('#/student')
+      } else {
+        await updateStudentPassword({
+          currentPassword: currentPassword.trim(),
+          newPassword: newPassword.trim(),
+          confirmPassword: confirmPassword.trim(),
+        })
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+        setPasswordRequiredBanner(null)
+        setPasswordMessage('Password berhasil diperbarui.')
+      }
     } catch (err) {
       setPasswordMessage(err instanceof ApiError ? err.message : 'Gagal memperbarui password.')
     } finally {
@@ -626,7 +640,9 @@ export default function StudentProfilePage() {
       </div>
 
       <div className="rounded-2xl border bg-white p-6 space-y-4 max-w-xl">
-        <h2 className="text-lg font-semibold text-gray-900">Ubah Password</h2>
+        <h2 className="text-lg font-semibold text-gray-900">
+          {firstPasswordMode ? 'Atur password' : 'Ubah Password'}
+        </h2>
         {passwordMessage && (
           <div className={`p-3 rounded-lg text-sm flex items-start justify-between gap-3 ${passwordMessage.includes('berhasil') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             <span>{passwordMessage}</span>
@@ -641,34 +657,36 @@ export default function StudentProfilePage() {
           </div>
         )}
         <form onSubmit={handlePasswordSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password Saat Ini</label>
-            <div className="relative">
-              <input
-                type={showCurrentPassword ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-lg border px-4 py-2.5 pr-11 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword((v) => !v)}
-                className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-primary"
-                aria-label={showCurrentPassword ? 'Sembunyikan password' : 'Lihat password'}
-              >
-                {showCurrentPassword ? (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-4.42M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-0.45 1.35-1.27 2.7-2.38 3.9M6.1 6.1C4.27 7.4 2.88 9.16 2 12c1 3 5 7 10 7 1.76 0 3.4-.5 4.83-1.35" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
+          {!firstPasswordMode ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password Saat Ini</label>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full rounded-lg border px-4 py-2.5 pr-11 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-primary"
+                  aria-label={showCurrentPassword ? 'Sembunyikan password' : 'Lihat password'}
+                >
+                  {showCurrentPassword ? (
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-4.42M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-0.45 1.35-1.27 2.7-2.38 3.9M6.1 6.1C4.27 7.4 2.88 9.16 2 12c1 3 5 7 10 7 1.76 0 3.4-.5 4.83-1.35" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password Baru</label>
             <div className="relative">
@@ -730,7 +748,7 @@ export default function StudentProfilePage() {
             disabled={savingPassword}
             className="w-full py-2.5 rounded-xl bg-primary text-white font-medium text-sm hover:bg-primary-hover disabled:opacity-50"
           >
-            {savingPassword ? 'Menyimpan Password...' : 'Update Password'}
+            {savingPassword ? 'Menyimpan Password...' : firstPasswordMode ? 'Simpan password' : 'Update Password'}
           </button>
         </form>
       </div>
