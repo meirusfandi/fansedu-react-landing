@@ -443,13 +443,19 @@ function App() {
             </div>
 
             <button
-              className="md:hidden w-10 h-10 flex flex-col items-center justify-center gap-1.5"
+              className="md:hidden w-10 h-10 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
               aria-label="Toggle menu"
               onClick={() => setIsMenuOpen((prev) => !prev)}
             >
-              <span className={`w-6 h-0.5 bg-white transition-all ${isMenuOpen ? 'bar-open-1' : ''}`}></span>
-              <span className={`w-6 h-0.5 bg-white transition-all ${isMenuOpen ? 'bar-open-2' : ''}`}></span>
-              <span className={`w-6 h-0.5 bg-white transition-all ${isMenuOpen ? 'bar-open-3' : ''}`}></span>
+              {isMenuOpen ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
             </button>
           </div>
         </nav>
