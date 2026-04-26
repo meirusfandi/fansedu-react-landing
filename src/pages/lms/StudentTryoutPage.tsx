@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ApiError, type OpenTryoutItem } from '../../lib/api'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApiError, getRegisterMasterData, type OpenTryoutItem, type RegisterLevelOption, type TryoutFilterParams } from '../../lib/api'
 import { getTryoutScheduleText } from '../../data/tryoutList'
 import { TryoutListSkeletonLms } from '../../components/tryout/TryoutListSkeleton'
 import { fetchVisibleTryoutsForViewer } from '../../utils/fetchVisibleTryouts'
@@ -10,12 +10,50 @@ export default function StudentTryoutPage() {
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
+  // --- Filter state ---
+  const [levels, setLevels] = useState<RegisterLevelOption[]>([])
+  const [selectedLevel, setSelectedLevel] = useState('')
+  const [selectedSubject, setSelectedSubject] = useState('')
+
   const retryLoad = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  // Load master data for filter dropdowns
+  useEffect(() => {
+    getRegisterMasterData()
+      .then((res) => setLevels(res.levels))
+      .catch(() => {
+        /* master data opsional — filter tetap bisa diketik manual */
+      })
+  }, [])
+
+  // Subject options berdasarkan level terpilih
+  const subjectOptions = useMemo(() => {
+    if (!selectedLevel) {
+      // Kumpulkan semua subject unik dari semua level
+      const map = new Map<string, string>()
+      for (const lv of levels) {
+        for (const s of lv.subjects) {
+          if (!map.has(s.name)) map.set(s.name, s.name)
+        }
+      }
+      return Array.from(map.values())
+    }
+    const lv = levels.find((l) => l.slug === selectedLevel || l.name === selectedLevel)
+    return lv ? lv.subjects.map((s) => s.name) : []
+  }, [levels, selectedLevel])
+
+  // Build filter params
+  const filterParams = useMemo((): TryoutFilterParams | undefined => {
+    const f: TryoutFilterParams = {}
+    if (selectedSubject.trim()) f.subject = selectedSubject.trim()
+    if (selectedLevel.trim()) f.level = selectedLevel.trim()
+    return f.subject || f.level ? f : undefined
+  }, [selectedSubject, selectedLevel])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchVisibleTryoutsForViewer({ preferStudentOpen: true })
+    fetchVisibleTryoutsForViewer({ preferStudentOpen: true, filter: filterParams })
       .then((list) => {
         if (!cancelled) {
           setTryouts(list)
@@ -34,15 +72,22 @@ export default function StudentTryoutPage() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, filterParams])
+
+  // Reset subject saat level berubah (jika subject tidak ada di level baru)
+  useEffect(() => {
+    if (selectedSubject && subjectOptions.length > 0 && !subjectOptions.includes(selectedSubject)) {
+      setSelectedSubject('')
+    }
+  }, [selectedLevel, subjectOptions, selectedSubject])
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Tryout</h1>
           <p className="text-gray-500">
-            Tryout yang terbuka untuk akun Anda. Jika server belum menyediakan daftar siswa, kami memuat tryout publik yang sedang open.
+            Tryout yang terbuka untuk akun Anda, difilter berdasarkan bidang dan kelas.
           </p>
         </div>
         <a
@@ -51,6 +96,62 @@ export default function StudentTryoutPage() {
         >
           Riwayat tryout
         </a>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="filter-level" className="text-xs font-medium text-gray-500">
+            Kelas / Jenjang
+          </label>
+          <select
+            id="filter-level"
+            value={selectedLevel}
+            onChange={(e) => setSelectedLevel(e.target.value)}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 min-w-[140px]"
+          >
+            <option value="">Semua jenjang</option>
+            {levels.map((lv) => (
+              <option key={lv.id} value={lv.slug}>
+                {lv.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="filter-subject" className="text-xs font-medium text-gray-500">
+            Bidang / Mata Pelajaran
+          </label>
+          <select
+            id="filter-subject"
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 min-w-[160px]"
+          >
+            <option value="">Semua bidang</option>
+            {subjectOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(selectedLevel || selectedSubject) && (
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedLevel('')
+                setSelectedSubject('')
+              }}
+              className="px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-primary hover:bg-gray-50 transition-colors"
+            >
+              Reset filter
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -68,7 +169,9 @@ export default function StudentTryoutPage() {
         </div>
       ) : tryouts.length === 0 ? (
         <div className="border rounded-2xl p-8 bg-white text-center text-gray-500">
-          Belum ada tryout yang terbuka. Cek kembali nanti.
+          {filterParams
+            ? 'Tidak ada tryout yang cocok dengan filter. Coba ubah filter atau reset.'
+            : 'Belum ada tryout yang terbuka. Cek kembali nanti.'}
         </div>
       ) : (
         <div className="space-y-4">

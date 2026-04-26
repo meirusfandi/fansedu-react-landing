@@ -1788,16 +1788,33 @@ export async function getOpenTryouts(): Promise<OpenTryoutItem[]> {
   return parseOpenTryoutsResponse(data)
 }
 
+/** Filter opsional untuk daftar tryout siswa (query param ?subject=…&level=…) */
+export interface TryoutFilterParams {
+  subject?: string
+  level?: string
+}
+
+function buildTryoutFilterQuery(params?: TryoutFilterParams): string {
+  if (!params) return ''
+  const qs = new URLSearchParams()
+  if (params.subject?.trim()) qs.set('subject', params.subject.trim())
+  if (params.level?.trim()) qs.set('level', params.level.trim())
+  const q = qs.toString()
+  return q ? `?${q}` : ''
+}
+
 /** GET /student/tryouts — semua TO non-draft sesuai bidang siswa */
-export async function getStudentTryouts(): Promise<OpenTryoutItem[]> {
-  const res = await apiFetch(`${API_BASE}/student/tryouts`, { headers: authHeaders() })
+export async function getStudentTryouts(params?: TryoutFilterParams): Promise<OpenTryoutItem[]> {
+  const q = buildTryoutFilterQuery(params)
+  const res = await apiFetch(`${API_BASE}/student/tryouts${q}`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseOpenTryoutsResponse(data)
 }
 
 /** GET /student/tryouts/open — TO buka (open + closes_at belum lewat), filter bidang */
-export async function getStudentTryoutsOpen(): Promise<OpenTryoutItem[]> {
-  const res = await apiFetch(`${API_BASE}/student/tryouts/open`, { headers: authHeaders() })
+export async function getStudentTryoutsOpen(params?: TryoutFilterParams): Promise<OpenTryoutItem[]> {
+  const q = buildTryoutFilterQuery(params)
+  const res = await apiFetch(`${API_BASE}/student/tryouts/open${q}`, { headers: authHeaders() })
   const data = await handleResponse<unknown>(res)
   return parseOpenTryoutsResponse(data)
 }
