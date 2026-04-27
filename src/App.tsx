@@ -42,15 +42,15 @@ function waUrl(message: string): string {
 
 /** Template pesan WA per section (bisa dipindah ke backend/site_settings nanti) */
 const WA_TEMPLATES = {
-  navbar: 'Halo Fansedu, saya ingin bertanya tentang program pelatihan.',
-  hero: 'Halo Fansedu, saya tertarik mendaftar program pelatihan OSN Informatika.',
-  heroSlot: 'Halo Fansedu, saya ingin amankan slot program OSN-K / Batch April.',
+  navbar: 'Halo Fansedu, saya ingin bertanya tentang program pelatihan OSN.',
+  hero: 'Halo Fansedu, saya tertarik mendaftar program pelatihan OSN (Informatika / Matematika SMP / Matematika SD). Boleh info lebih lanjut?',
+  heroSlot: 'Halo Fansedu, saya ingin amankan slot program OSN Batch Mei 2026. Boleh info program dan harganya?',
   /** Setelah promo resmi berakhir — tanya penawaran yang masih berlaku */
   promoBaru: 'Halo Fansedu, saya ingin menanyakan promo atau penawaran terbaru untuk program pelatihan OSN.',
   tanyaProgram: 'Halo Fansedu, saya ingin bertanya tentang program dan pendaftaran.',
-  requestBidang: 'Halo Fansedu, saya ingin request program bidang lainnya.',
-  contact: 'Halo Fansedu, saya ingin bertanya lebih lanjut tentang program dan pendaftaran.',
-  float: 'Halo Fansedu, saya ada pertanyaan.',
+  requestBidang: 'Halo Fansedu, saya ingin request program bidang OSN lainnya.',
+  contact: 'Halo Fansedu, saya ingin bertanya lebih lanjut tentang program pelatihan OSN dan pendaftaran.',
+  float: 'Halo Fansedu, saya ada pertanyaan tentang program OSN.',
 } as const
 
 /** Base path LMS: gunakan hash routing dalam project yang sama (#/auth, #/student, #/guru) */
@@ -85,17 +85,30 @@ function getStoredAuthUser(): { name: string; role: string } | null {
 
 /** Urgency: batch, kuota, deadline — ubah sesuai jadwal nyata */
 const URGENCY = {
-  batch: 'Batch April 2026',
+  batch: 'Batch 1 & Batch 2 Mei 2026',
   quotaMax: 30,
   /** Slot tersisa (display marketing; sesuaikan dengan data real). */
-  slotsRemaining: 8,
-  /** Tenggat Early Bird / promo display (hitungan hari). */
-  earlyBirdEnd: new Date('2026-03-17T23:59:59+07:00'),
-  /** Akhir countdown promo di hero & pricing (WIB) — harus sama dengan narasi promoEndDisplay. */
-  promoEndsAt: new Date('2026-03-25T23:59:59+07:00'),
-  promoLabel: 'Promo THR',
-  /** Tanggal teks (selaras dengan promoEndsAt). */
-  promoEndDisplay: '25 Maret 2026',
+  slotsRemaining: 12,
+  /**
+   * Pendaftaran Batch 1 ditutup 3 Mei 2026.
+   * Countdown akan menghitung ke sini terlebih dahulu.
+   */
+  earlyBirdEnd: new Date('2026-05-03T23:59:59+07:00'),
+  batch1EndsAt: new Date('2026-05-03T23:59:59+07:00'),
+  /**
+   * Pendaftaran Batch 2 ditutup 17 Mei 2026.
+   * Countdown beralih ke sini setelah Batch 1 tutup.
+   */
+  promoEndsAt: new Date('2026-05-17T23:59:59+07:00'),
+  promoLabel: 'Early Bird Batch 1',
+  /** Tanggal teks akhir promo (selaras dengan promoEndsAt). */
+  promoEndDisplay: '17 Mei 2026',
+} as const
+
+/** Info kedua batch untuk ditampilkan di hero & pricing */
+const BATCH_DATES = {
+  batch1: { label: 'Batch 1', period: '1 Mei – 3 Mei 2026', closeDisplay: '3 Mei 2026' },
+  batch2: { label: 'Batch 2', period: '4 Mei – 17 Mei 2026', closeDisplay: '17 Mei 2026' },
 } as const
 
 function getEarlyBirdDaysLeft(): number {
@@ -110,36 +123,61 @@ function formatUrgencyDate(date: Date): string {
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Countdown ke URGENCY.promoEndsAt (re-render tiap detik). */
+/** Countdown ke deadline terdekat: Batch 1 (3 Mei) → lalu Batch 2 (17 Mei). */
 function getPromoCountdownLabel(): {
   headline: string
   timer: string
   ended: boolean
   urgent24h: boolean
+  activeBatch: 1 | 2 | null
   /** Teks penjelas jika promo sudah lewat; null jika masih berjalan */
   endedBody: string | null
 } {
-  const ms = URGENCY.promoEndsAt.getTime() - Date.now()
-  if (ms <= 0) {
+  const now = Date.now()
+  // Pilih target deadline terdekat yang belum lewat
+  const batch1Ms = URGENCY.batch1EndsAt.getTime() - now
+  const batch2Ms = URGENCY.promoEndsAt.getTime() - now
+
+  if (batch1Ms > 0) {
+    // Batch 1 masih buka — hitung mundur ke penutupan Batch 1
+    const totalSec = Math.floor(batch1Ms / 1000)
+    const days = Math.floor(totalSec / 86400)
+    const h = Math.floor((totalSec % 86400) / 3600)
+    const urgent24h = days < 1
     return {
-      headline: 'Promo periode ini sudah berakhir',
-      timer: '',
-      ended: true,
-      urgent24h: false,
-      endedBody: `${URGENCY.promoLabel} yang berlaku hingga ${URGENCY.promoEndDisplay} sudah tidak berlaku. Untuk mengetahui promo lain atau harga terbaru, silakan hubungi tim Fansedu.`,
+      headline: urgent24h ? 'Kurang dari 24 jam! Batch 1 ditutup segera' : 'Pendaftaran Batch 1 ditutup dalam',
+      timer: urgent24h ? `${h} jam tersisa` : `${days} hari ${h} jam`,
+      ended: false,
+      urgent24h,
+      activeBatch: 1,
+      endedBody: null,
     }
   }
-  const totalSec = Math.floor(ms / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  const pad = (n: number) => String(n).padStart(2, '0')
+
+  if (batch2Ms > 0) {
+    // Batch 1 sudah tutup, hitung mundur ke penutupan Batch 2
+    const totalSec = Math.floor(batch2Ms / 1000)
+    const days = Math.floor(totalSec / 86400)
+    const h = Math.floor((totalSec % 86400) / 3600)
+    const urgent24h = days < 1
+    return {
+      headline: urgent24h ? 'Kurang dari 24 jam! Batch 2 ditutup segera' : 'Pendaftaran Batch 2 ditutup dalam',
+      timer: urgent24h ? `${h} jam tersisa` : `${days} hari ${h} jam`,
+      ended: false,
+      urgent24h,
+      activeBatch: 2,
+      endedBody: null,
+    }
+  }
+
+  // Semua batch sudah tutup
   return {
-    headline: h < 24 ? 'Sisa waktu promo' : 'Hitung mundur berakhirnya promo',
-    timer: `${pad(h)}:${pad(m)}:${pad(s)}`,
-    ended: false,
-    urgent24h: h < 24,
-    endedBody: null,
+    headline: 'Pendaftaran periode ini sudah ditutup',
+    timer: '',
+    ended: true,
+    urgent24h: false,
+    activeBatch: null,
+    endedBody: `Batch 1 (${BATCH_DATES.batch1.period}) dan Batch 2 (${BATCH_DATES.batch2.period}) sudah ditutup. Untuk info batch berikutnya atau promo terbaru, hubungi tim Fansedu.`,
   }
 }
 
@@ -224,6 +262,56 @@ const MOCK_PACKAGES: LandingPackage[] = [
       'Forum diskusi & dashboard ranking nasional',
     ],
   },
+  {
+    id: '4',
+    name: 'OSN Matematika SMP 2026',
+    slug: 'osn-matematika-smp-2026',
+    shortDescription: 'Program pelatihan intensif OSN Matematika khusus jenjang SMP. Dari aljabar dan geometri dasar hingga strategi kompetisi tingkat kabupaten.',
+    price: 299000,
+    priceEarlyBird: 299000,
+    priceNormal: 450000,
+    ctaUrl: waUrl('Saya ingin bertanya detail terkait program OSN Matematika SMP 2026.'),
+    ctaLabel: 'Daftar / Tanya',
+    isOpen: true,
+    durasi: '4 Minggu',
+    materi: [
+      'Aljabar, geometri, dan kombinatorika level OSN SMP',
+      'Pola soal yang sering keluar di seleksi kabupaten & provinsi',
+      'Teknik penyelesaian soal olimpiade non-kalkulator',
+      'Strategi manajemen waktu saat kompetisi',
+    ],
+    fasilitas: [
+      '2x Live Class per minggu',
+      '2x Tryout Nasional format OSN SMP',
+      'Rekaman kelas & video pembahasan soal',
+      'Dashboard ranking nasional peserta',
+    ],
+  },
+  {
+    id: '5',
+    name: 'OSN Matematika SD 2026',
+    slug: 'osn-matematika-sd-2026',
+    shortDescription: 'Program pelatihan OSN Matematika jenjang SD. Membangun fondasi berpikir logis dan terbiasa dengan soal olimpiade sejak dini.',
+    price: 249000,
+    priceEarlyBird: 249000,
+    priceNormal: 399000,
+    ctaUrl: waUrl('Saya ingin bertanya detail terkait program OSN Matematika SD 2026.'),
+    ctaLabel: 'Daftar / Tanya',
+    isOpen: true,
+    durasi: '4 Minggu',
+    materi: [
+      'Aritmetika, pola bilangan, dan geometri dasar olimpiade SD',
+      'Soal tipe KSN/OSN SD dengan pembahasan step-by-step',
+      'Berpikir logis dan sistematis sejak dini',
+      'Strategi menghadapi soal cerita olimpiade',
+    ],
+    fasilitas: [
+      '2x Live Class per minggu',
+      'Latihan soal terstruktur & tryout simulasi',
+      'Rekaman kelas yang bisa diulang kapan saja',
+      'Forum diskusi orang tua & peserta',
+    ],
+  },
 ]
 
 const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@fansedu.official'
@@ -236,28 +324,71 @@ const MOCK_ARTICLES: Article[] = [
     id: '1',
     title: 'Tips Persiapan OSN Informatika 2026',
     excerpt: 'Langkah-langkah praktis mempersiapkan diri menghadapi OSN Informatika dari persiapan materi hingga manajemen waktu.',
-    image: 'https://placehold.co/600x320/161616/c9fd02?text=Tips+OSN',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=Tips+OSN+Informatika',
     slug: 'tips-persiapan-osn-informatika-2026',
     publishedAt: '2026-02-20',
-    category: 'Tips',
+    category: 'Informatika',
   },
   {
     id: '2',
-    title: 'Materi Dasar Pemrograman untuk Pemula',
-    excerpt: 'Pengenalan konsep pemrograman dan struktur data dasar yang sering muncul di soal OSN Informatika.',
-    image: 'https://placehold.co/600x320/161616/c9fd02?text=Materi+Dasar',
-    slug: 'materi-dasar-pemrograman-pemula',
+    title: 'Strategi Lolos OSN Matematika SMP 2026',
+    excerpt: 'Materi prioritas dan strategi pengerjaan soal olimpiade Matematika SMP yang sering ditanyakan di seleksi tingkat kabupaten dan provinsi.',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=OSN+Mat+SMP',
+    slug: 'strategi-lolos-osn-matematika-smp-2026',
     publishedAt: '2026-02-15',
-    category: 'Materi',
+    category: 'Matematika SMP',
   },
   {
     id: '3',
-    title: 'Jadwal dan Tahapan OSN 2026',
-    excerpt: 'Informasi lengkap tahapan seleksi OSN dari tingkat sekolah hingga nasional serta timeline penting.',
-    image: 'https://placehold.co/600x320/161616/c9fd02?text=Jadwal+OSN',
-    slug: 'jadwal-tahapan-osn-2026',
+    title: 'Persiapan OSN Matematika SD: Mulai dari Mana?',
+    excerpt: 'Panduan untuk orang tua dan siswa SD yang ingin memulai persiapan olimpiade matematika sejak dini — fondasi, latihan, dan tryout.',
+    image: 'https://placehold.co/600x320/161616/c9fd02?text=OSN+Mat+SD',
+    slug: 'persiapan-osn-matematika-sd-mulai-dari-mana',
     publishedAt: '2026-02-10',
-    category: 'Info',
+    category: 'Matematika SD',
+  },
+]
+
+const FAQ_ITEMS = [
+  {
+    q: 'Bidang OSN apa saja yang tersedia di Fansedu?',
+    a: 'Saat ini tersedia tiga program: OSN Informatika (SMA), OSN Matematika SMP, dan OSN Matematika SD. Masing-masing memiliki kurikulum, mentor, dan tryout tersendiri sesuai jenjang.',
+  },
+  {
+    q: 'Apakah program Informatika cocok untuk pemula yang belum kenal C++ sama sekali?',
+    a: 'Ya, program Foundation Informatika dirancang khusus untuk pemula. Kami mulai dari dasar: logika berpikir, sintaks C++, hingga struktur data dasar. Tidak perlu pengalaman coding sebelumnya.',
+  },
+  {
+    q: 'Program Matematika SD apakah perlu bimbingan orang tua?',
+    a: 'Live class bisa diikuti mandiri oleh siswa SD, tapi kami juga menyediakan grup diskusi orang tua agar bisa membantu latihan di rumah. Rekaman kelas bisa ditonton ulang bersama.',
+  },
+  {
+    q: 'Bagaimana jika tidak bisa hadir di live class?',
+    a: 'Tidak masalah. Semua sesi live class direkam dan bisa kamu akses kapan saja di platform. Tidak ada batas waktu akses rekaman selama program berjalan.',
+  },
+  {
+    q: 'Berapa lama durasi setiap program?',
+    a: 'Semua program berdurasi 4 minggu dengan 2x live class per minggu, kecuali Kelas Gabungan Informatika (Foundation + OSN-K) yang berdurasi 6 minggu.',
+  },
+  {
+    q: 'Apakah ada sertifikat setelah selesai program?',
+    a: 'Tidak. Peserta yang menyelesaikan program tidak mendapatkan sertifikat digital kelulusan dari Fansedu. Karena ini hanya untuk persiapan lomba dan tidak menjamin kelulusan OSN, kami fokus pada kualitas materi dan pembelajaran daripada sertifikat.',
+  },
+  {
+    q: 'Bagaimana cara pembayaran dan konfirmasi pendaftaran?',
+    a: 'Pembayaran bisa dilakukan via transfer bank atau melalui platform Fansedu. Setelah pembayaran, konfirmasi ke tim kami via WhatsApp dan akses program langsung aktif di dashboard siswa.',
+  },
+  {
+    q: 'Apakah program online atau offline?',
+    a: 'Sepenuhnya online. Live class via platform video conference, materi dan latihan soal ada di dashboard platform — bisa diikuti dari mana saja di seluruh Indonesia.',
+  },
+  {
+    q: `Kapan ${URGENCY.batch} mulai dan berapa kuotanya?`,
+    a: `Ada dua gelombang: ${BATCH_DATES.batch1.label} berlangsung ${BATCH_DATES.batch1.period}, dan ${BATCH_DATES.batch2.label} berlangsung ${BATCH_DATES.batch2.period}. Kuota per kelas hanya ${URGENCY.quotaMax} siswa untuk menjaga kualitas interaksi dengan mentor. Daftar sebelum penuh.`,
+  },
+  {
+    q: 'Apakah ada garansi lolos OSN?',
+    a: 'Kami tidak menjanjikan kelulusan karena banyak faktor yang mempengaruhi. Yang kami pastikan adalah kurikulum berkualitas, mentor berpengalaman (alumni & pelatih OSN per bidang), dan tryout nasional yang mempersiapkan kamu seoptimal mungkin.',
   },
 ]
 
@@ -271,10 +402,11 @@ function App() {
   // Paket / program: diisi dari backend GET /api/v1/packages (hanya is_open = true)
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
+  const [faqOpen, setFaqOpen] = useState<number | null>(null)
   const urgencyDateLabel = formatUrgencyDate(URGENCY.earlyBirdEnd)
   const [, setCountdownTick] = useState(0)
   useEffect(() => {
-    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 1000)
+    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
   const promoCountdown = getPromoCountdownLabel()
@@ -424,22 +556,34 @@ function App() {
                 <a href="#request" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#request')}>
                   Request Bidang
                 </a>
+                <a href="#faq" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#faq')}>
+                  FAQ
+                </a>
                 <a href="#contact" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#contact')}>
                   Kontak
                 </a>
               </nav>
-              {authUser ? (
+              <div className="flex items-center gap-2">
                 <a
-                  href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
-                  className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+                  href="#packages"
+                  className="btn-secondary px-5 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white"
+                  onClick={(event) => handleAnchorClick(event, '#packages')}
                 >
-                  Dashboard
+                  Daftar Program
                 </a>
-              ) : (
-                <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
-                  Masuk
-                </a>
-              )}
+                {authUser ? (
+                  <a
+                    href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
+                    className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+                  >
+                    Dashboard
+                  </a>
+                ) : (
+                  <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
+                    Masuk
+                  </a>
+                )}
+              </div>
             </div>
 
             <button
@@ -482,11 +626,21 @@ function App() {
             <a href="#request" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#request')}>
               Request Bidang
             </a>
+            <a href="#faq" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => { handleAnchorClick(event, '#faq') }}>
+              FAQ
+            </a>
             <a href="#contact" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#contact')}>
               Kontak
             </a>
           </nav>
           <div className="mt-8 flex flex-col gap-3">
+            <a
+              href="#packages"
+              className="btn-secondary px-6 py-4 rounded-full font-semibold text-center block border-2 border-[var(--accent)] text-[var(--accent)]"
+              onClick={(event) => { handleAnchorClick(event, '#packages') }}
+            >
+              Daftar Program
+            </a>
             {authUser ? (
               <a href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
                 Dashboard
@@ -508,31 +662,44 @@ function App() {
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div className="order-1">
               <div className="reveal flex flex-wrap items-center gap-2 mb-4">
-                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
-                  <span aria-hidden={true}>⚠️</span>
-                  Batch April hampir penuh
-                </span>
+                {promoCountdown.activeBatch === 1 ? (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
+                    <span aria-hidden={true}>⚠️</span>
+                    Slot {BATCH_DATES.batch1.label} hampir penuh
+                  </span>
+                ) : !promoCountdown.ended ? (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md ring-1 ring-black/15 dark:ring-white/25">
+                    <span aria-hidden={true}>⚠️</span>
+                    Slot {BATCH_DATES.batch2.label} hampir penuh
+                  </span>
+                ) : null}
                 <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold bg-[var(--card)] text-[var(--fg)] border-2 border-[var(--fg)]/15 shadow-sm">
                   ~{URGENCY.slotsRemaining} slot tersisa
                 </span>
+                {promoCountdown.activeBatch === 1 && (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold bg-[var(--card)] text-[var(--fg)] border border-[var(--border)] shadow-sm">
+                    {BATCH_DATES.batch2.label} buka 4 Mei 2026
+                  </span>
+                )}
               </div>
 
               <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-6xl leading-tight mb-4 reveal reveal-delay-1">
-                Siap Lolos OSN-K Informatika 2026?
+                Siap Lolos OSN 2026?<br />
+                <span className="text-[var(--accent)]">Informatika · Mat SMP · Mat SD</span>
               </h1>
               <p className="text-xl sm:text-2xl text-[var(--fg-muted)] font-medium mb-6 max-w-xl reveal reveal-delay-1">
-                Dari tidak tahu apa-apa → paham soal OSN → siap lolos seleksi
+                Dari tidak tahu apa-apa → kuasai materi → siap lolos seleksi
               </p>
 
               <ul className="space-y-2 mb-6 reveal reveal-delay-2">
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Latihan soal OSN real
+                  <span className="text-[var(--accent)] font-bold">✔</span> 3 bidang: Informatika, Mat SMP, Mat SD
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> 2x tryout nasional
+                  <span className="text-[var(--accent)] font-bold">✔</span> Latihan soal &amp; tryout nasional format OSN
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Ranking &amp; evaluasi kemampuan
+                  <span className="text-[var(--accent)] font-bold">✔</span> Ranking &amp; evaluasi kemampuan real-time
                 </li>
               </ul>
 
@@ -553,8 +720,19 @@ function App() {
                     <p className="font-display font-bold text-3xl sm:text-4xl text-[var(--accent)] tabular-nums tracking-tight">
                       {promoCountdown.timer}
                     </p>
-                    <p className="text-xs text-[var(--fg-muted)] mt-2">
-                      {URGENCY.promoLabel} · berlaku s.d. {URGENCY.promoEndDisplay}
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                      <p className="text-xs text-[var(--fg-muted)]">
+                        <span className="font-semibold text-[var(--fg)]">{BATCH_DATES.batch1.label}:</span> {BATCH_DATES.batch1.period}
+                      </p>
+                      <p className="text-xs text-[var(--fg-muted)]">
+                        <span className="font-semibold text-[var(--fg)]">{BATCH_DATES.batch2.label}:</span> {BATCH_DATES.batch2.period}
+                      </p>
+                    </div>
+                    <p className="text-xs text-[var(--fg-muted)] mt-1">
+                      {promoCountdown.activeBatch === 1
+                        ? `${URGENCY.promoLabel} · pendaftaran Batch 1 tutup ${BATCH_DATES.batch1.closeDisplay}`
+                        : `Batch 1 sudah tutup · pendaftaran Batch 2 tutup ${BATCH_DATES.batch2.closeDisplay}`
+                      }
                     </p>
                   </>
                 ) : (
@@ -619,7 +797,7 @@ function App() {
                     {heroVideoId ? (
                       <img
                         src={`https://img.youtube.com/vi/${heroVideoId}/maxresdefault.jpg`}
-                        alt="Video Pembelajaran Fansedu - OSN Informatika"
+                        alt="Video Pembelajaran Fansedu - OSN Informatika, Matematika SMP & SD"
                         className="w-full h-auto object-cover"
                         onError={(e) => {
                           const target = e.currentTarget
@@ -634,7 +812,7 @@ function App() {
                     ) : (
                       <img
                         src="https://placehold.co/600x500/161616/c9fd02?text=Video+Pembelajaran"
-                        alt="Fansedu Informatic Olympiad Training"
+                        alt="Fansedu OSN Training - Informatika, Matematika SMP & SD"
                         className="w-full h-auto"
                       />
                     )}
@@ -675,14 +853,14 @@ function App() {
       <section id="social-proof" className="py-16 relative bg-[var(--card)] border-b border-[var(--border)]">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <p className="text-center text-sm font-semibold text-[var(--fg-muted)] uppercase tracking-wide mb-8 reveal">
-            Dipercaya peserta &amp; pembimbing dari berbagai sekolah
+            Dipercaya peserta &amp; pembimbing SD, SMP, SMA dari berbagai kota
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { value: '20+', label: 'paket pembahasan soal' },
-              { value: '2x', label: 'Tryout nasional per batch' },
-              { value: '100%', label: 'Pembahasan mendalam' },
-              { value: 'sejak 2014', label: 'Pengalaman bimbingan OSN' },
+              { value: '150+', label: 'siswa aktif di platform' },
+              { value: '3+', label: 'batch sukses berjalan' },
+              { value: '2x', label: 'tryout nasional per batch' },
+              { value: 'sejak 2014', label: 'pengalaman bimbingan OSN' },
             ].map((item) => (
               <div key={item.label} className="reveal">
                 <div className="font-display font-bold text-3xl sm:text-4xl text-[var(--accent)] mb-1">{item.value}</div>
@@ -817,7 +995,7 @@ function App() {
               Bukan karena tidak pintar — <span className="text-[var(--accent)]">tapi karena ini</span>
             </h2>
             <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 max-w-2xl mx-auto">
-              Banyak siswa gagal OSN bukan karena tidak pintar, tapi karena:
+              Banyak siswa gagal OSN (Informatika, Matematika SMP, maupun Matematika SD) bukan karena tidak pintar, tapi karena:
             </p>
           </div>
           <div className="max-w-3xl mx-auto space-y-4 mb-12">
@@ -847,7 +1025,7 @@ function App() {
                 <div className="feature-card rounded-3xl p-8 lg:p-12 h-full flex flex-col items-center justify-center text-center">
                   <img src="/fansedu.png" alt="Fansedu logo" className="w-40 sm:w-48 rounded-2xl mb-6" />
                   <h2 className="font-display font-bold text-2xl lg:text-3xl">Transformasi bersama Fansedu</h2>
-                  <p className="text-sm text-[var(--fg-muted)] mt-3">Dari belajar random → jalur terukur menuju OSN-K</p>
+                  <p className="text-sm text-[var(--fg-muted)] mt-3">Dari belajar random → jalur terukur menuju OSN</p>
                 </div>
             </div>
 
@@ -862,10 +1040,10 @@ function App() {
 
               <ul className="space-y-3 mb-8 reveal reveal-delay-2">
                 {[
-                  'Paham pola soal OSN',
-                  'Terbiasa dengan soal real & tekanan tryout',
+                  'Paham pola soal OSN bidang yang kamu pilih',
+                  'Terbiasa dengan soal real & tekanan tryout nasional',
                   'Tahu posisi kemampuanmu (ranking nasional)',
-                  'Siap menghadapi seleksi OSN-K',
+                  'Siap menghadapi seleksi dari tingkat sekolah hingga nasional',
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3 text-[var(--fg)] text-lg">
                     <span className="text-[var(--accent)] font-bold shrink-0">✔</span>
@@ -875,7 +1053,7 @@ function App() {
               </ul>
 
               <p className="text-[var(--fg-muted)] mb-2 reveal reveal-delay-3 text-sm">
-                Tim pengajar: <strong className="text-[var(--fg)]">Ex-OSN Informatika</strong>, praktisi dari <strong className="text-[var(--fg)]">Tokopedia</strong> &amp; <strong className="text-[var(--fg)]">Govtech Indonesia</strong> — materi disetel khusus persiapan OSN.
+                Tim pengajar: <strong className="text-[var(--fg)]">Alumni OSN Informatika &amp; Matematika</strong>, praktisi dari <strong className="text-[var(--fg)]">Tokopedia</strong> &amp; <strong className="text-[var(--fg)]">Govtech Indonesia</strong> — materi disetel khusus per bidang OSN.
               </p>
             </div>
           </div>
@@ -896,12 +1074,12 @@ function App() {
 
           <div className="grid lg:grid-cols-2 gap-8">
             {[
-              ['Pembahasan solusi optimal seperti di OSN', 'Pembahasan algoritma langkah demi langkah dan solusi optimal ala soal OSN, bukan sekadar jawaban singkat.'],
+              ['Pembahasan solusi mendalam sesuai bidang', 'Setiap soal dibahas step-by-step: algoritma untuk Informatika, pembuktian dan strategi untuk Matematika SMP/SD — bukan sekadar jawaban singkat.'],
               ['Akses materi & rekaman kapan saja', 'Fleksibilitas penuh mengakses materi, rekaman kelas, dan pembahasan sesuai jadwal kamu.'],
-              ['Kurikulum dari praktisi & alumni OSN', 'Materi disusun oleh praktisi dan alumni OSN berpengalaman, fokus ke yang sering keluar di lomba.'],
-              ['Mentor medalis & pelatih OSN', 'Medalis dan pelatih OSN—dari Ex-OSN, Ex-Tokopedia, hingga Software engineer di Govtech Indonesia. Materi dan strategi disesuaikan khusus untuk persiapan OSN.'],
+              ['Kurikulum dari praktisi & alumni OSN', 'Materi disusun oleh alumni OSN berpengalaman per bidang, fokus ke topik yang sering keluar di seleksi nyata.'],
+              ['Mentor medalis & pelatih OSN', 'Medalis dan pelatih OSN Informatika serta Matematika — materi dan strategi disesuaikan khusus per bidang kompetisi.'],
               ['Rekaman kelas & pembahasan tanpa batas', 'Akses semua rekaman live class dan video pembahasan soal tanpa batas waktu.'],
-              ['Investasi tepat untuk persiapan OSN', 'Nilai terbaik untuk hasil maksimal: dari dasar sampai siap menghadapi OSN-K.'],
+              ['Investasi tepat untuk persiapan OSN', 'Nilai terbaik untuk hasil maksimal: dari fondasi dasar sampai siap menghadapi seleksi OSN di tingkat manapun.'],
             ].map(([title, desc], index) => (
               <div key={title} className={`feature-card rounded-2xl p-6 flex gap-5 reveal reveal-delay-${(index % 4) + 1}`}>
                 <div className="feature-icon w-12 h-12 rounded-xl bg-[var(--accent)] flex items-center justify-center flex-shrink-0">
@@ -955,7 +1133,11 @@ function App() {
                   Pilih program — <span className="text-[var(--accent)]">harga promo aktif</span>
                 </h2>
                 <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2 mb-2">
-                  Harga normal dicoret di bawah. Promo berlaku hingga <strong className="text-[var(--fg)]">{URGENCY.promoEndDisplay}</strong> atau sampai batch penuh.
+                  Harga normal dicoret di bawah. Pendaftaran{' '}
+                  {promoCountdown.activeBatch === 1
+                    ? <><strong className="text-[var(--fg)]">Batch 1 tutup {BATCH_DATES.batch1.closeDisplay}</strong>, lalu Batch 2 tutup {BATCH_DATES.batch2.closeDisplay}.</>
+                    : <>tutup <strong className="text-[var(--fg)]">{BATCH_DATES.batch2.closeDisplay}</strong> atau sampai batch penuh.</>
+                  }
                 </p>
               </>
             )}
@@ -1042,7 +1224,9 @@ function App() {
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2 mb-4 py-3 px-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
-                  <span className="text-xs font-medium text-[var(--fg-muted)]">{URGENCY.batch}</span>
+                  <span className="text-xs font-semibold text-[var(--fg)]">{BATCH_DATES.batch1.label}: {BATCH_DATES.batch1.period}</span>
+                  <span className="text-[var(--fg-muted)]">·</span>
+                  <span className="text-xs font-semibold text-[var(--fg)]">{BATCH_DATES.batch2.label}: {BATCH_DATES.batch2.period}</span>
                   <span className="text-[var(--fg-muted)]">·</span>
                   <span className="text-xs font-semibold text-[var(--fg)]">Kuota {URGENCY.quotaMax} siswa per kelas</span>
                   {getEarlyBirdDaysLeft() > 0 && (
@@ -1073,7 +1257,7 @@ function App() {
                             <p className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">Hemat {hematRupiah}</p>
                           )}
                           {!promoCountdown.ended ? (
-                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Berlaku s.d. {URGENCY.promoEndDisplay}</p>
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Tutup {promoCountdown.activeBatch === 1 ? BATCH_DATES.batch1.closeDisplay : BATCH_DATES.batch2.closeDisplay}</p>
                           ) : (
                             <p className="text-xs text-[var(--fg-muted)] mt-2">Promo periode ini sudah berakhir. Tanya WhatsApp untuk penawaran terbaru.</p>
                           )}
@@ -1093,7 +1277,7 @@ function App() {
                             </p>
                           )}
                           {!promoCountdown.ended ? (
-                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Berlaku s.d. {URGENCY.promoEndDisplay}</p>
+                            <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-2">⏳ Tutup {promoCountdown.activeBatch === 1 ? BATCH_DATES.batch1.closeDisplay : BATCH_DATES.batch2.closeDisplay}</p>
                           ) : (
                             <p className="text-xs text-[var(--fg-muted)] mt-2">Promo periode ini sudah berakhir. Tanya WhatsApp untuk penawaran terbaru.</p>
                           )}
@@ -1240,9 +1424,9 @@ function App() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { quote: 'Materi terstruktur dari dasar, jadi tidak bingung lagi mau mulai dari mana. Tryout-nya juga bikin saya tahu posisi saya di antara peserta lain.', author: 'Siswa SMA', role: 'Peserta Foundation', thumb: '/dashboard-siswa.png' },
-              { quote: 'Pembahasan soalnya mendalam dan mentor responsif. Saya rekomendasikan untuk yang serius mau persiapan OSN.', author: 'Guru Pembimbing', role: 'OSN Informatika', thumb: '/kelas-osn.png' },
-              { quote: 'Dari tidak bisa C++ sama sekali sampai bisa ikut tryout dan lihat ranking. Program ini worth it.', author: 'Siswa SMA', role: 'Peserta OSN-K', thumb: '/leaderboard-to.png' },
+              { quote: 'Awalnya takut C++ itu susah. Ternyata dengan cara ngajar di Foundation, saya ngerti dalam 2 minggu. Tryout-nya juga bikin saya sadar di mana posisi saya dibanding peserta lain.', author: 'Rizky A.', role: 'Siswa SMAN 3 Surabaya · Peserta Foundation', thumb: '/dashboard-siswa.png' },
+              { quote: 'Materi di OSN-K sangat relevan dengan soal seleksi nyata. Mentor yang sudah berpengalaman OSN benar-benar tahu apa yang perlu difokuskan. Saya rekomendasikan ke semua guru pembimbing.', author: 'Pak Budi S.', role: 'Guru Pembimbing OSN · SMA Negeri Bandung', thumb: '/kelas-osn.png' },
+              { quote: 'Dari tidak tahu struktur data sama sekali, sekarang saya bisa ikut tryout nasional dan masuk Top 20. Program ini benar-benar worth every penny.', author: 'Dimas F.', role: 'Siswa SMA · Peserta OSN-K, Ranking Top 20 Nasional', thumb: '/leaderboard-to.png' },
             ].map((item, index) => (
               <div key={index} className={`feature-card rounded-2xl overflow-hidden reveal reveal-delay-${(index % 3) + 1}`}>
                 <button
@@ -1292,20 +1476,23 @@ function App() {
             </>
           ) : (
             <>
-              <p className="text-amber-700 dark:text-amber-300 font-bold text-sm uppercase tracking-wide mb-3 reveal">⚠️ Batch hampir penuh</p>
+              <p className="text-amber-700 dark:text-amber-300 font-bold text-sm uppercase tracking-wide mb-3 reveal">⚠️ {BATCH_DATES.batch1.label} hampir penuh</p>
               <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal">
                 Promo &amp; slot <span className="text-[var(--accent)]">tidak nunggu</span>
               </h2>
               <p className="text-red-600 dark:text-red-400 font-semibold text-lg mb-2 reveal">🔥 Promo akan segera berakhir — jangan sampai ketinggalan.</p>
               <p className="text-[var(--fg-muted)] text-base mb-8 max-w-xl mx-auto reveal">
-                Amankan slot {URGENCY.batch}. Hanya ~{URGENCY.slotsRemaining} kursi tersisa untuk gelombang ini.
+                {BATCH_DATES.batch1.label} ({BATCH_DATES.batch1.period}) hampir penuh. {BATCH_DATES.batch2.label} ({BATCH_DATES.batch2.period}) masih tersedia — hanya ~{URGENCY.slotsRemaining} kursi tersisa.
               </p>
             </>
           )}
 
           <div className="flex flex-wrap justify-center gap-3 mb-10 reveal">
             <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
-              📅 {URGENCY.batch}
+              📅 {BATCH_DATES.batch1.label}: {BATCH_DATES.batch1.period}
+            </span>
+            <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
+              📅 {BATCH_DATES.batch2.label}: {BATCH_DATES.batch2.period}
             </span>
             <span className="inline-flex items-center px-4 py-2 rounded-full bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--fg)]">
               👥 Kuota {URGENCY.quotaMax} siswa per kelas
@@ -1357,7 +1544,7 @@ function App() {
         </div>
       </section>
 
-      <section id="articles" className="hidden py-24 relative bg-[var(--bg-secondary)]">
+      <section id="articles" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
           <div className="text-center max-w-3xl mx-auto mb-16">
@@ -1439,6 +1626,59 @@ function App() {
         </div>
       </section>
 
+      <section id="faq" className="py-24 relative bg-[var(--bg)] border-t border-[var(--border)]">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6 reveal">FAQ</span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-4 reveal reveal-delay-1">
+              Pertanyaan yang <span className="text-[var(--accent)]">Sering Ditanya</span>
+            </h2>
+            <p className="text-[var(--fg-muted)] text-lg reveal reveal-delay-2">
+              Belum ketemu jawabannya? Tanya langsung ke tim kami via WhatsApp.
+            </p>
+          </div>
+          <div className="max-w-3xl mx-auto space-y-3 reveal">
+            {FAQ_ITEMS.map((item, index) => (
+              <div key={index} className="feature-card rounded-2xl border border-[var(--border)] overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full text-left px-6 py-5 flex items-center justify-between gap-4 hover:bg-[var(--surface)] transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--accent)]"
+                  onClick={() => setFaqOpen(faqOpen === index ? null : index)}
+                  aria-expanded={faqOpen === index}
+                >
+                  <span className="font-display font-semibold text-[var(--fg)] text-left leading-snug">{item.q}</span>
+                  <svg
+                    className={`w-5 h-5 flex-shrink-0 text-[var(--accent)] transition-transform duration-200 ${faqOpen === index ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {faqOpen === index && (
+                  <div className="px-6 pb-5 text-[var(--fg-muted)] text-sm leading-relaxed border-t border-[var(--border)]">
+                    <p className="pt-4">{item.a}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-10 reveal">
+            <a
+              href={waUrl(WA_TEMPLATES.contact)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary px-8 py-3 rounded-full font-semibold text-sm inline-block"
+              onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'faq' })}
+            >
+              Masih ada pertanyaan? Chat di WhatsApp
+            </a>
+          </div>
+        </div>
+      </section>
+
       <section id="contact" className="py-24 relative bg-[var(--bg-secondary)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
@@ -1486,7 +1726,7 @@ function App() {
                 </div>
                 <h3 className="font-display font-bold text-2xl lg:text-3xl mb-4">Mulai Persiapan OSN Sekarang</h3>
                 <p className="text-[var(--fg-muted)] mb-8 max-w-md mx-auto">
-                  Jangan biarkan kesempatan berlalu. Persiapkan diri Anda dengan program pelatihan terbaik untuk meraih medali di OSN Informatika.
+                  Jangan biarkan kesempatan berlalu. Persiapkan diri dengan program pelatihan terbaik — OSN Informatika, Matematika SMP, atau Matematika SD.
                 </p>
                 <a
                   href={waUrl(WA_TEMPLATES.contact)}
@@ -1511,10 +1751,10 @@ function App() {
                 <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
                   <span className="font-display font-bold text-white text-lg">F</span>
                 </div>
-                <span className="font-display font-semibold text-xl">Fansedu Informatic Olympiad</span>
+                <span className="font-display font-semibold text-xl">Fansedu OSN Training</span>
               </a>
               <p className="text-[var(--fg-muted)] max-w-sm">
-                Platform pelatihan OSN Informatika terpercaya untuk siswa SMA yang ingin meraih prestasi di kompetisi olimpiade.
+                Platform pelatihan OSN terpercaya untuk siswa SD, SMP, dan SMA. Tersedia program OSN Informatika, OSN Matematika SMP, dan OSN Matematika SD.
               </p>
             </div>
 
@@ -1541,6 +1781,9 @@ function App() {
                 </a>
                 <a href="#request" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#request')}>
                   Request Bidang
+                </a>
+                <a href="#faq" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#faq')}>
+                  FAQ
                 </a>
                 <a href="#contact" className="nav-link text-sm" onClick={(event) => handleAnchorClick(event, '#contact')}>
                   Kontak
