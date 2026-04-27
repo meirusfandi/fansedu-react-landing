@@ -45,10 +45,17 @@ export default function StudentTryoutPage() {
   // Build filter params
   const filterParams = useMemo((): TryoutFilterParams | undefined => {
     const f: TryoutFilterParams = {}
-    if (selectedSubject.trim()) f.subject = selectedSubject.trim()
+    if (selectedSubject.trim()) {
+      // Prefer slug from master data; fall back to the raw name string
+      const subjectSlug = levels
+        .flatMap((lv) => lv.subjects)
+        .find((s) => s.name === selectedSubject.trim())
+        ?.slug
+      f.subject = subjectSlug ?? selectedSubject.trim()
+    }
     if (selectedLevel.trim()) f.level = selectedLevel.trim()
     return f.subject || f.level ? f : undefined
-  }, [selectedSubject, selectedLevel])
+  }, [selectedSubject, selectedLevel, levels])
 
   useEffect(() => {
     let cancelled = false
@@ -169,9 +176,17 @@ export default function StudentTryoutPage() {
         </div>
       ) : tryouts.length === 0 ? (
         <div className="border rounded-2xl p-8 bg-white text-center text-gray-500">
-          {filterParams
-            ? 'Tidak ada tryout yang cocok dengan filter. Coba ubah filter atau reset.'
-            : 'Belum ada tryout yang terbuka. Cek kembali nanti.'}
+          {filterParams ? (
+            'Tidak ada tryout yang cocok dengan filter. Coba ubah filter atau reset.'
+          ) : (
+            <>
+              <p>Belum ada tryout yang terbuka untuk akun Anda.</p>
+              <p className="text-sm mt-2">
+                Pastikan profil akademik (jenjang &amp; bidang studi) sudah diisi lengkap di{' '}
+                <a href="#/student/profile" className="text-primary hover:underline font-medium">halaman profil</a>.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-4">

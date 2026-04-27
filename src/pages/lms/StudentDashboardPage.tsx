@@ -3,7 +3,7 @@ import {
   ApiError,
   getStudentNextActions,
   getMyCourses,
-  getOpenTryouts,
+  getStudentTryoutsOpen,
   getStudentDashboard,
   getTransactions,
   type StudentNextActionItem,
@@ -153,7 +153,7 @@ export default function StudentDashboardPage() {
     const pending = Promise.allSettled([
       getStudentDashboard(),
       getMyCourses({ page: 1, limit: 200 }),
-      getOpenTryouts(),
+      getStudentTryoutsOpen(),  // student-specific endpoint (filtered by profile level/subject)
       getTransactions({ status: 'pending', page: 1, limit: 50 }),
       getStudentNextActions(),
     ])
