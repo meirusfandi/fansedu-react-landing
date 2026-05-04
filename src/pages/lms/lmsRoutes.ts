@@ -20,6 +20,7 @@ export interface LmsRoute {
     | 'student-coding'
     | 'student-coding-problem'
     | 'student-transactions'
+    | 'student-transaction-detail'
     | 'student-certificates'
     | 'student-profile'
     | 'guru'
@@ -129,6 +130,9 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   const codingProblemMatch = pathOnly.match(/^\/student\/coding\/problem\/([^/]+)$/)
   if (codingProblemMatch) return { type: 'student-coding-problem', codingProblemSlug: codingProblemMatch[1], studentPath: '/student/coding' }
   if (pathOnly === '/student/transactions') return { type: 'student-transactions', studentPath: '/student/transactions' }
+  if (pathOnly === '/student/transactions/confirm') {
+    return { type: 'student-transaction-detail', checkoutConfirmOrderId: query.get('order') || undefined, studentPath: '/student/transactions' }
+  }
   if (pathOnly === '/student/certificates') return { type: 'student-certificates', studentPath: '/student/certificates' }
   if (pathOnly === '/student/profile') return { type: 'student-profile', studentPath: '/student/profile' }
 

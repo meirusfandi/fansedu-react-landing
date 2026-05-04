@@ -61,13 +61,18 @@ export default function CheckoutConfirmPage({
   const [proofNote, setProofNote] = useState('')
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [transferAmount, setTransferAmount] = useState<number | null>(null)
   const [midtransLoading, setMidtransLoading] = useState(false)
   const transactionsHref = scope === 'guru' ? '#/guru/transactions' : '#/student/transactions'
 
   useEffect(() => {
-    if (!orderId) return
+    if (!orderId) {
+      setDetailLoading(false)
+      return
+    }
+    setDetailLoading(true)
     getTransactions({ page: 1, limit: 50, search: orderId, status: 'all' })
       .then((res) => {
         const found = res.data.find((t) => t.orderId === orderId)
@@ -84,10 +89,11 @@ export default function CheckoutConfirmPage({
         })
       })
       .catch(() => {})
+      .finally(() => setDetailLoading(false))
   }, [orderId])
 
   const statusMeta = getTransactionStatusMeta(transactionDetail?.status)
-  const canUploadProof = transactionDetail ? isPendingUploadTransactionStatus(transactionDetail.status) : true
+  const canUploadProof = !detailLoading && (transactionDetail ? isPendingUploadTransactionStatus(transactionDetail.status) : false)
   const isVerificationPhase = transactionDetail ? isVerificationTransactionStatus(transactionDetail.status) : false
   const isPaid = isPaidTransactionStatus(transactionDetail?.status)
 
@@ -180,6 +186,13 @@ export default function CheckoutConfirmPage({
         Order ID <strong className="font-mono">{orderId}</strong>
       </p>
 
+      {detailLoading ? (
+        <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50 animate-pulse">
+          <div className="h-4 w-24 bg-slate-200 rounded mb-3" />
+          <div className="h-4 w-40 bg-slate-200 rounded mb-2" />
+          <div className="h-4 w-32 bg-slate-200 rounded" />
+        </div>
+      ) : (
       <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50">
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <p className="text-sm text-slate-600">Status:</p>
@@ -194,20 +207,21 @@ export default function CheckoutConfirmPage({
           Total: {transferAmount != null ? `Rp${transferAmount.toLocaleString('id-ID')}` : 'Menunggu data dari server'}
         </p>
       </div>
+      )}
 
-      {error && (
+      {!detailLoading && error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm" role="alert">
           {error}
         </div>
       )}
 
-      {success && (
+      {!detailLoading && success && (
         <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm" role="status">
           {success}
         </div>
       )}
 
-      {!canUploadProof && (
+      {!detailLoading && !canUploadProof && (
         <div className="mb-6 p-4 rounded-xl border border-blue-200 bg-blue-50 text-sm text-blue-900">
           {isPaid
             ? 'Pembayaran sudah lunas. Tidak perlu upload bukti lagi.'

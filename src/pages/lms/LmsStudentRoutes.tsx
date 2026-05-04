@@ -14,6 +14,7 @@ import StudentTryoutDetailPage from './StudentTryoutDetailPage'
 const StudentTryoutExamPage = lazy(() => import('./StudentTryoutExamPage'))
 import StudentCodingProblemPage from './StudentCodingProblemPage'
 import StudentTransactionsPage from './StudentTransactionsPage'
+import CheckoutConfirmPage from './CheckoutConfirmPage'
 import StudentCertificatesPage from './StudentCertificatesPage'
 import StudentProfilePage from './StudentProfilePage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
@@ -110,6 +111,12 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/transactions">
           <StudentTransactionsPage />
+        </StudentLayout>
+      )
+    case 'student-transaction-detail':
+      return (
+        <StudentLayout currentPath="/student/transactions">
+          <CheckoutConfirmPage orderId={route.checkoutConfirmOrderId ?? null} embedded scope="student" />
         </StudentLayout>
       )
     case 'student-certificates':

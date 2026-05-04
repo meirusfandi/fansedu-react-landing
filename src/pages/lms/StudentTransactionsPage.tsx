@@ -131,11 +131,11 @@ export default function StudentTransactionsPage() {
                 <td className="py-4 px-4">
                   {r.orderId ? (
                     <div className="flex flex-col gap-1">
-                      <a href={`#/checkout/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
+                      <a href={`#/student/transactions/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-primary font-medium hover:underline text-xs sm:text-sm">
                         Detail
                       </a>
                       {canUploadProof && (
-                        <a href={`#/checkout/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-amber-700 font-medium hover:underline text-xs sm:text-sm">
+                        <a href={`#/student/transactions/confirm?order=${encodeURIComponent(r.orderId)}`} className="text-amber-700 font-medium hover:underline text-xs sm:text-sm">
                           Upload bukti
                         </a>
                       )}
