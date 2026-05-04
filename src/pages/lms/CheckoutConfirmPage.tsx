@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { submitPaymentProof, ApiError, getTransactions, createPaymentSession } from '../../lib/api'
+import {
+  getTransactionStatusMeta,
+  isPaidTransactionStatus,
+  isPendingUploadTransactionStatus,
+  isVerificationTransactionStatus,
+} from '../../utils/transactionStatus'
 
 /** Rekening untuk transfer (sama dengan CheckoutPage) */
 const BANK_ACCOUNTS = [
@@ -42,11 +48,18 @@ export default function CheckoutConfirmPage({
   embedded?: boolean
   scope?: 'student' | 'guru'
 }) {
+  const [transactionDetail, setTransactionDetail] = useState<{
+    orderId: string
+    status: string
+    total: number
+    programs: { title: string }[]
+  } | null>(null)
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [senderAccountNo, setSenderAccountNo] = useState('')
   const [senderName, setSenderName] = useState('')
   const [senderBank, setSenderBank] = useState('')
   const [proofNote, setProofNote] = useState('')
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [transferAmount, setTransferAmount] = useState<number | null>(null)
@@ -55,13 +68,28 @@ export default function CheckoutConfirmPage({
 
   useEffect(() => {
     if (!orderId) return
-    getTransactions()
+    getTransactions({ page: 1, limit: 50, search: orderId, status: 'all' })
       .then((res) => {
         const found = res.data.find((t) => t.orderId === orderId)
-        if (found && typeof found.total === 'number') setTransferAmount(found.total)
+        if (!found) {
+          setTransactionDetail(null)
+          return
+        }
+        if (typeof found.total === 'number') setTransferAmount(found.total)
+        setTransactionDetail({
+          orderId: found.orderId,
+          status: found.status,
+          total: found.total,
+          programs: found.programs,
+        })
       })
       .catch(() => {})
   }, [orderId])
+
+  const statusMeta = getTransactionStatusMeta(transactionDetail?.status)
+  const canUploadProof = transactionDetail ? isPendingUploadTransactionStatus(transactionDetail.status) : true
+  const isVerificationPhase = transactionDetail ? isVerificationTransactionStatus(transactionDetail.status) : false
+  const isPaid = isPaidTransactionStatus(transactionDetail?.status)
 
   const onPayMidtrans = async () => {
     if (!orderId) return
@@ -94,6 +122,7 @@ export default function CheckoutConfirmPage({
       return
     }
     setError(null)
+    setSuccess(null)
     setLoading(true)
     try {
       const form = new FormData()
@@ -103,7 +132,18 @@ export default function CheckoutConfirmPage({
       if (senderBank.trim()) form.append('senderBank', senderBank.trim())
       if (proofNote.trim()) form.append('note', proofNote.trim())
       await submitPaymentProof(orderId, form)
-      window.location.hash = '#/checkout/success'
+      setSuccess('Bukti pembayaran berhasil dikirim. Status transaksi akan mengikuti update dari API.')
+      setProofFile(null)
+      const refreshed = await getTransactions({ page: 1, limit: 50, search: orderId, status: 'all' })
+      const found = refreshed.data.find((t) => t.orderId === orderId)
+      if (found) {
+        setTransactionDetail({
+          orderId: found.orderId,
+          status: found.status,
+          total: found.total,
+          programs: found.programs,
+        })
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal mengirim bukti pembayaran.')
     } finally {
@@ -135,8 +175,25 @@ export default function CheckoutConfirmPage({
 
   const content = (
     <>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Upload Bukti Pembayaran</h1>
-      <p className="text-gray-600 mb-6">Transaksi dengan Order ID <strong className="font-mono">{orderId}</strong> menunggu bukti transfer. Isi data pengirim dan upload bukti.</p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Detail Transaksi</h1>
+      <p className="text-gray-600 mb-4">
+        Order ID <strong className="font-mono">{orderId}</strong>
+      </p>
+
+      <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <p className="text-sm text-slate-600">Status:</p>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusMeta.badgeClassName}`}>
+            {statusMeta.label}
+          </span>
+        </div>
+        <p className="text-sm text-slate-600 mb-1">
+          Program: {transactionDetail?.programs?.map((p) => p.title).join(', ') || '-'}
+        </p>
+        <p className="text-sm text-slate-600">
+          Total: {transferAmount != null ? `Rp${transferAmount.toLocaleString('id-ID')}` : 'Menunggu data dari server'}
+        </p>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm" role="alert">
@@ -144,6 +201,23 @@ export default function CheckoutConfirmPage({
         </div>
       )}
 
+      {success && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm" role="status">
+          {success}
+        </div>
+      )}
+
+      {!canUploadProof && (
+        <div className="mb-6 p-4 rounded-xl border border-blue-200 bg-blue-50 text-sm text-blue-900">
+          {isPaid
+            ? 'Pembayaran sudah lunas. Tidak perlu upload bukti lagi.'
+            : isVerificationPhase
+              ? 'Bukti pembayaran sudah terkirim dan sedang diverifikasi. Tunggu update status terbaru dari API.'
+              : 'Transaksi ini tidak dalam status upload bukti pembayaran.'}
+        </div>
+      )}
+
+      {canUploadProof && (
       <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5">
         <p className="text-sm font-medium text-gray-900 mb-2">Bayar dengan Midtrans</p>
         <p className="text-xs text-gray-600 mb-3">
@@ -158,7 +232,9 @@ export default function CheckoutConfirmPage({
           {midtransLoading ? 'Membuka Midtrans...' : 'Lanjut ke Midtrans'}
         </button>
       </div>
+      )}
 
+      {canUploadProof && (
       <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
         <p className="text-sm font-medium text-slate-700 mb-3">Pastikan Anda sudah transfer ke rekening berikut dengan nominal yang sesuai:</p>
         <div className="space-y-3 text-sm">
@@ -182,7 +258,9 @@ export default function CheckoutConfirmPage({
           </div>
         </div>
       </div>
+      )}
 
+      {canUploadProof && (
       <section className="border rounded-2xl p-6 bg-white">
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
@@ -214,6 +292,13 @@ export default function CheckoutConfirmPage({
           </div>
         </form>
       </section>
+      )}
+
+      <div className="mt-6">
+        <a href={transactionsHref} className="text-primary font-medium hover:underline text-sm">
+          ← Kembali ke Riwayat Transaksi
+        </a>
+      </div>
     </>
   )
 
