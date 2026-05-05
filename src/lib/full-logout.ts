@@ -32,7 +32,6 @@ export async function performFullLogoutAndRedirect(): Promise<void> {
     useAuthStore.persist.clearStorage()
   } catch {
     try {
-      localStorage.removeItem('fansedu-auth')
       sessionStorage.removeItem('fansedu-auth')
     } catch {
       /* ignore */
@@ -44,7 +43,6 @@ export async function performFullLogoutAndRedirect(): Promise<void> {
     useNotificationsStore.persist.clearStorage()
   } catch {
     try {
-      localStorage.removeItem('fansedu-notifications')
       sessionStorage.removeItem('fansedu-notifications')
     } catch {
       /* ignore */

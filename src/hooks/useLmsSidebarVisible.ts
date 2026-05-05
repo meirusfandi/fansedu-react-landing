@@ -17,7 +17,7 @@ function isDesktopViewport(): boolean {
 function readInitialSidebarVisible(role: LmsSidebarRole): boolean {
   if (typeof window === 'undefined') return true
   try {
-    const raw = localStorage.getItem(storageKey(role))
+    const raw = sessionStorage.getItem(storageKey(role))
     if (raw === '0') return false
     if (raw === '1') return true
   } catch {
@@ -28,7 +28,7 @@ function readInitialSidebarVisible(role: LmsSidebarRole): boolean {
 }
 
 /**
- * Sidebar dashboard siswa/guru: bisa disembunyikan; preferensi disimpan di localStorage.
+ * Sidebar dashboard siswa/guru: bisa disembunyikan; preferensi disimpan di sessionStorage.
  * Di layar sempit (di bawah lebar `md` / 768px), default tertutup agar konten utama dapat ruang penuh.
  */
 export function useLmsSidebarVisible(role: LmsSidebarRole) {
@@ -44,7 +44,7 @@ export function useLmsSidebarVisible(role: LmsSidebarRole) {
     const mq = window.matchMedia(SIDEBAR_DESKTOP_MEDIA)
     const onViewportChange = () => {
       try {
-        const raw = localStorage.getItem(storageKey(role))
+        const raw = sessionStorage.getItem(storageKey(role))
         if (raw === '0' || raw === '1') return
       } catch {
         /* ignore */
@@ -57,7 +57,7 @@ export function useLmsSidebarVisible(role: LmsSidebarRole) {
 
   const persist = useCallback((next: boolean) => {
     try {
-      localStorage.setItem(storageKey(role), next ? '1' : '0')
+      sessionStorage.setItem(storageKey(role), next ? '1' : '0')
     } catch {
       /* ignore */
     }

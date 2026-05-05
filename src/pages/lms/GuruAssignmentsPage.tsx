@@ -30,7 +30,7 @@ interface AssignmentDraft {
 const ASSIGNMENT_DRAFT_KEY = 'guru-assignment-drafts-v1'
 
 function loadDrafts(): AssignmentDraft[] {
-  const raw = window.localStorage.getItem(ASSIGNMENT_DRAFT_KEY)
+  const raw = window.sessionStorage.getItem(ASSIGNMENT_DRAFT_KEY)
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw)
@@ -41,7 +41,7 @@ function loadDrafts(): AssignmentDraft[] {
 }
 
 function saveDrafts(next: AssignmentDraft[]) {
-  window.localStorage.setItem(ASSIGNMENT_DRAFT_KEY, JSON.stringify(next))
+  window.sessionStorage.setItem(ASSIGNMENT_DRAFT_KEY, JSON.stringify(next))
 }
 
 function downloadCsv(filename: string, content: string) {

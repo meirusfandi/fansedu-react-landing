@@ -564,7 +564,7 @@ Untuk dropdown **Provinsi** dan **Kabupaten/Kota** di form (mis. profil instrukt
 
 Detail key, TTL, dan contoh pseudo-code: **`docs/GEO_REDIS_BACKEND.md`**.
 
-**Frontend:** set `VITE_GEO_SOURCE=internal` agar memanggil `{VITE_API_URL}/geo/provinces` dan `{VITE_API_URL}/geo/regencies/:id`. Tanpa env tersebut, frontend memakai API publik emsifa dengan **cache `localStorage` 7 hari** di sisi browser (bukan Redis).
+**Frontend:** set `VITE_GEO_SOURCE=internal` agar memanggil `{VITE_API_URL}/geo/provinces` dan `{VITE_API_URL}/geo/regencies/:id`. Tanpa env tersebut, frontend memakai API publik emsifa dengan **cache `sessionStorage` 7 hari** di sisi browser (bukan Redis).
 
 ---
 

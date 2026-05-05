@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 export interface AppNotification {
   id: string
@@ -43,6 +43,9 @@ export const useNotificationsStore = create<NotificationsStore>()(
         })),
       unreadCount: () => get().items.filter((item) => !item.read).length,
     }),
-    { name: 'fansedu-notifications' }
+    {
+      name: 'fansedu-notifications',
+      storage: createJSONStorage(() => sessionStorage),
+    },
   )
 )

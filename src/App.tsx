@@ -59,13 +59,13 @@ const LMS_BASE = '#'
 /** Link daftar akun di platform (LMS) — tetap di URL yang sama (hash routing) */
 const REGISTER_URL = `${LMS_BASE}/auth?tab=register`
 
-/** Key localStorage auth dari LMS (Zustand persist 'fansedu-auth') */
+/** Key sessionStorage auth dari LMS (Zustand persist 'fansedu-auth') */
 const AUTH_STORAGE_KEY = 'fansedu-auth'
 
 function getStoredAuthUser(): { name: string; role: string } | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY) ?? sessionStorage.getItem(AUTH_STORAGE_KEY)
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as {
       state?: {
@@ -415,6 +415,24 @@ function App() {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [])
+
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onWide = () => {
+      if (mq.matches) setIsMenuOpen(false)
+    }
+    mq.addEventListener('change', onWide)
+    return () => mq.removeEventListener('change', onWide)
+  }, [])
   useEffect(() => {
     const api = import.meta.env.VITE_ARTICLES_API_URL as string | undefined
     if (!api) return
@@ -527,46 +545,85 @@ function App() {
   return (
     <div className="wrapper pb-20 md:pb-0">
       <header className={`navbar fixed top-0 left-0 right-0 z-50 ${navbarSolid ? 'navbar-solid' : ''}`}>
-        <nav className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-          <div className="flex items-center justify-between h-20">
-            <a href="#hero" className="flex items-center gap-3" onClick={(event) => handleAnchorClick(event, '#hero')}>
-              <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center">
+        <nav className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10" aria-label="Navigasi utama">
+          <div className="flex items-center justify-between gap-3 min-h-[5rem]">
+            <a
+              href="#hero"
+              className="flex shrink-0 items-center gap-2 sm:gap-3 min-w-0"
+              onClick={(event) => handleAnchorClick(event, '#hero')}
+            >
+              <div className="w-10 h-10 shrink-0 bg-[var(--accent)] rounded-lg flex items-center justify-center">
                 <span className="font-display font-bold text-white text-lg">F</span>
               </div>
-              <span className="font-display font-semibold text-xl hidden sm:block">Fansedu</span>
+              <span className="font-display font-semibold text-lg sm:text-xl hidden sm:block truncate">Fansedu</span>
             </a>
 
-            <div className="hidden md:flex items-center gap-6">
-              <nav className="flex items-center gap-6 lg:gap-8">
-                <a href="#tryout" className="nav-link font-medium text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+            <div className="hidden lg:flex flex-1 min-w-0 items-center justify-end gap-3 xl:gap-5">
+              <nav
+                className="flex min-w-0 max-w-full items-center justify-end gap-x-2 gap-y-1 xl:gap-x-4 2xl:gap-x-6 overflow-x-auto overscroll-x-contain py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                aria-label="Tautan halaman"
+              >
+                <a
+                  href="#tryout"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-[var(--accent)]"
+                  onClick={(event) => handleAnchorClick(event, '#tryout')}
+                >
                   Tryout Gratis
                 </a>
-                <a href="#packages" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#packages')}>
+                <a
+                  href="#packages"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#packages')}
+                >
                   Program &amp; Harga
                 </a>
-                <a href="#solusi" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#solusi')}>
+                <a
+                  href="#solusi"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#solusi')}
+                >
                   Hasil
                 </a>
-                <a href="#features" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#features')}>
+                <a
+                  href="#features"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#features')}
+                >
                   Fitur
                 </a>
-                <a href="#testimoni" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
+                <a
+                  href="#testimoni"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#testimoni')}
+                >
                   Testimoni
                 </a>
-                <a href="#request" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#request')}>
+                <a
+                  href="#request"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#request')}
+                >
                   Request Bidang
                 </a>
-                <a href="#faq" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#faq')}>
+                <a
+                  href="#faq"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#faq')}
+                >
                   FAQ
                 </a>
-                <a href="#contact" className="nav-link font-medium" onClick={(event) => handleAnchorClick(event, '#contact')}>
+                <a
+                  href="#contact"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#contact')}
+                >
                   Kontak
                 </a>
               </nav>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2 pl-1 xl:border-l xl:border-[var(--border)] xl:pl-5">
                 <a
                   href="#packages"
-                  className="btn-secondary px-5 py-2.5 rounded-full font-semibold text-sm inline-block border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white"
+                  className="btn-secondary px-4 py-2 xl:px-5 xl:py-2.5 rounded-full font-semibold text-xs xl:text-sm inline-block border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white"
                   onClick={(event) => handleAnchorClick(event, '#packages')}
                 >
                   Daftar Program
@@ -574,12 +631,12 @@ function App() {
                 {authUser ? (
                   <a
                     href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
-                    className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block"
+                    className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block"
                   >
                     Dashboard
                   </a>
                 ) : (
-                  <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-3 rounded-full font-semibold text-sm inline-block">
+                  <a href={`${LMS_BASE}/auth`} className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block">
                     Masuk
                   </a>
                 )}
@@ -587,8 +644,10 @@ function App() {
             </div>
 
             <button
-              className="md:hidden w-10 h-10 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
-              aria-label="Toggle menu"
+              type="button"
+              className="lg:hidden shrink-0 w-10 h-10 inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--fg)] shadow-sm hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+              aria-expanded={isMenuOpen}
+              aria-label={isMenuOpen ? 'Tutup menu' : 'Buka menu'}
               onClick={() => setIsMenuOpen((prev) => !prev)}
             >
               {isMenuOpen ? (
@@ -605,8 +664,19 @@ function App() {
         </nav>
       </header>
 
-      <div className={`mobile-menu fixed top-0 right-0 w-80 h-full bg-[var(--bg)] z-40 border-l border-[var(--border)] ${isMenuOpen ? 'active' : ''}`}>
-        <div className="pt-24 px-6">
+      {isMenuOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-[1px] lg:hidden"
+          aria-label="Tutup menu"
+          onClick={() => setIsMenuOpen(false)}
+        />
+      ) : null}
+
+      <div
+        className={`mobile-menu fixed top-0 right-0 z-[45] h-full w-full max-w-sm bg-[var(--bg)] shadow-2xl border-l border-[var(--border)] lg:hidden ${isMenuOpen ? 'active' : ''}`}
+      >
+        <div className="pt-[5.5rem] px-6 pb-8 overflow-y-auto max-h-screen">
           <nav className="flex flex-col gap-4">
             <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
               Tryout Gratis
@@ -642,11 +712,19 @@ function App() {
               Daftar Program
             </a>
             {authUser ? (
-              <a href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+              <a
+                href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
+                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Dashboard
               </a>
             ) : (
-              <a href={`${LMS_BASE}/auth`} className="btn-primary px-6 py-4 rounded-full font-semibold text-center block">
+              <a
+                href={`${LMS_BASE}/auth`}
+                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block"
+                onClick={() => setIsMenuOpen(false)}
+              >
                 Masuk
               </a>
             )}

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { isAuthUserBlockedFromLmsPortal, normalizeAuthFields, type AuthUser } from '../types/auth'
 
 interface AuthStore {
@@ -11,33 +11,6 @@ interface AuthStore {
   setUser: (user: AuthUser | null) => void
   isAuthenticated: () => boolean
   hasRole: (role: AuthUser['role']) => boolean
-}
-
-const authStorage: StateStorage = {
-  getItem: (name) => {
-    const localValue = localStorage.getItem(name)
-    if (localValue) return localValue
-    return sessionStorage.getItem(name)
-  },
-  setItem: (name, value) => {
-    try {
-      const parsed = JSON.parse(value) as { state?: { rememberMe?: boolean } }
-      const shouldPersist = parsed?.state?.rememberMe !== false
-      if (shouldPersist) {
-        localStorage.setItem(name, value)
-        sessionStorage.removeItem(name)
-      } else {
-        sessionStorage.setItem(name, value)
-        localStorage.removeItem(name)
-      }
-    } catch {
-      localStorage.setItem(name, value)
-    }
-  },
-  removeItem: (name) => {
-    localStorage.removeItem(name)
-    sessionStorage.removeItem(name)
-  },
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -55,6 +28,7 @@ export const useAuthStore = create<AuthStore>()(
     {
       name: 'fansedu-auth',
       version: 2,
+      storage: createJSONStorage(() => sessionStorage),
       migrate: (persisted) => {
         if (!persisted || typeof persisted !== 'object') return persisted
         const p = persisted as {
@@ -77,7 +51,6 @@ export const useAuthStore = create<AuthStore>()(
           state: { ...p.state, user: userPatched },
         }
       },
-      storage: createJSONStorage(() => authStorage),
-    }
-  )
+    },
+  ),
 )

@@ -1,7 +1,7 @@
 /**
  * API client sesuai docs/API_REQUIREMENTS.md
  * Base URL: VITE_API_URL (default http://localhost:8080/api/v1)
- * Auth: Bearer token dari store (persist fansedu-auth)
+ * Auth: Bearer token dari store (persist fansedu-auth di sessionStorage)
  */
 
 import { clearAuthOnUnauthorized, clearStoredAuthOnly } from './auth-clear'
@@ -17,9 +17,7 @@ import { extractModuleFromPayload, type TryoutModuleStat } from '../utils/tryout
 
 function getStoredToken(): string | null {
   try {
-    const raw = typeof window !== 'undefined'
-      ? (localStorage.getItem('fansedu-auth') ?? sessionStorage.getItem('fansedu-auth'))
-      : null
+    const raw = typeof window !== 'undefined' ? sessionStorage.getItem('fansedu-auth') : null
     if (!raw) return null
     const parsed = JSON.parse(raw) as { state?: { token?: string } }
     return parsed?.state?.token ?? null
@@ -136,7 +134,7 @@ async function handleResponse<T>(
   if (res.status === 403 && typeof window !== 'undefined' && responseIndicatesPasswordSetupRequired(data)) {
     const role: UserRole = (() => {
       try {
-        const raw = localStorage.getItem('fansedu-auth') ?? sessionStorage.getItem('fansedu-auth')
+        const raw = sessionStorage.getItem('fansedu-auth')
         if (!raw) return 'student'
         const parsed = JSON.parse(raw) as {
           state?: { user?: { role?: string; roleCode?: string }; token?: string | null }

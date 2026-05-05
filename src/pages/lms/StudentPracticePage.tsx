@@ -33,7 +33,7 @@ function todayKey(): string {
 }
 
 function loadEngagement(): DailyEngagementState {
-  const raw = window.localStorage.getItem(ENGAGEMENT_KEY)
+  const raw = window.sessionStorage.getItem(ENGAGEMENT_KEY)
   if (!raw) return { streakDays: 1, lastVisitDate: todayKey(), points: 10 }
   try {
     const parsed = JSON.parse(raw) as Partial<DailyEngagementState>
@@ -48,7 +48,7 @@ function loadEngagement(): DailyEngagementState {
 }
 
 function saveEngagement(next: DailyEngagementState) {
-  window.localStorage.setItem(ENGAGEMENT_KEY, JSON.stringify(next))
+  window.sessionStorage.setItem(ENGAGEMENT_KEY, JSON.stringify(next))
 }
 
 function computeBadges(streakDays: number, points: number): string[] {

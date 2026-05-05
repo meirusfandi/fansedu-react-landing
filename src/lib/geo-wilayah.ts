@@ -1,7 +1,7 @@
 /**
  * Provinsi & kabupaten/kota untuk form alamat (mis. profil instruktur).
  * - Sumber default: API publik emsifa (kompatibel dengan backend internal).
- * - Cache browser (localStorage) mengurangi load berulang; backend Redis tetap disarankan untuk latency konsisten.
+ * - Cache browser (sessionStorage) mengurangi load berulang; backend Redis tetap disarankan untuk latency konsisten.
  * @see docs/GEO_REDIS_BACKEND.md
  */
 import { API_BASE } from './api-config'
@@ -55,12 +55,12 @@ interface StoredCache<T> {
 
 function readCache<T>(key: string, ttlMs: number): T | null {
   try {
-    const raw = localStorage.getItem(key)
+    const raw = sessionStorage.getItem(key)
     if (!raw) return null
     const parsed = JSON.parse(raw) as StoredCache<T>
     if (!parsed || typeof parsed.ts !== 'number' || parsed.data === undefined) return null
     if (Date.now() - parsed.ts > ttlMs) {
-      localStorage.removeItem(key)
+      sessionStorage.removeItem(key)
       return null
     }
     return parsed.data
@@ -72,7 +72,7 @@ function readCache<T>(key: string, ttlMs: number): T | null {
 function writeCache<T>(key: string, data: T): void {
   try {
     const payload: StoredCache<T> = { ts: Date.now(), data }
-    localStorage.setItem(key, JSON.stringify(payload))
+    sessionStorage.setItem(key, JSON.stringify(payload))
   } catch {
     // quota penuh / private mode — abaikan
   }
@@ -89,7 +89,7 @@ function parseWilayahRows(rows: unknown): Array<{ id: string; name: string }> {
 }
 
 /**
- * Daftar provinsi (dengan cache localStorage).
+ * Daftar provinsi (dengan cache sessionStorage).
  */
 export async function fetchProvinces(options?: { cacheTtlMs?: number }): Promise<GeoProvinceItem[]> {
   const ttl = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS
@@ -108,7 +108,7 @@ export async function fetchProvinces(options?: { cacheTtlMs?: number }): Promise
 }
 
 /**
- * Daftar kabupaten/kota untuk satu provinsi (dengan cache localStorage).
+ * Daftar kabupaten/kota untuk satu provinsi (dengan cache sessionStorage).
  */
 export async function fetchRegenciesByProvince(
   provinceId: string,

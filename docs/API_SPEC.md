@@ -582,7 +582,7 @@ Digunakan untuk dropdown alamat (mis. profil instruktur). **Cache Redis diimplem
 ]
 ```
 
-**Frontend:** `VITE_GEO_SOURCE=internal` memakai `{VITE_API_URL}` untuk kedua endpoint di atas. Tanpa itu, frontend memakai API publik dengan cache `localStorage`.
+**Frontend:** `VITE_GEO_SOURCE=internal` memakai `{VITE_API_URL}` untuk kedua endpoint di atas. Tanpa itu, frontend memakai API publik dengan cache `sessionStorage`.
 
 ---
 

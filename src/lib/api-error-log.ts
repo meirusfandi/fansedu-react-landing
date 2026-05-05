@@ -1,5 +1,5 @@
 /**
- * Log kegagalan pemanggilan API: console.error + riwayat di localStorage (key `fansedu-api-error-log`).
+ * Log kegagalan pemanggilan API: console.error + riwayat di sessionStorage (key `fansedu-api-error-log`).
  */
 
 const STORAGE_KEY = 'fansedu-api-error-log'
@@ -56,7 +56,7 @@ function sanitizeDetail(data: unknown): Record<string, unknown> | undefined {
 function readStored(): ApiClientFailureEntry[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     return Array.isArray(parsed) ? (parsed as ApiClientFailureEntry[]) : []
@@ -68,11 +68,11 @@ function readStored(): ApiClientFailureEntry[] {
 function writeStored(entries: ApiClientFailureEntry[]): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
   } catch {
     try {
       const trimmed = entries.slice(-Math.floor(MAX_ENTRIES / 2))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
     } catch {
       /* ignore quota */
     }
@@ -80,7 +80,7 @@ function writeStored(entries: ApiClientFailureEntry[]): void {
 }
 
 /**
- * Catat kegagalan API: selalu `console.error`, tambahkan ke riwayat localStorage.
+ * Catat kegagalan API: selalu `console.error`, tambahkan ke riwayat sessionStorage.
  */
 export function recordApiClientFailure(input: Omit<ApiClientFailureEntry, 'at'>): void {
   const entry: ApiClientFailureEntry = {
@@ -140,7 +140,7 @@ export function getApiErrorLog(): ApiClientFailureEntry[] {
 export function clearApiErrorLog(): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
   } catch {
     /* ignore */
   }
