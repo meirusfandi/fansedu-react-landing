@@ -17,19 +17,14 @@ export default function StudentTryoutPage() {
 
   const retryLoad = useCallback(() => setReloadKey((k) => k + 1), [])
 
-  // Load master data for filter dropdowns
   useEffect(() => {
     getRegisterMasterData()
       .then((res) => setLevels(res.levels))
-      .catch(() => {
-        /* master data opsional — filter tetap bisa diketik manual */
-      })
+      .catch(() => {})
   }, [])
 
-  // Subject options berdasarkan level terpilih
   const subjectOptions = useMemo(() => {
     if (!selectedLevel) {
-      // Kumpulkan semua subject unik dari semua level
       const map = new Map<string, string>()
       for (const lv of levels) {
         for (const s of lv.subjects) {
@@ -42,11 +37,9 @@ export default function StudentTryoutPage() {
     return lv ? lv.subjects.map((s) => s.name) : []
   }, [levels, selectedLevel])
 
-  // Build filter params
   const filterParams = useMemo((): TryoutFilterParams | undefined => {
     const f: TryoutFilterParams = {}
     if (selectedSubject.trim()) {
-      // Prefer slug from master data; fall back to the raw name string
       const subjectSlug = levels
         .flatMap((lv) => lv.subjects)
         .find((s) => s.name === selectedSubject.trim())
@@ -81,7 +74,6 @@ export default function StudentTryoutPage() {
     }
   }, [reloadKey, filterParams])
 
-  // Reset subject saat level berubah (jika subject tidak ada di level baru)
   useEffect(() => {
     if (selectedSubject && subjectOptions.length > 0 && !subjectOptions.includes(selectedSubject)) {
       setSelectedSubject('')
@@ -89,35 +81,44 @@ export default function StudentTryoutPage() {
   }, [selectedLevel, subjectOptions, selectedSubject])
 
   return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header Halaman */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Tryout</h1>
-          <p className="text-gray-500">
-            Tryout yang terbuka untuk akun Anda, difilter berdasarkan bidang dan kelas.
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Simulasi Tryout OSN</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200/60 uppercase">
+              Gratis &amp; Resmi
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Ikuti simulasi olimpiade sains berskala nasional, cek rangking, dan evaluasi hasil latihanmu.
           </p>
         </div>
         <a
           href="#/student/tryout/history"
-          className="shrink-0 px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-teal-300 hover:text-teal-700 hover:bg-teal-50/30 transition-all shadow-xs self-start sm:self-auto"
         >
-          Riwayat tryout
+          <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Riwayat Tryout Saya</span>
         </a>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      {/* Filter Bar (TeachSync Style) */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 flex flex-wrap items-center gap-3 shadow-xs">
         <div className="flex flex-col gap-1">
-          <label htmlFor="filter-level" className="text-xs font-medium text-gray-500">
-            Kelas / Jenjang
+          <label htmlFor="filter-level" className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            Jenjang / Kelas
           </label>
           <select
             id="filter-level"
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(e.target.value)}
-            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 min-w-[140px]"
+            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 min-w-[150px]"
           >
-            <option value="">Semua jenjang</option>
+            <option value="">Semua Jenjang</option>
             {levels.map((lv) => (
               <option key={lv.id} value={lv.slug}>
                 {lv.name}
@@ -127,16 +128,16 @@ export default function StudentTryoutPage() {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor="filter-subject" className="text-xs font-medium text-gray-500">
-            Bidang / Mata Pelajaran
+          <label htmlFor="filter-subject" className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            Bidang Kompetisi
           </label>
           <select
             id="filter-subject"
             value={selectedSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 min-w-[160px]"
+            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 min-w-[170px]"
           >
-            <option value="">Semua bidang</option>
+            <option value="">Semua Bidang</option>
             {subjectOptions.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -146,47 +147,52 @@ export default function StudentTryoutPage() {
         </div>
 
         {(selectedLevel || selectedSubject) && (
-          <div className="flex items-end">
+          <div className="flex items-end self-end sm:mb-0.5">
             <button
               type="button"
               onClick={() => {
                 setSelectedLevel('')
                 setSelectedSubject('')
               }}
-              className="px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-primary hover:bg-gray-50 transition-colors"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-teal-700 hover:bg-teal-50 transition-colors"
             >
-              Reset filter
+              Reset Filter ✕
             </button>
           </div>
         )}
       </div>
 
+      {/* Konten Tryout */}
       {loading ? (
         <TryoutListSkeletonLms rows={4} />
       ) : error ? (
-        <div className="border rounded-2xl p-8 bg-white text-center">
-          <p className="text-sm text-amber-700 mb-4">{error}</p>
+        <div className="rounded-3xl border border-amber-200 p-8 bg-amber-50 text-center shadow-xs">
+          <p className="text-sm font-semibold text-amber-900 mb-3">{error}</p>
           <button
             type="button"
             onClick={retryLoad}
-            className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-medium hover:bg-gray-50"
+            className="px-5 py-2 rounded-xl bg-white border border-amber-300 text-xs font-bold text-amber-900 hover:bg-amber-100/50 shadow-xs"
           >
-            Coba lagi
+            Coba Muat Ulang
           </button>
         </div>
       ) : tryouts.length === 0 ? (
-        <div className="border rounded-2xl p-8 bg-white text-center text-gray-500">
-          {filterParams ? (
-            'Tidak ada tryout yang cocok dengan filter. Coba ubah filter atau reset.'
-          ) : (
-            <>
-              <p>Belum ada tryout yang terbuka untuk akun Anda.</p>
-              <p className="text-sm mt-2">
-                Pastikan profil akademik (jenjang &amp; bidang studi) sudah diisi lengkap di{' '}
-                <a href="#/student/profile" className="text-primary hover:underline font-medium">halaman profil</a>.
-              </p>
-            </>
-          )}
+        <div className="rounded-3xl border border-slate-200/90 p-12 bg-white text-center shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto mb-4 text-2xl">
+            🎯
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mb-1">Belum Ada Tryout Terbuka</h3>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-4">
+            {filterParams
+              ? 'Tidak ada tryout yang cocok dengan filter yang dipilih. Silakan reset filter.'
+              : 'Pastikan data jenjang dan bidang studi di profil sudah sesuai dengan jadwal kompetisi yang dibuka.'}
+          </p>
+          <a
+            href="#/student/profile"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white font-semibold text-xs hover:bg-teal-700 shadow-xs"
+          >
+            Cek Profil Akademik
+          </a>
         </div>
       ) : (
         <div className="space-y-4">
@@ -194,40 +200,59 @@ export default function StudentTryoutPage() {
             <a
               key={t.id}
               href={`#/student/tryout/${encodeURIComponent(t.id)}`}
-              className="block border rounded-2xl p-6 bg-white hover:border-primary/30 hover:shadow-md transition-all"
+              className="group block rounded-2xl border border-slate-200/90 p-5 sm:p-6 bg-white hover:border-teal-300 hover:shadow-md transition-all shadow-xs"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h2 className="font-semibold text-gray-900">{t.shortTitle || t.title}</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-bold text-slate-900 group-hover:text-teal-700 transition-colors text-base sm:text-lg">
+                      {t.shortTitle || t.title}
+                    </h2>
                     {t.badge && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-semibold">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
                         {t.badge}
                       </span>
                     )}
                     {t.hasAttempted ? (
-                      <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
-                        Sudah dikerjakan
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                        Sudah Dikerjakan ✓
                       </span>
                     ) : t.isRegistered ? (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
-                        Sudah daftar
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                        Sudah Terdaftar
                       </span>
                     ) : null}
                   </div>
+
                   {t.description && (
-                    <p className="text-sm text-gray-600 mb-1 line-clamp-2">{t.description}</p>
-                  )}
-                  <p className="text-sm text-gray-500">{getTryoutScheduleText(t)}</p>
-                  {(t.durationMinutes != null || t.questionCount != null) && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      {[t.durationMinutes != null ? `${t.durationMinutes} menit` : null, t.questionCount != null ? `${t.questionCount} soal` : null]
-                        .filter(Boolean)
-                        .join(' · ')}
+                    <p className="text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                      {t.description}
                     </p>
                   )}
+
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-medium pt-1">
+                    <span className="flex items-center gap-1.5 text-teal-700">
+                      <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {getTryoutScheduleText(t)}
+                    </span>
+                    {(t.durationMinutes != null || t.questionCount != null) && (
+                      <span className="text-slate-400">
+                        · {[t.durationMinutes != null ? `${t.durationMinutes} Menit` : null, t.questionCount != null ? `${t.questionCount} Soal` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="shrink-0 text-primary font-medium text-sm">Lihat detail →</span>
+
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-50 group-hover:bg-teal-600 text-teal-700 group-hover:text-white font-semibold text-xs transition-all shadow-xs">
+                    <span>{t.hasAttempted ? 'Lihat Hasil / Pembahasan' : 'Ikuti Ujian'}</span>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </div>
               </div>
             </a>
           ))}

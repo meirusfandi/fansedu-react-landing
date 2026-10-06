@@ -631,14 +631,25 @@ function App() {
                 {authUser ? (
                   <a
                     href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
-                    className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block"
+                    className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
                   >
                     Dashboard
                   </a>
                 ) : (
-                  <a href={`${LMS_BASE}/auth`} className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block">
-                    Masuk
-                  </a>
+                  <>
+                    <a
+                      href={`${LMS_BASE}/auth`}
+                      className="px-3.5 py-2 text-xs xl:text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
+                    >
+                      Masuk
+                    </a>
+                    <a
+                      href={REGISTER_URL}
+                      className="btn-primary px-4 py-2 xl:px-5 xl:py-2.5 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
+                    >
+                      Daftar
+                    </a>
+                  </>
                 )}
               </div>
             </div>
@@ -720,13 +731,22 @@ function App() {
                 Dashboard
               </a>
             ) : (
-              <a
-                href={`${LMS_BASE}/auth`}
-                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Masuk
-              </a>
+              <div className="flex gap-2">
+                <a
+                  href={`${LMS_BASE}/auth`}
+                  className="btn-secondary flex-1 py-3.5 rounded-full font-semibold text-center block border border-[var(--border)]"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Masuk
+                </a>
+                <a
+                  href={REGISTER_URL}
+                  className="btn-primary flex-1 py-3.5 rounded-full font-semibold text-center block"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Daftar
+                </a>
+              </div>
             )}
           </div>
         </div>
@@ -1029,34 +1049,53 @@ function App() {
           </div>
 
           <div className="text-center reveal">
-            <a
-              href={REGISTER_URL}
-              className="btn-primary px-8 py-4 rounded-full font-semibold inline-block text-lg shadow-lg shadow-[var(--accent)]/20"
-              onClick={() => trackConversionEvent('cta_register_click', { placement: 'tryout' })}
-            >
-              Mulai Tryout Gratis
-            </a>
+            {authUser ? (
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a
+                  href={authUser.role === 'guru' ? `${LMS_BASE}/guru/tryouts` : `${LMS_BASE}/student/tryout`}
+                  className="btn-primary px-8 py-4 rounded-full font-semibold inline-block text-lg shadow-lg shadow-[var(--accent)]/20"
+                  onClick={() => trackConversionEvent('cta_tryout_click', { placement: 'tryout_dashboard' })}
+                >
+                  Buka Tryout di Dashboard
+                </a>
+                <a
+                  href="#/tryout"
+                  className="btn-secondary px-8 py-4 rounded-full font-semibold inline-block text-lg border border-[var(--border)]"
+                  onClick={() => trackConversionEvent('cta_tryout_click', { placement: 'tryout_public_list' })}
+                >
+                  Lihat Jadwal Tryout
+                </a>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a
+                  href="#/tryout"
+                  className="btn-primary px-8 py-4 rounded-full font-semibold inline-block text-lg shadow-lg shadow-[var(--accent)]/20"
+                  onClick={() => trackConversionEvent('cta_tryout_click', { placement: 'tryout_public_list' })}
+                >
+                  Lihat Jadwal &amp; Ikuti Tryout
+                </a>
+                <a
+                  href={REGISTER_URL}
+                  className="btn-secondary px-8 py-4 rounded-full font-semibold inline-block text-lg border border-[var(--border)]"
+                  onClick={() => trackConversionEvent('cta_register_click', { placement: 'tryout' })}
+                >
+                  Daftar Akun Gratis
+                </a>
+              </div>
+            )}
             <p className="text-[var(--fg-muted)] text-sm mt-4">
               {authUser ? (
                 <>
-                  Sudah login?{' '}
-                  <a
-                    href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
-                    className="text-[var(--accent)] font-medium hover:underline"
-                  >
-                    Buka dashboard
-                  </a>
-                  {authUser.role === 'guru'
-                    ? ' untuk mengakses fitur guru (termasuk tryout jika tersedia).'
-                    : ' lalu buka menu Tryout dari sana.'}
+                  Masuk sebagai <strong className="text-[var(--fg)]">{authUser.name || 'Pengguna'}</strong> ({authUser.role === 'guru' ? 'Guru/Instruktur' : 'Siswa'}). Akses tryout langsung dari dashboard akun Anda.
                 </>
               ) : (
                 <>
                   Sudah punya akun?{' '}
                   <a href={`${LMS_BASE}/auth`} className="text-[var(--accent)] font-medium hover:underline">
-                    Masuk
+                    Masuk di sini
                   </a>
-                  , lalu buka menu Tryout di dashboard.
+                  , atau buat akun baru untuk menyimpan hasil &amp; peringkat nasional tryout Anda.
                 </>
               )}
             </p>
@@ -1886,7 +1925,7 @@ function App() {
           </div>
 
           <div className="pt-8 border-t border-[var(--border)] flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-[var(--fg-muted)]">2024 Fansedu Informatic Olympiad. All rights reserved.</p>
+            <p className="text-sm text-[var(--fg-muted)]">{new Date().getFullYear()} Fansedu Informatic Olympiad. All rights reserved.</p>
             <p className="text-sm text-[var(--fg-muted)]">Dibuat dengan dedikasi untuk pendidikan Indonesia.</p>
           </div>
         </div>
