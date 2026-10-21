@@ -1,3 +1,4 @@
+import { RequestTutorForm } from './components/tutor/RequestTutorForm'
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
@@ -351,6 +352,18 @@ const MOCK_ARTICLES: Article[] = [
 
 const FAQ_ITEMS = [
   {
+    q: 'Apakah Fansedu kini menyediakan bimbingan selain kelas OSN?',
+    a: 'Ya! Fansedu telah berkembang tidak hanya untuk pelatihan OSN (Informatika dan Matematika SD/SMP/SMA), tetapi juga menghadirkan Bimbingan TKA (Tes Kemampuan Akademik untuk UTBK-SNBT PTN dan seleksi masuk SMA Unggulan seperti Taruna Nusantara, Pradita Dirgantara, & MAN IC) serta Kelas Privat Eksklusif 1-on-1.',
+  },
+  {
+    q: 'Bagaimana cara request pengajar privat atau guru les ke rumah?',
+    a: 'Cukup isi formulir pada bagian Request Pengajar di website ini atau melalui dashboard siswa. Tentukan jenjang, mata pelajaran, mode belajar (online atau guru datang ke rumah), dan jadwal belajar yang diinginkan. Tim kami akan segera mencocokkan pengajar terverifikasi dari jaringan TeachSync.',
+  },
+  {
+    q: 'Apa itu integrasi TeachSync di Fansedu?',
+    a: 'TeachSync adalah sistem manajemen pengajar dan marketplace tutor yang menjadi mitra teknologi Fansedu. Setiap permintaan guru privat dari siswa Fansedu akan diproses melalui TeachSync untuk memastikan kualitas, verifikasi latar belakang pengajar, dan penjadwalan kelas yang rapi.',
+  },
+  {
     q: 'Bidang OSN apa saja yang tersedia di Fansedu?',
     a: 'Saat ini tersedia tiga program: OSN Informatika (SMA), OSN Matematika SMP, dan OSN Matematika SD. Masing-masing memiliki kurikulum, mentor, dan tryout tersendiri sesuai jenjang.',
   },
@@ -564,32 +577,39 @@ function App() {
                 aria-label="Tautan halaman"
               >
                 <a
-                  href="#tryout"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-[var(--accent)]"
-                  onClick={(event) => handleAnchorClick(event, '#tryout')}
+                  href="#layanan"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-[var(--accent)] font-semibold"
+                  onClick={(event) => handleAnchorClick(event, '#layanan')}
                 >
-                  Tryout Gratis
+                  Layanan Kami
                 </a>
                 <a
                   href="#packages"
                   className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
                   onClick={(event) => handleAnchorClick(event, '#packages')}
                 >
-                  Program &amp; Harga
+                  Kelas OSN
                 </a>
                 <a
-                  href="#solusi"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#solusi')}
+                  href="#request-tutor"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-teal-700 font-semibold"
+                  onClick={(event) => handleAnchorClick(event, '#request-tutor')}
                 >
-                  Hasil
+                  Request Pengajar ✦
+                </a>
+                <a
+                  href="#tryout"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  onClick={(event) => handleAnchorClick(event, '#tryout')}
+                >
+                  Tryout Gratis
                 </a>
                 <a
                   href="#features"
                   className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
                   onClick={(event) => handleAnchorClick(event, '#features')}
                 >
-                  Fitur
+                  Keunggulan
                 </a>
                 <a
                   href="#testimoni"
@@ -597,13 +617,6 @@ function App() {
                   onClick={(event) => handleAnchorClick(event, '#testimoni')}
                 >
                   Testimoni
-                </a>
-                <a
-                  href="#request"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#request')}
-                >
-                  Request Bidang
                 </a>
                 <a
                   href="#faq"
@@ -689,23 +702,23 @@ function App() {
       >
         <div className="pt-[5.5rem] px-6 pb-8 overflow-y-auto max-h-screen">
           <nav className="flex flex-col gap-4">
-            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
-              Tryout Gratis
+            <a href="#layanan" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#layanan')}>
+              Layanan (OSN, Privat &amp; TKA)
             </a>
             <a href="#packages" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#packages')}>
-              Program &amp; Harga
+              Program &amp; Paket OSN
             </a>
-            <a href="#solusi" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#solusi')}>
-              Hasil
+            <a href="#request-tutor" className="nav-link font-semibold text-lg py-3 border-b border-[var(--border)] text-teal-700" onClick={(event) => handleAnchorClick(event, '#request-tutor')}>
+              Request Pengajar Privat ✦
+            </a>
+            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
+              Tryout Gratis
             </a>
             <a href="#features" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#features')}>
-              Fitur
+              Fitur &amp; Keunggulan
             </a>
             <a href="#testimoni" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
               Testimoni
-            </a>
-            <a href="#request" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#request')}>
-              Request Bidang
             </a>
             <a href="#faq" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => { handleAnchorClick(event, '#faq') }}>
               FAQ
@@ -782,22 +795,22 @@ function App() {
               </div>
 
               <h1 className="font-display font-bold text-4xl sm:text-5xl lg:text-6xl leading-tight mb-4 reveal reveal-delay-1">
-                Siap Lolos OSN 2026?<br />
-                <span className="text-[var(--accent)]">Informatika · Mat SMP · Mat SD</span>
+                Pelatihan OSN, TKA &amp;<br />
+                <span className="text-[var(--accent)]">Kelas Privat Impianmu</span>
               </h1>
               <p className="text-xl sm:text-2xl text-[var(--fg-muted)] font-medium mb-6 max-w-xl reveal reveal-delay-1">
-                Dari tidak tahu apa-apa → kuasai materi → siap lolos seleksi
+                Kuasai materi olimpiade, taklukkan tes masuk SMA &amp; PTN unggulan, atau belajar privat bersama mentor TeachSync.
               </p>
 
               <ul className="space-y-2 mb-6 reveal reveal-delay-2">
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> 3 bidang: Informatika, Mat SMP, Mat SD
+                  <span className="text-[var(--accent)] font-bold">✔</span> <strong>Pelatihan OSN:</strong> Informatika SMA, Mat SMP &amp; Mat SD
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Latihan soal &amp; tryout nasional format OSN
+                  <span className="text-[var(--accent)] font-bold">✔</span> <strong>Bimbingan TKA:</strong> Masuk SMA Unggulan &amp; UTBK-SNBT PTN
                 </li>
                 <li className="flex items-center gap-2 text-[var(--fg)]">
-                  <span className="text-[var(--accent)] font-bold">✔</span> Ranking &amp; evaluasi kemampuan real-time
+                  <span className="text-[var(--accent)] font-bold">✔</span> <strong>Kelas Privat 1-on-1:</strong> Guru ke rumah atau online interaktif
                 </li>
               </ul>
 
@@ -853,30 +866,28 @@ function App() {
 
               <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mb-10 reveal reveal-delay-3">
                 <a
-                  href={waUrl(WA_TEMPLATES.heroSlot)}
-                  target="_blank"
-                  rel="noreferrer"
+                  href="#packages"
                   className="btn-primary px-6 py-3 rounded-full font-semibold text-sm text-center shadow-lg shadow-[var(--accent)]/25"
-                  onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'hero_slot' })}
+                  onClick={(e) => handleAnchorClick(e, '#packages')}
                 >
-                  Amankan Slot Sekarang
+                  Pilih Paket OSN
+                </a>
+                <a
+                  href="#request-tutor"
+                  className="btn-secondary px-6 py-3 rounded-full font-semibold text-sm text-center border-2 border-[var(--accent)] text-[var(--accent)] hover:bg-teal-50"
+                  onClick={(e) => handleAnchorClick(e, '#request-tutor')}
+                >
+                  Request Guru Privat ✦
                 </a>
                 <a
                   href="#tryout"
-                  className="btn-secondary px-6 py-3 rounded-full font-semibold text-sm text-center border-2 border-[var(--accent)] text-[var(--accent)]"
+                  className="text-center px-4 py-2 text-sm font-semibold text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors"
                   onClick={(event) => {
                     handleAnchorClick(event, '#tryout')
                     trackConversionEvent('cta_tryout_click', { placement: 'hero' })
                   }}
                 >
-                  Coba Tryout Gratis Dulu
-                </a>
-                <a
-                  href={REGISTER_URL}
-                  className="text-center px-4 py-2 text-sm font-semibold text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors"
-                  onClick={() => trackConversionEvent('cta_register_click', { placement: 'hero_secondary' })}
-                >
-                  Atau daftar akun →
+                  Coba Tryout Gratis →
                 </a>
               </div>
 
@@ -965,6 +976,136 @@ function App() {
                 <div className="text-sm text-[var(--fg-muted)]">{item.label}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3 PILAR LAYANAN: OSN, TKA, KELAS PRIVAT */}
+      <section id="layanan" className="py-20 relative bg-[var(--bg)] border-b border-[var(--border)]">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200/80 mb-3 shadow-xs">
+              Ekosistem Belajar Terpadu FansEdu x TeachSync
+            </span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight mb-4">
+              Lebih dari Sekadar OSN: <span className="text-[var(--accent)]">3 Solusi Belajar Prestasi</span>
+            </h2>
+            <p className="text-slate-600 text-base sm:text-lg leading-relaxed">
+              Mulai dari persiapan medali olimpiade, bimbingan tes masuk SMA/PTN impian, hingga les privat 1-on-1 dengan jadwal fleksibel bersama mentor terverifikasi.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+            {/* Kartu 1: Pelatihan OSN */}
+            <div className="rounded-3xl border border-slate-200/90 bg-white p-7 lg:p-8 flex flex-col justify-between shadow-xs hover:border-teal-300 hover:shadow-lg transition-all group">
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center text-3xl mb-5 group-hover:scale-105 transition-transform">
+                  🏆
+                </div>
+                <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full uppercase tracking-wider border border-teal-200/60">
+                  Olimpiade Sains
+                </span>
+                <h3 className="font-display font-bold text-xl sm:text-2xl text-slate-900 mt-3 mb-2.5">
+                  Pelatihan Intensif OSN
+                </h3>
+                <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                  Program terstruktur untuk seleksi tingkat Kota/Kabupaten, Provinsi, hingga Nasional. Bidang Informatika, Matematika SD/SMP, dan Sains bersama alumni peraih medali.
+                </p>
+                <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 mb-6">
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> 2x Live Class per minggu &amp; rekaman
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> 2x Tryout Nasional simulasi real-time
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Dashboard analitik performa per bab
+                  </li>
+                </ul>
+              </div>
+              <a
+                href="#packages"
+                onClick={(e) => handleAnchorClick(e, '#packages')}
+                className="w-full py-3 px-5 rounded-xl border border-teal-600 text-teal-700 hover:bg-teal-50 font-bold text-xs sm:text-sm text-center transition-colors shadow-xs"
+              >
+                Lihat Paket OSN →
+              </a>
+            </div>
+
+            {/* Kartu 2: Bimbingan TKA */}
+            <div className="rounded-3xl border-2 border-teal-600 bg-gradient-to-b from-teal-50/40 to-white p-7 lg:p-8 flex flex-col justify-between shadow-md relative group">
+              <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-teal-600 text-white text-[11px] font-extrabold uppercase tracking-wider shadow-sm">
+                Program Favorit
+              </span>
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-3xl mb-5 shadow-xs group-hover:scale-105 transition-transform">
+                  🎯
+                </div>
+                <span className="text-[11px] font-bold text-teal-800 bg-teal-100 px-2.5 py-1 rounded-full uppercase tracking-wider border border-teal-200">
+                  Tes Masuk PTN &amp; SMA
+                </span>
+                <h3 className="font-display font-bold text-xl sm:text-2xl text-slate-900 mt-3 mb-2.5">
+                  Bimbingan TKA Spesialis
+                </h3>
+                <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                  Persiapan Tes Kemampuan Akademik (TKA) Saintek/Soshum untuk lolos UTBK-SNBT &amp; Ujian Mandiri PTN, serta seleksi ketat SMA Unggulan (Taruna Nusantara, Pradita Dirgantara, MAN IC).
+                </p>
+                <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 mb-6">
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Drill soal HOTS &amp; penalaran tingkat lanjut
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Strategi pengerjaan cepat &amp; manajemen waktu
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Simulasi berkala format standar resmi
+                  </li>
+                </ul>
+              </div>
+              <a
+                href="#request-tutor"
+                onClick={(e) => handleAnchorClick(e, '#request-tutor')}
+                className="w-full py-3 px-5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm text-center shadow-xs transition-colors"
+              >
+                Daftar Bimbingan TKA →
+              </a>
+            </div>
+
+            {/* Kartu 3: Kelas Privat 1-on-1 */}
+            <div className="rounded-3xl border border-slate-200/90 bg-white p-7 lg:p-8 flex flex-col justify-between shadow-xs hover:border-teal-300 hover:shadow-lg transition-all group">
+              <div>
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center text-3xl mb-5 group-hover:scale-105 transition-transform">
+                  📚
+                </div>
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full uppercase tracking-wider border border-amber-200">
+                  Guru Datang / Online
+                </span>
+                <h3 className="font-display font-bold text-xl sm:text-2xl text-slate-900 mt-3 mb-2.5">
+                  Kelas Privat Eksklusif
+                </h3>
+                <p className="text-slate-600 text-sm leading-relaxed mb-6">
+                  Belajar 1-on-1 dengan jadwal fleksibel yang disesuaikan kebutuhan siswa. Didukung database pengajar terverifikasi dari sistem TeachSync untuk hasil belajar maksimal.
+                </p>
+                <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 mb-6">
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Pilihan guru datang ke rumah atau online
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Kurikulum fleksibel mengikuti ritme siswa
+                  </li>
+                  <li className="flex items-center gap-2.5">
+                    <span className="text-teal-600 font-bold">✓</span> Garansi kecocokan pengajar / ganti guru
+                  </li>
+                </ul>
+              </div>
+              <a
+                href="#request-tutor"
+                onClick={(e) => handleAnchorClick(e, '#request-tutor')}
+                className="w-full py-3 px-5 rounded-xl border border-teal-600 text-teal-700 hover:bg-teal-50 font-bold text-xs sm:text-sm text-center transition-colors shadow-xs"
+              >
+                Request Guru Privat →
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -1717,28 +1858,24 @@ function App() {
         </div>
       </section>
 
-      <section id="request" className="py-24 relative bg-[var(--bg-secondary)]">
+      {/* SECTION REQUEST PENGAJAR & KELAS PRIVAT (TERHUBUNG TEACHSYNC) */}
+      <section id="request-tutor" className="py-24 relative bg-[var(--bg-secondary)] border-t border-[var(--border)]">
         <div className="absolute inset-0 grid-bg opacity-50"></div>
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 relative">
-          <div className="feature-card rounded-3xl p-8 lg:p-12 text-center reveal">
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--fg-muted)] mb-6">
-              Request Bidang Lainnya
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="text-center max-w-3xl mx-auto mb-12 reveal">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-50 text-teal-800 border border-teal-200/80 mb-4 shadow-xs">
+              Powered by TeachSync Tutor Dispatch Network
             </span>
-            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl mb-6">
-              Ingin Request <span className="text-[var(--accent)]">Bidang Lainnya?</span>
+            <h2 className="font-display font-bold text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight mb-4">
+              Cari &amp; Request <span className="text-[var(--accent)]">Pengajar Privat Impianmu</span>
             </h2>
-            <p className="text-[var(--fg-muted)] text-lg max-w-3xl mx-auto mb-8">
-              Jika Anda membutuhkan program pelatihan di bidang selain OSN Informatika, tim kami siap menerima masukan dan menyesuaikan kebutuhan belajar Anda.
+            <p className="text-slate-600 text-base sm:text-lg leading-relaxed">
+              Ajukan kriteria guru les privat atau bimbingan TKA sesuai kebutuhanmu. Sistem cerdas kami yang terhubung dengan TeachSync akan mencocokkan profil pengajar terverifikasi terbaik.
             </p>
-            <a
-              href={waUrl(WA_TEMPLATES.requestBidang)}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-primary px-8 py-4 rounded-full font-semibold text-center inline-block"
-              onClick={() => trackConversionEvent('cta_whatsapp_click', { placement: 'request' })}
-            >
-              Kirim Request
-            </a>
+          </div>
+
+          <div className="reveal">
+            <RequestTutorForm />
           </div>
         </div>
       </section>

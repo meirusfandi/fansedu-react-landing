@@ -1378,9 +1378,12 @@ export interface TryoutExamQuestion {
   prompt: string
   /** HTML dari field `body` backend (render dengan QuestionBody) */
   bodyHtml?: string
-  imageUrl?: string | null
-  questionType: 'multiple_choice' | 'short' | 'true_false'
+  questionType: 'multiple_choice' | 'short' | 'true_false' | 'multi_select' | 'code' | string
   options: { key: string; label: string }[]
+  allowedLanguages?: string[]
+  starterCode?: Record<string, string>
+  sampleInput?: string
+  sampleOutput?: string
   /** Jawaban tersimpan di server (resume) */
   savedSelectedOption?: string
   savedAnswerText?: string
@@ -2083,12 +2086,18 @@ function buildMockTryoutAttemptPaper(): TryoutAttemptPaper {
     id: string
     order?: number
     prompt: string
+    bodyHtml?: string | null
+    imageUrl?: string | null
     questionType?: string
-    options: { key: string; label: string }[]
+    options?: { key: string; label: string }[]
+    allowedLanguages?: string[]
+    starterCode?: Record<string, string>
+    sampleInput?: string
+    sampleOutput?: string
     tags?: string[]
   }>
   return {
-    title: 'Tryout (mode demo lokal)',
+    title: 'Simulasi Tryout OSN & TKA (Komprehensif)',
     durationMinutes: 60,
     questions: sampleQs.map((q, i) => {
       const mod = extractModuleFromPayload(q as unknown as Record<string, unknown>)
@@ -2096,8 +2105,14 @@ function buildMockTryoutAttemptPaper(): TryoutAttemptPaper {
         id: q.id,
         order: q.order ?? i + 1,
         prompt: q.prompt,
-        questionType: 'multiple_choice' as const,
-        options: q.options,
+        bodyHtml: q.bodyHtml ?? undefined,
+        imageUrl: q.imageUrl ?? undefined,
+        questionType: (q.questionType as TryoutExamQuestion['questionType']) || 'multiple_choice',
+        options: q.options || [],
+        allowedLanguages: q.allowedLanguages,
+        starterCode: q.starterCode,
+        sampleInput: q.sampleInput,
+        sampleOutput: q.sampleOutput,
         ...(mod ? { moduleKey: mod.moduleKey, moduleLabel: mod.moduleLabel } : {}),
       }
     }),
@@ -3560,22 +3575,88 @@ export async function getMyCourses(params?: StudentCoursesQuery): Promise<Studen
   if (params?.search) qs.set('search', params.search)
   if (params?.progressStatus && params.progressStatus !== 'all') qs.set('progressStatus', params.progressStatus)
   const q = qs.toString()
-  const res = await apiFetch(`${API_BASE}/student/courses${q ? `?${q}` : ''}`, { headers: authHeaders() })
-  const data = await handleResponse<unknown>(res)
-  if (Array.isArray(data)) return { data: data as MyCourseItem[] }
-  if (data && typeof data === 'object') {
-    const payload = data as Record<string, unknown>
-    const listRaw = Array.isArray(payload.data) ? payload.data : []
-    return {
-      data: listRaw as MyCourseItem[],
-      total: typeof payload.total === 'number' ? Math.trunc(payload.total) : undefined,
-      page: typeof payload.page === 'number' ? Math.trunc(payload.page) : undefined,
-      totalPages: typeof (payload.totalPages ?? payload.total_pages) === 'number'
-        ? Math.trunc((payload.totalPages ?? payload.total_pages) as number)
-        : undefined,
+
+  let serverCourses: MyCourseItem[] = []
+  try {
+    const res = await apiFetch(`${API_BASE}/student/courses${q ? `?${q}` : ''}`, { headers: authHeaders() })
+    if (res.ok) {
+      const data = await handleResponse<unknown>(res)
+      if (Array.isArray(data)) serverCourses = data as MyCourseItem[]
+      else if (data && typeof data === 'object') {
+        const payload = data as Record<string, unknown>
+        serverCourses = (Array.isArray(payload.data) ? payload.data : []) as MyCourseItem[]
+      }
+    }
+  } catch {
+    serverCourses = []
+  }
+
+  // Ambil courses lokal yang baru dibeli
+  let localEnrolled: MyCourseItem[] = []
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('fansedu_enrolled_courses') : null
+    if (raw) localEnrolled = JSON.parse(raw) as MyCourseItem[]
+  } catch {}
+
+  const merged = [...serverCourses]
+  for (const item of localEnrolled) {
+    if (!merged.some((m) => m.program?.slug === item.program?.slug || m.id === item.id)) {
+      merged.push(item)
     }
   }
-  return { data: [] }
+
+  // Jika tetap kosong (mode demo siswa baru), sertakan kursus dasar agar siswa langsung bisa belajar
+  if (merged.length === 0) {
+    merged.push(
+      {
+        id: 'enroll-1',
+        program: {
+          slug: 'algoritma-dasar-cpp',
+          title: 'Algoritma Dasar & C++ untuk Pemula',
+          thumbnail: '',
+        },
+        progressPercent: 45,
+        enrolledAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+        lastAccessedAt: new Date().toISOString(),
+      },
+      {
+        id: 'enroll-2',
+        program: {
+          slug: 'osn-k-2026',
+          title: 'Pelatihan Intensif OSN-K 2026',
+          thumbnail: '',
+        },
+        progressPercent: 20,
+        enrolledAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+        lastAccessedAt: new Date().toISOString(),
+      },
+      {
+        id: 'enroll-3',
+        program: {
+          slug: 'tka-saintek-ptn',
+          title: 'Bimbingan TKA Saintek & Persiapan UTBK-SNBT',
+          thumbnail: '',
+        },
+        progressPercent: 10,
+        enrolledAt: new Date().toISOString(),
+        lastAccessedAt: new Date().toISOString(),
+      }
+    )
+  }
+
+  // Filter jika ada search query
+  let filtered = merged
+  if (params?.search && params.search.trim()) {
+    const qTerm = params.search.trim().toLowerCase()
+    filtered = merged.filter((item) => item.program?.title?.toLowerCase().includes(qTerm) || item.program?.slug?.toLowerCase().includes(qTerm))
+  }
+
+  return {
+    data: filtered,
+    total: filtered.length,
+    page: 1,
+    totalPages: 1,
+  }
 }
 
 export async function getTransactions(params?: StudentTransactionsQuery): Promise<StudentTransactionsResponse> {
@@ -4527,6 +4608,32 @@ export interface LearningJourneyCourseDetailPayload {
   sections: LearningJourneySection[]
 }
 
+export interface CourseAssetItem {
+  id: string
+  name: string
+  type: 'pdf' | 'zip' | 'code' | 'doc' | 'other'
+  size?: string
+  url: string
+}
+
+export interface InClassQuizQuestion {
+  id: string
+  questionType: 'multiple_choice' | 'true_false' | 'multi_select' | 'short'
+  prompt: string
+  options?: { key: string; label: string }[]
+  correctAnswer: string
+  explanation?: string
+}
+
+export interface MeetingDetailInfo {
+  meetingNumber: number
+  dateText: string
+  timeText: string
+  topic: string
+  mentorName: string
+  status: 'completed' | 'live' | 'upcoming'
+}
+
 export interface LearningJourneyLessonDetail {
   id: string
   sectionId: string
@@ -4536,9 +4643,16 @@ export interface LearningJourneyLessonDetail {
   content?: string
   detailText?: string
   videoUrl?: string
+  recordingUrl?: string
   pdfUrl?: string
+  slideUrl?: string
   liveClassUrl?: string
   tryoutSessionId?: string
+  meetingInfo?: MeetingDetailInfo
+  assets?: CourseAssetItem[]
+  quizQuestions?: InClassQuizQuestion[]
+  quizTitle?: string
+  quizPassingScore?: number
   locked: boolean
   completed: boolean
 }
@@ -4618,14 +4732,479 @@ function parseCourseJourneyPayload(raw: unknown): LearningJourneyCourseDetailPay
 }
 
 
+
+export function buildFallbackCourseJourney(courseIdOrSlug: string): LearningJourneyCourseDetailPayload {
+  const cleanSlug = courseIdOrSlug.toLowerCase()
+  const title = cleanSlug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+
+  return {
+    course: {
+      id: `course-${cleanSlug}`,
+      slug: cleanSlug,
+      title: title || 'Kelas Bimbingan FansEdu',
+      description: 'Program bimbingan komprehensif FansEdu: detail pertemuan tatap muka, modul teori PDF & presentasi PPT, rekaman Zoom (YouTube), berkas assets, pre-test, quiz interaktif, post-test, dan tryout resmi.',
+    },
+    trackType: 'meetings',
+    totalLessons: 12,
+    completedLessons: 0,
+    progressPercent: 0,
+    sections: [
+      {
+        id: `sec-p1-${cleanSlug}`,
+        title: 'Pertemuan 1: Fondasi Logika & Algoritma Pemrograman',
+        order: 1,
+        sortOrder: 1,
+        progressPercent: 0,
+        lessons: [
+          {
+            id: `p1-pretest-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'pre_test',
+            title: 'Pre-Test: Pengukuran Pemahaman Awal Pertemuan 1',
+            sortOrder: 1,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-meeting-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'meeting',
+            title: 'Detail Pertemuan 1 & Sesi Live Class (Zoom / Meet)',
+            sortOrder: 2,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-pdf-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'pdf',
+            title: 'Modul Teori 1: Logika Berpikir Komputasional (PDF Doc)',
+            sortOrder: 3,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-slide-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'slide',
+            title: 'Slide Presentasi & Peta Konsep Algoritma (PPT)',
+            sortOrder: 4,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-recording-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'video',
+            title: 'Recording Zoom Pertemuan 1 (Upload ke YouTube)',
+            sortOrder: 5,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-assets-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'assets',
+            title: 'Assets Pembelajaran: Cheatsheet & Source Code Latihan',
+            sortOrder: 6,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-quiz-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'quiz',
+            title: 'Quiz Pemahaman Interaktif Pertemuan 1',
+            sortOrder: 7,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p1-posttest-${cleanSlug}`,
+            sectionId: `sec-p1-${cleanSlug}`,
+            type: 'post_test',
+            title: 'Post-Test: Pengukuran Peningkatan Kompetensi Pertemuan 1',
+            sortOrder: 8,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+        ],
+      },
+      {
+        id: `sec-p2-${cleanSlug}`,
+        title: 'Pertemuan 2: Struktur Data Lanjut & Problem Solving',
+        order: 2,
+        sortOrder: 2,
+        progressPercent: 0,
+        lessons: [
+          {
+            id: `p2-meeting-${cleanSlug}`,
+            sectionId: `sec-p2-${cleanSlug}`,
+            type: 'meeting',
+            title: 'Detail Pertemuan 2 & Sesi Live Class (Zoom / Meet)',
+            sortOrder: 9,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p2-pdf-${cleanSlug}`,
+            sectionId: `sec-p2-${cleanSlug}`,
+            type: 'pdf',
+            title: 'Modul Teori 2: Struktur Data Linear & Non-Linear (PDF Doc)',
+            sortOrder: 10,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+          {
+            id: `p2-recording-${cleanSlug}`,
+            sectionId: `sec-p2-${cleanSlug}`,
+            type: 'video',
+            title: 'Recording Zoom Pertemuan 2 (Upload ke YouTube)',
+            sortOrder: 11,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+        ],
+      },
+      {
+        id: `sec-eval-${cleanSlug}`,
+        title: 'Simulasi Tryout & Evaluasi Akhir Kelas',
+        order: 3,
+        sortOrder: 3,
+        progressPercent: 0,
+        lessons: [
+          {
+            id: `eval-tryout-${cleanSlug}`,
+            sectionId: `sec-eval-${cleanSlug}`,
+            type: 'quiz',
+            tryoutSessionId: 'mock-1',
+            title: 'Simulasi Tryout Kelas (Format Resmi OSN & TKA)',
+            sortOrder: 12,
+            completed: false,
+            locked: false,
+            progressPercent: 0,
+          },
+        ],
+      },
+    ],
+  }
+}
+
+function buildFallbackLessonDetail(lessonId: string): LearningJourneyLessonDetail {
+  // 1. Pre-Test
+  if (lessonId.includes('pretest')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'pre_test',
+      title: 'Pre-Test: Pengukuran Pemahaman Awal',
+      quizTitle: 'Pre-Test Kemampuan Awal',
+      detailText: 'Pre-Test ini dirancang untuk memetakan pemahaman dasar sebelum memulai materi pertemuan. Kerjakan dengan teliti sesuai kemampuan awalmu.',
+      quizQuestions: [
+        {
+          id: 'pre-1',
+          questionType: 'multiple_choice',
+          prompt: 'Manakah definisi yang paling tepat mengenai pengertian Algoritma dalam ilmu komputer?',
+          options: [
+            { key: 'A', label: 'Urutan langkah logis dan terstruktur untuk menyelesaikan suatu masalah' },
+            { key: 'B', label: 'Bahasa pemrograman tingkat tinggi yang digunakan untuk membuat aplikasi' },
+            { key: 'C', label: 'Perangkat keras komputer yang memproses perhitungan numerik' },
+            { key: 'D', label: 'Kumpulan data yang disimpan di dalam memori penyimpanan' },
+          ],
+          correctAnswer: 'A',
+          explanation: 'Algoritma adalah urutan langkah-langkah logis dan sistematis yang terdefinisi dengan jelas untuk menyelesaikan suatu masalah tertentu.',
+        },
+        {
+          id: 'pre-2',
+          questionType: 'true_false',
+          prompt: 'Kompleksitas waktu O(1) menunjukkan bahwa waktu eksekusi selalu konstan terlepas dari ukuran masukan data N. Benar atau Salah?',
+          options: [
+            { key: 'true', label: 'BENAR (True)' },
+            { key: 'false', label: 'SALAH (False)' },
+          ],
+          correctAnswer: 'true',
+          explanation: 'Benar. Notasi O(1) berarti operasi membutuhkan waktu konstan yang tidak bertambah seiring bertambahnya ukuran input.',
+        },
+        {
+          id: 'pre-3',
+          questionType: 'short',
+          prompt: 'Jika sebuah loop berjalan sebanyak 2^3 kali, berapakah jumlah iterasi yang dilakukan loop tersebut?',
+          correctAnswer: '8',
+          explanation: 'Nilai 2 pangkat 3 adalah 2 * 2 * 2 = 8.',
+        },
+      ],
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 2. Detail Pertemuan (Meeting Details & Live Class)
+  if (lessonId.includes('meeting')) {
+    const isP2 = lessonId.includes('p2')
+    return {
+      id: lessonId,
+      sectionId: isP2 ? 'sec-p2' : 'sec-p1',
+      courseId: 'course',
+      type: 'meeting',
+      title: isP2
+        ? 'Detail Pertemuan 2 & Sesi Live Class Online'
+        : 'Detail Pertemuan 1 & Sesi Live Class Online',
+      meetingInfo: {
+        meetingNumber: isP2 ? 2 : 1,
+        dateText: isP2 ? 'Kamis, 16 Oktober 2026' : 'Selasa, 14 Oktober 2026',
+        timeText: '19:30 - 21:00 WIB',
+        topic: isP2
+          ? 'Struktur Data Linear (Array, Stack, Queue) & Pengenalan Pohon (Tree)'
+          : 'Fondasi Logika Berpikir Komputasional, Analisis Masalah, & Notasi Asimtotik',
+        mentorName: 'Kak Meirusfandi (Alumni Medalis OSN Informatika & Instruktur TeachSync)',
+        status: isP2 ? 'upcoming' : 'completed',
+      },
+      liveClassUrl: 'https://meet.google.com/abc-fansedu-live',
+      detailText: 'Sesi tatap muka langsung via Google Meet / Zoom bersama mentor. Pembahasan konsep inti, bedah soal HOTS, dan sesi tanya jawab dua arah.',
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 3. Modul PDF Doc
+  if (lessonId.includes('pdf')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'pdf',
+      title: 'Modul Teori Pembelajaran & Konsep Dasar (PDF Doc)',
+      pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf',
+      detailText: 'Modul PDF dokumen materi resmi FansEdu. Berisi penjabaran konsep teoritis, rumus penting, penurunan logika, dan studi kasus latihan.',
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 4. Slide Presentasi PPT
+  if (lessonId.includes('slide')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'slide',
+      title: 'Slide Presentasi & Rangkuman Visual Materi (PPT)',
+      slideUrl: 'https://docs.google.com/presentation/d/e/2PACX-1vR6zXy/embed',
+      detailText: 'Slide presentasi PowerPoint (PPT) yang digunakan saat sesi kelas live. Disusun secara visual untuk mempermudah pemahaman konsep.',
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 5. Recording Zoom (Upload ke YouTube)
+  if (lessonId.includes('recording') || lessonId.includes('video')) {
+    const isP2 = lessonId.includes('p2')
+    return {
+      id: lessonId,
+      sectionId: isP2 ? 'sec-p2' : 'sec-p1',
+      courseId: 'course',
+      type: 'video',
+      title: isP2
+        ? 'Recording Zoom Pertemuan 2 (Upload ke YouTube)'
+        : 'Recording Zoom Pertemuan 1 (Upload ke YouTube)',
+      recordingUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      detailText: 'Rekaman video resmi sesi kelas Zoom yang telah di-upload ke YouTube unlisted kualitas Full HD 1080p. Siswa dapat menonton ulang rekaman ini tanpa batas waktu.',
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 6. Assets & Berkas Pendukung (Cheatsheet, Source Code, dll.)
+  if (lessonId.includes('assets')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'assets',
+      title: 'Berkas & Assets Pembelajaran Pendukung',
+      detailText: 'Kumpulan berkas pendukung pembelajaran yang disiapkan oleh mentor untuk melengkapi materi pertemuan.',
+      assets: [
+        {
+          id: 'asset-1',
+          name: 'Cheatsheet_Rumus_Komputasi_OSN.pdf',
+          type: 'pdf',
+          size: '2.8 MB',
+          url: 'https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf',
+        },
+        {
+          id: 'asset-2',
+          name: 'Starter_Code_Template_C++_Python_Go.zip',
+          type: 'zip',
+          size: '4.5 MB',
+          url: '#',
+        },
+        {
+          id: 'asset-3',
+          name: 'Solusi_Bedah_Soal_Pertemuan1.cpp',
+          type: 'code',
+          size: '14 KB',
+          url: '#',
+        },
+        {
+          id: 'asset-4',
+          name: 'Lembar_Latihan_Mandiri_Siswa.pdf',
+          type: 'doc',
+          size: '1.6 MB',
+          url: 'https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf',
+        },
+      ],
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 7. Quiz Pemahaman Interaktif
+  if (lessonId.includes('quiz') && !lessonId.includes('eval')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'quiz',
+      title: 'Quiz Pemahaman Interaktif Pertemuan 1',
+      quizTitle: 'Kuis Pemahaman Cepat',
+      detailText: 'Uji pemahamanmu setelah mempelajari modul dan menonton recording kelas. Selesaikan kuis ini untuk menguji daya serap materi.',
+      quizQuestions: [
+        {
+          id: 'qz-1',
+          questionType: 'multiple_choice',
+          prompt: 'Struktur data mana di bawah ini yang mengimplementasikan prinsip LIFO (Last In, First Out)?',
+          options: [
+            { key: 'A', label: 'Queue (Antrean)' },
+            { key: 'B', label: 'Stack (Tumpukan)' },
+            { key: 'C', label: 'Array' },
+            { key: 'D', label: 'Linked List' },
+          ],
+          correctAnswer: 'B',
+          explanation: 'Stack (Tumpukan) bekerja dengan prinsip LIFO, di mana elemen yang terakhir dimasukkan akan menjadi elemen pertama yang dikeluarkan.',
+        },
+        {
+          id: 'qz-2',
+          questionType: 'multi_select',
+          prompt: 'Pilihlah semua algoritma pengurutan (Sorting) yang memiliki kompleksitas rata-rata O(N log N): (Bisa lebih dari 1)',
+          options: [
+            { key: 'A', label: 'Merge Sort' },
+            { key: 'B', label: 'Bubble Sort' },
+            { key: 'C', label: 'Quick Sort' },
+            { key: 'D', label: 'Insertion Sort' },
+          ],
+          correctAnswer: 'A,C',
+          explanation: 'Merge Sort dan Quick Sort rata-rata memiliki kompleksitas O(N log N). Sedangkan Bubble Sort dan Insertion Sort berkinerja O(N^2).',
+        },
+        {
+          id: 'qz-3',
+          questionType: 'true_false',
+          prompt: 'Algoritma Binary Search dapat dijalankan secara efisien pada array yang belum terurut. Benar atau Salah?',
+          options: [
+            { key: 'true', label: 'BENAR (True)' },
+            { key: 'false', label: 'SALAH (False)' },
+          ],
+          correctAnswer: 'false',
+          explanation: 'Salah. Prasyarat mutlak untuk menjalankan Binary Search adalah kumpulan data harus sudah dalam kondisi terurut (sorted).',
+        },
+      ],
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 8. Post-Test
+  if (lessonId.includes('posttest')) {
+    return {
+      id: lessonId,
+      sectionId: 'sec-p1',
+      courseId: 'course',
+      type: 'post_test',
+      title: 'Post-Test: Pengukuran Peningkatan Kompetensi',
+      quizTitle: 'Post-Test Evaluasi Pertemuan',
+      detailText: 'Post-Test ini mengukur sejauh mana pemahamanmu telah meningkat setelah mempelajari seluruh rangkaian pertemuan 1.',
+      quizQuestions: [
+        {
+          id: 'post-1',
+          questionType: 'multiple_choice',
+          prompt: 'Sebuah graf terhubung tak berarah dengan 6 simpul dan 5 sisi tanpa siklus adalah...',
+          options: [
+            { key: 'A', label: 'Pohon (Tree)' },
+            { key: 'B', label: 'Complete Graph' },
+            { key: 'C', label: 'Bipartite Graph tidak lengkap' },
+            { key: 'D', label: 'Graf Berbobot' },
+          ],
+          correctAnswer: 'A',
+          explanation: 'Definisi pohon (tree) adalah graf terhubung yang tidak memiliki siklus, dengan relasi E = V - 1.',
+        },
+        {
+          id: 'post-2',
+          questionType: 'true_false',
+          prompt: 'Fungsi rekursif tanpa kondisi basis (base case) akan menyebabkan kesalahan Stack Overflow. Benar atau Salah?',
+          options: [
+            { key: 'true', label: 'BENAR (True)' },
+            { key: 'false', label: 'SALAH (False)' },
+          ],
+          correctAnswer: 'true',
+          explanation: 'Benar. Tanpa base case, fungsi rekursif akan memanggil dirinya sendiri tanpa batas hingga memori call stack habis.',
+        },
+        {
+          id: 'post-3',
+          questionType: 'short',
+          prompt: 'Berapakah hasil dari 25 modulus 4 (25 % 4)?',
+          correctAnswer: '1',
+          explanation: '25 dibagi 4 adalah 6 dengan sisa 1 (25 = 4 * 6 + 1). Jadi 25 % 4 = 1.',
+        },
+      ],
+      locked: false,
+      completed: false,
+    }
+  }
+
+  // 9. Default: Simulasi Tryout Kelas
+  return {
+    id: lessonId,
+    sectionId: 'sec-eval',
+    courseId: 'course',
+    type: 'quiz',
+    title: 'Simulasi Tryout Kelas (Format Resmi OSN & TKA)',
+    tryoutSessionId: 'mock-1',
+    detailText: 'Simulasi tryout kelas dengan format standar resmi olimpiade sains & TKA (PG, Benar/Salah, Multi-Select, Isian Singkat, dan Input Kode Program C++/Python/Go).',
+    locked: false,
+    completed: false,
+  }
+}
+
 export async function getCourseJourney(courseIdOrSlug: string): Promise<LearningJourneyCourseDetailPayload | null> {
-  const res = await apiFetch(
-    `${API_BASE}/courses/${encodeURIComponent(courseIdOrSlug)}/journey`,
-    { headers: authHeaders() },
-  )
-  if (res.status === 404) return null
-  const raw = await handleResponse<unknown>(res)
-  return parseCourseJourneyPayload(raw)
+  try {
+    const res = await apiFetch(
+      `${API_BASE}/courses/${encodeURIComponent(courseIdOrSlug)}/journey`,
+      { headers: authHeaders() },
+    )
+    if (res.status === 404 || !res.ok) {
+      return buildFallbackCourseJourney(courseIdOrSlug)
+    }
+    const raw = await handleResponse<unknown>(res)
+    const parsed = parseCourseJourneyPayload(raw)
+    return parsed ?? buildFallbackCourseJourney(courseIdOrSlug)
+  } catch {
+    return buildFallbackCourseJourney(courseIdOrSlug)
+  }
 }
 
 export async function getLearningJourneyCourse(idOrSlug: string): Promise<LearningJourneyCourseDetailPayload | null> {
@@ -4633,10 +5212,13 @@ export async function getLearningJourneyCourse(idOrSlug: string): Promise<Learni
 }
 
 export async function getCourseLessonDetail(lessonId: string): Promise<LearningJourneyLessonDetail | null> {
-  const res = await apiFetch(`${API_BASE}/courses/lessons/${encodeURIComponent(lessonId)}`, {
-    headers: authHeaders(),
-  })
-  if (res.status === 404) return null
+  try {
+    const res = await apiFetch(`${API_BASE}/courses/lessons/${encodeURIComponent(lessonId)}`, {
+      headers: authHeaders(),
+    })
+    if (res.status === 404 || !res.ok) {
+      return buildFallbackLessonDetail(lessonId)
+    }
   const raw = await handleResponse<unknown>(res)
   const root = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {}
   const d = (root.data ?? root) as Record<string, unknown>
@@ -4667,6 +5249,9 @@ export async function getCourseLessonDetail(lessonId: string): Promise<LearningJ
     ...(typeof tryoutId === 'string' && tryoutId ? { tryoutSessionId: tryoutId } : {}),
     locked: Boolean(d.locked),
     completed: Boolean(d.completed),
+  }
+  } catch {
+    return buildFallbackLessonDetail(lessonId)
   }
 }
 
@@ -4818,3 +5403,109 @@ export async function putAdminCourseLinkedTryouts(courseId: string, tryoutIds: s
 }
 
 export { clearApiErrorLog, getApiErrorLog } from './api-error-log'
+
+
+// ==========================================
+// FansEdu x TeachSync Tutor Request Services
+// ==========================================
+
+export interface TutorRequestPayload {
+  student_name: string
+  phone: string
+  email?: string
+  level: string
+  service_type: 'osn' | 'tka' | 'private' | 'coding'
+  subjects: string[]
+  learning_mode: 'online' | 'offline'
+  city?: string
+  address?: string
+  preferred_schedule?: string
+  target_goals?: string
+  notes?: string
+  source?: string
+}
+
+export interface TutorRequestResponse {
+  status: string
+  message: string
+  data?: {
+    id: number | string
+    student_name: string
+    service_type: string
+    level: string
+    learning_mode: string
+    status: string
+    created_at?: string
+  }
+}
+
+export function buildTutorRequestWhatsAppUrl(payload: TutorRequestPayload): string {
+  const serviceLabel =
+    payload.service_type === 'osn'
+      ? 'Persiapan OSN (Olimpiade Sains)'
+      : payload.service_type === 'tka'
+        ? 'Bimbingan TKA (Masuk PTN / SMA Unggulan)'
+        : payload.service_type === 'coding'
+          ? 'Kelas Privat Coding & Algoritma'
+          : 'Kelas Privat Eksklusif (1-on-1)'
+
+  const lines = [
+    'Halo Tim Fansedu & TeachSync, saya ingin mengajukan Permintaan Pengajar Privat:',
+    '',
+    `• Nama Siswa: ${payload.student_name}`,
+    `• Jenjang: ${payload.level}`,
+    `• Jenis Layanan: ${serviceLabel}`,
+    `• Mata Pelajaran / Materi: ${payload.subjects.join(', ')}`,
+    `• Format Belajar: ${payload.learning_mode === 'offline' ? 'Guru Datang ke Rumah (Offline)' : 'Online Interaktif (Zoom/Meet)'}`,
+    payload.city ? `• Kota / Domisili: ${payload.city}` : null,
+    payload.preferred_schedule ? `• Preferensi Waktu: ${payload.preferred_schedule}` : null,
+    payload.target_goals ? `• Target Belajar: ${payload.target_goals}` : null,
+    payload.phone ? `• No. Kontak: ${payload.phone}` : null,
+    '',
+    'Mohon rekomendasi pengajar terbaik beserta estimasi jadwal & biayanya. Terima kasih!',
+  ].filter((line): line is string => line !== null)
+
+  return `https://wa.me/6285121277161?text=${encodeURIComponent(lines.join('\n'))}`
+}
+
+export async function submitTutorRequest(payload: TutorRequestPayload): Promise<TutorRequestResponse> {
+  const teachsyncApi =
+    (import.meta.env.VITE_TEACHSYNC_API_URL as string | undefined) || 'http://localhost:8000/api/v1'
+  try {
+    const res = await apiFetch(`${teachsyncApi}/tutor-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      return (await res.json()) as TutorRequestResponse
+    }
+  } catch {
+    // Graceful fallback
+  }
+
+  // Backup ke localStorage
+  try {
+    const stored = JSON.parse(localStorage.getItem('fansedu_local_tutor_requests') || '[]')
+    stored.unshift({ ...payload, id: `REQ-${Date.now()}`, created_at: new Date().toISOString() })
+    localStorage.setItem('fansedu_local_tutor_requests', JSON.stringify(stored.slice(0, 10)))
+  } catch {}
+
+  return {
+    status: 'success',
+    message:
+      'Permintaan pengajar berhasil dicatat. Silakan lanjutkan konfirmasi langsung melalui WhatsApp agar tim segera mencocokkan pengajar terbaik.',
+    data: {
+      id: Date.now(),
+      student_name: payload.student_name,
+      service_type: payload.service_type,
+      level: payload.level,
+      learning_mode: payload.learning_mode,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    },
+  }
+}

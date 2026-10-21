@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "description": "Sample lembar tryout dari demo VITE_TRYOUT_EXAM_MOCK — impor ke admin/backend. Field correctOption hanya untuk bank soal/admin (jangan kirim ke client siswa).",
-  "title": "Tryout demo (sample export)",
+  "description": "Sample lembar tryout FansEdu lengkap dengan berbagai jenis soal: Pilihan Ganda, Benar/Salah, Multi-Select, Isian Singkat, dan Input Kode Program (C++, Python, Go).",
+  "title": "Simulasi Tryout Komprehensif OSN & TKA",
   "durationMinutes": 60,
-  "gradingNotes": "Format OSN-K: hanya jawaban benar yang menambah poin; salah/kosong tidak mengurangi. Bobot per soal bisa disesuaikan di admin.",
+  "gradingNotes": "Format komprehensif: Pilihan ganda, Benar/Salah, Multi-Select, Isian Singkat, dan Pemrograman.",
   "questions": [
     {
       "id": "mock-1",
@@ -24,114 +24,77 @@
     {
       "id": "mock-2",
       "order": 2,
-      "questionType": "multiple_choice",
-      "prompt": "Jika 2^x = 32, maka nilai x adalah …",
-      "bodyHtml": null,
+      "questionType": "true_false",
+      "prompt": "Pernyataan: 'Sebuah graf terhubung tak berarah dengan V simpul dan E sisi merupakan pohon (tree) jika dan hanya jika E = V - 1.'\n\nApakah pernyataan di atas Benar atau Salah?",
+      "bodyHtml": "<p>Sebuah graf terhubung tak berarah dengan <strong>V</strong> simpul dan <strong>E</strong> sisi merupakan pohon (<em>tree</em>) jika dan hanya jika <code>E = V - 1</code>.</p><p>Tentukan kebenaran dari pernyataan tersebut:</p>",
       "imageUrl": null,
       "options": [
-        { "key": "A", "label": "4" },
-        { "key": "B", "label": "5" },
-        { "key": "C", "label": "6" },
-        { "key": "D", "label": "3" }
+        { "key": "true", "label": "BENAR (True)" },
+        { "key": "false", "label": "SALAH (False)" }
       ],
-      "correctOption": "B",
-      "tags": ["matematika", "eksponen"]
+      "correctOption": "true",
+      "tags": ["struktur-data", "graf", "tree"]
     },
     {
       "id": "mock-3",
       "order": 3,
-      "questionType": "multiple_choice",
-      "prompt": "Kompleksitas waktu terbaik untuk pencarian biner pada array terurut berukuran n adalah …",
-      "bodyHtml": null,
+      "questionType": "multi_select",
+      "prompt": "Manakah di antara struktur data berikut yang dapat digunakan untuk merepresentasikan antrean prioritas (Priority Queue) atau pencarian terpendek? (Pilih semua yang benar)",
+      "bodyHtml": "<p>Pilihlah <strong>semua</strong> struktur data di bawah ini yang dapat digunakan untuk merepresentasikan antrean prioritas (<em>Priority Queue</em>) atau pencarian rute terpendek:</p>",
       "imageUrl": null,
       "options": [
-        { "key": "A", "label": "O(n)" },
-        { "key": "B", "label": "O(log n)" },
-        { "key": "C", "label": "O(n log n)" },
-        { "key": "D", "label": "O(1)" }
+        { "key": "A", "label": "Binary Heap (Min-Heap / Max-Heap)" },
+        { "key": "B", "label": "Array terurut (Sorted Array)" },
+        { "key": "C", "label": "Self-Balancing Binary Search Tree (AVL / Red-Black Tree)" },
+        { "key": "D", "label": "Circular Singly Linked List tanpa penunjuk ekor" }
       ],
-      "correctOption": "B",
-      "tags": ["algoritma", "kompleksitas"]
+      "correctOption": "A,B,C",
+      "tags": ["struktur-data", "heap", "priority-queue"]
     },
     {
       "id": "mock-4",
       "order": 4,
-      "questionType": "multiple_choice",
-      "prompt": "Struktur data FIFO (first-in-first-out) yang umum dipakai untuk BFS pada graf adalah …",
-      "bodyHtml": null,
+      "questionType": "short",
+      "prompt": "Jika 2^x = 1024, berapakah nilai x yang memenuhi persamaan tersebut?",
+      "bodyHtml": "<p>Diberikan persamaan eksponensial:</p><pre><code>2^x = 1024</code></pre><p>Tuliskan nilai <strong>x</strong> dalam bentuk bilangan bulat:</p>",
       "imageUrl": null,
-      "options": [
-        { "key": "A", "label": "Stack" },
-        { "key": "B", "label": "Queue" },
-        { "key": "C", "label": "Heap" },
-        { "key": "D", "label": "Hash map" }
-      ],
-      "correctOption": "B",
-      "tags": ["struktur-data", "graf"]
+      "options": [],
+      "correctOption": "10",
+      "tags": ["matematika", "aljabar", "eksponen"]
     },
     {
       "id": "mock-5",
       "order": 5,
-      "questionType": "multiple_choice",
-      "prompt": "Pada bahasa C++, deklarasi pointer ke integer yang benar adalah …",
-      "bodyHtml": null,
+      "questionType": "code",
+      "prompt": "SOAL PEMROGRAMAN: Penjumlahan Dua Bilangan (A + B)\n\nDiberikan dua bilangan bulat A dan B yang dipisahkan oleh spasi. Buatlah program dalam bahasa C++, Python, atau Go untuk membaca kedua bilangan tersebut dan mencetak hasil penjumlahannya ke layar standar.",
+      "bodyHtml": "<div class=\"p-4 rounded-xl bg-slate-900 text-slate-100 mb-4\"><p class=\"font-bold text-teal-400 mb-2\">Deskripsi Soal:</p><p class=\"text-sm mb-3\">Diberikan dua bilangan bulat <code>A</code> dan <code>B</code> (1 &le; A, B &le; 10<sup>9</sup>). Cetaklah nilai dari <code>A + B</code>.</p><div class=\"grid grid-cols-2 gap-4 text-xs font-mono bg-slate-950 p-3 rounded-lg\"><div><p class=\"text-slate-400 font-bold mb-1\">Contoh Masukan (Input):</p><pre>3 5</pre></div><div><p class=\"text-slate-400 font-bold mb-1\">Contoh Keluaran (Output):</p><pre>8</pre></div></div></div>",
       "imageUrl": null,
-      "options": [
-        { "key": "A", "label": "int p*;" },
-        { "key": "B", "label": "int* p;" },
-        { "key": "C", "label": "pointer int p;" },
-        { "key": "D", "label": "*int p;" }
-      ],
-      "correctOption": "B",
-      "tags": ["cpp", "pointer"]
+      "options": [],
+      "allowedLanguages": ["cpp", "python", "go"],
+      "starterCode": {
+        "cpp": "#include <iostream>\nusing namespace std;\n\nint main() {\n    long long a, b;\n    if (cin >> a >> b) {\n        cout << (a + b) << endl;\n    }\n    return 0;\n}",
+        "python": "# Tulis solusimu di bawah ini\ndef solve():\n    import sys\n    input_data = sys.stdin.read().split()\n    if len(input_data) >= 2:\n        a = int(input_data[0])\n        b = int(input_data[1])\n        print(a + b)\n\nif __name__ == '__main__':\n    solve()",
+        "go": "package main\n\nimport \"fmt\"\n\nfunc main() {\n    var a, b int64\n    fmt.Scan(&a, &b)\n    fmt.Println(a + b)\n}"
+      },
+      "sampleInput": "3 5",
+      "sampleOutput": "8",
+      "tags": ["pemrograman", "cpp", "python", "go", "io"]
     },
     {
       "id": "mock-6",
       "order": 6,
       "questionType": "multiple_choice",
-      "prompt": "Jumlah deret aritmetika 1 + 2 + … + 10 sama dengan …",
+      "prompt": "Kompleksitas waktu terbaik untuk algoritma Binary Search pada array berukuran N yang sudah terurut adalah …",
       "bodyHtml": null,
       "imageUrl": null,
       "options": [
-        { "key": "A", "label": "45" },
-        { "key": "B", "label": "55" },
-        { "key": "C", "label": "50" },
-        { "key": "D", "label": "100" }
+        { "key": "A", "label": "O(N)" },
+        { "key": "B", "label": "O(log N)" },
+        { "key": "C", "label": "O(1) saat elemen berada tepat di titik tengah pertama" },
+        { "key": "D", "label": "O(N log N)" }
       ],
-      "correctOption": "B",
-      "tags": ["matematika", "deret"]
-    },
-    {
-      "id": "mock-7",
-      "order": 7,
-      "questionType": "multiple_choice",
-      "prompt": "Prinsip induksi matematika dipakai untuk membuktikan pernyataan yang berlaku untuk …",
-      "bodyHtml": null,
-      "imageUrl": null,
-      "options": [
-        { "key": "A", "label": "Hanya satu bilangan bulat" },
-        { "key": "B", "label": "Semua bilangan bulat tak negatif (atau subset terkait)" },
-        { "key": "C", "label": "Hanya bilangan prima" },
-        { "key": "D", "label": "Hanya bilangan real" }
-      ],
-      "correctOption": "B",
-      "tags": ["matematika", "induksi"]
-    },
-    {
-      "id": "mock-8",
-      "order": 8,
-      "questionType": "multiple_choice",
-      "prompt": "Pada graf tidak berarah, jumlah derajat semua simpul selalu …",
-      "bodyHtml": null,
-      "imageUrl": null,
-      "options": [
-        { "key": "A", "label": "Ganjil" },
-        { "key": "B", "label": "Genap" },
-        { "key": "C", "label": "Sama dengan jumlah sisi" },
-        { "key": "D", "label": "Tak terbatas" }
-      ],
-      "correctOption": "B",
-      "tags": ["graf", "teori-graf"]
+      "correctOption": "C",
+      "tags": ["algoritma", "kompleksitas"]
     }
   ]
 }

@@ -105,3 +105,11 @@ createRoot(document.getElementById('root')!).render(
     <Root />
   </StrictMode>,
 )
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((err) => console.error('Landing page SW registration failed:', err))
+  })
+}

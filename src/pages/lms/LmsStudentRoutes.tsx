@@ -18,6 +18,7 @@ import CheckoutConfirmPage from './CheckoutConfirmPage'
 import StudentCertificatesPage from './StudentCertificatesPage'
 import StudentProfilePage from './StudentProfilePage'
 import TryoutLeaderboardPage from './TryoutLeaderboardPage'
+import StudentRequestTutorPage from './StudentRequestTutorPage'
 
 /** Dashboard & halaman siswa — chunk terpisah, tidak diunduh di landing. */
 export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
@@ -129,6 +130,12 @@ export default function LmsStudentRoutes({ route }: { route: LmsRoute }) {
       return (
         <StudentLayout currentPath="/student/profile">
           <StudentProfilePage />
+        </StudentLayout>
+      )
+    case 'student-request-tutor':
+      return (
+        <StudentLayout currentPath="/student/request-tutor">
+          <StudentRequestTutorPage />
         </StudentLayout>
       )
     default:

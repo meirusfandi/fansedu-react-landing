@@ -23,6 +23,7 @@ export interface LmsRoute {
     | 'student-transaction-detail'
     | 'student-certificates'
     | 'student-profile'
+    | 'student-request-tutor'
     | 'guru'
     | 'guru-courses'
     | 'guru-assignments'
@@ -135,6 +136,7 @@ export function parseLmsRoute(hashPath: string): LmsRoute | null {
   }
   if (pathOnly === '/student/certificates') return { type: 'student-certificates', studentPath: '/student/certificates' }
   if (pathOnly === '/student/profile') return { type: 'student-profile', studentPath: '/student/profile' }
+  if (pathOnly === '/student/request-tutor') return { type: 'student-request-tutor', studentPath: '/student/request-tutor' }
 
   const gp = pathOnly.replace(/^\/instructor(?=\/|$)/, '/guru')
 
