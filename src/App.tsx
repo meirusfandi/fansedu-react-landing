@@ -419,6 +419,7 @@ function App() {
   const [packages, setPackages] = useState<LandingPackage[]>(MOCK_PACKAGES)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
   const [faqOpen, setFaqOpen] = useState<number | null>(null)
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null)
   const urgencyDateLabel = formatUrgencyDate(URGENCY.earlyBirdEnd)
   const [, setCountdownTick] = useState(0)
   useEffect(() => {
@@ -580,18 +581,11 @@ function App() {
                 aria-label="Tautan halaman"
               >
                 <a
-                  href="#layanan"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-[var(--accent)] font-semibold"
-                  onClick={(event) => handleAnchorClick(event, '#layanan')}
-                >
-                  Layanan Kami
-                </a>
-                <a
                   href="#packages"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
+                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base text-[var(--accent)] font-semibold"
                   onClick={(event) => handleAnchorClick(event, '#packages')}
                 >
-                  Kelas OSN
+                  Program &amp; Layanan
                 </a>
                 <a
                   href="#request-tutor"
@@ -601,25 +595,11 @@ function App() {
                   Request Pengajar ✦
                 </a>
                 <a
-                  href="#tryout"
+                  href="#articles"
                   className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#tryout')}
+                  onClick={(event) => handleAnchorClick(event, '#articles')}
                 >
-                  Tryout Gratis
-                </a>
-                <a
-                  href="#features"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#features')}
-                >
-                  Keunggulan
-                </a>
-                <a
-                  href="#testimoni"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#testimoni')}
-                >
-                  Testimoni
+                  Artikel
                 </a>
                 <a
                   href="#faq"
@@ -628,50 +608,22 @@ function App() {
                 >
                   FAQ
                 </a>
-                <a
-                  href="#contact"
-                  className="nav-link shrink-0 whitespace-nowrap font-medium text-sm xl:text-base"
-                  onClick={(event) => handleAnchorClick(event, '#contact')}
-                >
-                  Kontak
-                </a>
               </nav>
               <div className="flex shrink-0 items-center gap-2 pl-1 xl:border-l xl:border-[var(--border)] xl:pl-5">
-                <a
-                  href="#packages"
-                  className="btn-secondary px-4 py-2 xl:px-5 xl:py-2.5 rounded-full font-semibold text-xs xl:text-sm inline-block border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white"
-                  onClick={(event) => handleAnchorClick(event, '#packages')}
-                >
-                  Daftar Program
-                </a>
                 {authUser ? (
                   <a
                     href={authUser.role === 'guru' ? `${TEACHSYNC_BASE}/dashboard` : (authUser.role === 'parent' ? `${LMS_BASE}/parent/dashboard` : `${LMS_BASE}/student/dashboard`)}
-                    className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
+                    className="btn-primary px-5 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
                   >
                     Dashboard
                   </a>
                 ) : (
-                  <>
-                    <a
-                      href={TEACHSYNC_LOGIN_URL}
-                      className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 rounded-full border border-teal-200 hover:bg-teal-100 transition-colors"
-                    >
-                      <span>👩‍🏫 Portal Guru</span>
-                    </a>
-                    <a
-                      href={LOGIN_URL}
-                      className="px-3.5 py-2 text-xs xl:text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
-                    >
-                      Masuk (Siswa &amp; Ortu)
-                    </a>
-                    <a
-                      href={REGISTER_URL}
-                      className="btn-primary px-4 py-2 xl:px-5 xl:py-2.5 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
-                    >
-                      Daftar
-                    </a>
-                  </>
+                  <a
+                    href={LOGIN_URL}
+                    className="btn-primary px-5 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
+                  >
+                    Masuk
+                  </a>
                 )}
               </div>
             </div>
@@ -711,71 +663,36 @@ function App() {
       >
         <div className="pt-[5.5rem] px-6 pb-8 overflow-y-auto max-h-screen">
           <nav className="flex flex-col gap-4">
-            <a href="#layanan" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#layanan')}>
-              Layanan (OSN, Privat &amp; TKA)
-            </a>
-            <a href="#packages" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#packages')}>
-              Program &amp; Paket OSN
+            <a href="#packages" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)] text-[var(--accent)]" onClick={(event) => handleAnchorClick(event, '#packages')}>
+              Program &amp; Layanan
             </a>
             <a href="#request-tutor" className="nav-link font-semibold text-lg py-3 border-b border-[var(--border)] text-teal-700" onClick={(event) => handleAnchorClick(event, '#request-tutor')}>
               Request Pengajar Privat ✦
             </a>
-            <a href="#tryout" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#tryout')}>
-              Tryout Gratis
+            <a href="#articles" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#articles')}>
+              Artikel
             </a>
-            <a href="#features" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#features')}>
-              Fitur &amp; Keunggulan
-            </a>
-            <a href="#testimoni" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#testimoni')}>
-              Testimoni
-            </a>
-            <a href="#faq" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => { handleAnchorClick(event, '#faq') }}>
+            <a href="#faq" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#faq')}>
               FAQ
-            </a>
-            <a href="#contact" className="nav-link font-medium text-lg py-3 border-b border-[var(--border)]" onClick={(event) => handleAnchorClick(event, '#contact')}>
-              Kontak
             </a>
           </nav>
           <div className="mt-8 flex flex-col gap-3">
-            <a
-              href="#packages"
-              className="btn-secondary px-6 py-4 rounded-full font-semibold text-center block border-2 border-[var(--accent)] text-[var(--accent)]"
-              onClick={(event) => { handleAnchorClick(event, '#packages') }}
-            >
-              Daftar Program
-            </a>
             {authUser ? (
               <a
-                href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
-                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block"
+                href={authUser.role === 'guru' ? `${TEACHSYNC_BASE}/dashboard` : (authUser.role === 'parent' ? `${LMS_BASE}/parent/dashboard` : `${LMS_BASE}/student/dashboard`)}
+                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block shadow-md"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Dashboard
               </a>
             ) : (
-              <div className="flex gap-2">
-                <a
-                  href={LOGIN_URL}
-                  className="btn-secondary flex-1 py-3.5 rounded-full font-semibold text-center block border border-[var(--border)]"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Masuk Siswa/Ortu
-                </a>
-                <a
-                  href={TEACHSYNC_LOGIN_URL}
-                  className="btn-secondary flex-1 py-3.5 rounded-full font-semibold text-center block border border-teal-300 text-teal-800 bg-teal-50/50"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Portal Guru
-                </a>
-                <a
-                  href={REGISTER_URL}
-                  className="btn-primary flex-1 py-3.5 rounded-full font-semibold text-center block"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Daftar
-                </a>
-              </div>
+              <a
+                href={LOGIN_URL}
+                className="btn-primary px-6 py-4 rounded-full font-semibold text-center block shadow-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Masuk
+              </a>
             )}
           </div>
         </div>

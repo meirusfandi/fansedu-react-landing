@@ -177,7 +177,7 @@ function LoginSection({ redirect, onSwitch }: { redirect: string; onSwitch: () =
   return (
     <>
       <h2 className="text-xl font-bold text-gray-900 mb-1">Masuk</h2>
-      <p className="text-gray-600 text-sm mb-6">Gunakan akun Anda untuk mengakses dashboard.</p>
+      <p className="text-gray-600 text-sm mb-6">Gunakan akun Siswa, Guru, atau Orang Tua Anda untuk mengakses dashboard.</p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
         <div>
