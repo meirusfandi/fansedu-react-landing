@@ -1,5 +1,5 @@
 import { RequestTutorForm } from './components/tutor/RequestTutorForm'
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { Article } from './types/article'
 import { getPackages, trackAnalyticsEvent, trackPageview } from './lib/api'
@@ -54,11 +54,14 @@ const WA_TEMPLATES = {
   float: 'Halo Fansedu, saya ada pertanyaan tentang program OSN.',
 } as const
 
-/** Base path LMS: gunakan hash routing dalam project yang sama (#/auth, #/student, #/guru) */
-const LMS_BASE = '#'
+/** Base path LMS & TeachSync untuk ekosistem FansEdu */
+const LMS_BASE = (import.meta.env.VITE_LMS_URL as string) || 'http://localhost:3000'
+const TEACHSYNC_BASE = (import.meta.env.VITE_TEACHSYNC_URL as string) || 'http://localhost:8000'
 
-/** Link daftar akun di platform (LMS) — tetap di URL yang sama (hash routing) */
-const REGISTER_URL = `${LMS_BASE}/auth?tab=register`
+/** Link login & register untuk Siswa & Orang Tua */
+const LOGIN_URL = `${LMS_BASE}/login`
+const REGISTER_URL = `${LMS_BASE}/register`
+const TEACHSYNC_LOGIN_URL = `${TEACHSYNC_BASE}/login`
 
 /** Key sessionStorage auth dari LMS (Zustand persist 'fansedu-auth') */
 const AUTH_STORAGE_KEY = 'fansedu-auth'
@@ -643,7 +646,7 @@ function App() {
                 </a>
                 {authUser ? (
                   <a
-                    href={authUser.role === 'guru' ? `${LMS_BASE}/guru` : `${LMS_BASE}/student`}
+                    href={authUser.role === 'guru' ? `${TEACHSYNC_BASE}/dashboard` : (authUser.role === 'parent' ? `${LMS_BASE}/parent/dashboard` : `${LMS_BASE}/student/dashboard`)}
                     className="btn-primary px-4 py-2.5 xl:px-6 xl:py-3 rounded-full font-semibold text-xs xl:text-sm inline-block shadow-xs"
                   >
                     Dashboard
@@ -651,10 +654,16 @@ function App() {
                 ) : (
                   <>
                     <a
-                      href={`${LMS_BASE}/auth`}
+                      href={TEACHSYNC_LOGIN_URL}
+                      className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 rounded-full border border-teal-200 hover:bg-teal-100 transition-colors"
+                    >
+                      <span>👩‍🏫 Portal Guru</span>
+                    </a>
+                    <a
+                      href={LOGIN_URL}
                       className="px-3.5 py-2 text-xs xl:text-sm font-semibold text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
                     >
-                      Masuk
+                      Masuk (Siswa &amp; Ortu)
                     </a>
                     <a
                       href={REGISTER_URL}
@@ -746,11 +755,18 @@ function App() {
             ) : (
               <div className="flex gap-2">
                 <a
-                  href={`${LMS_BASE}/auth`}
+                  href={LOGIN_URL}
                   className="btn-secondary flex-1 py-3.5 rounded-full font-semibold text-center block border border-[var(--border)]"
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  Masuk
+                  Masuk Siswa/Ortu
+                </a>
+                <a
+                  href={TEACHSYNC_LOGIN_URL}
+                  className="btn-secondary flex-1 py-3.5 rounded-full font-semibold text-center block border border-teal-300 text-teal-800 bg-teal-50/50"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Portal Guru
                 </a>
                 <a
                   href={REGISTER_URL}

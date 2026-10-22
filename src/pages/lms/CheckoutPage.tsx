@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { useCheckoutStore } from '../../store/checkout'

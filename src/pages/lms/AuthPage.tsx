@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { useAuthStore } from '../../store/auth'
 import { authUserFromApiResponse, LmsPortalAccessDeniedError, type UserRole } from '../../types/auth'

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from 'react'
+import React, { useEffect, useLayoutEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { isAuthUserBlockedFromLmsPortal, type UserRole } from '../../types/auth'
 

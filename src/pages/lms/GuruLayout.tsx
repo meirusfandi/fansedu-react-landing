@@ -1,3 +1,4 @@
+import React from 'react'
 import { LmsHeader } from '../../components/lms/Header'
 import { AuthGuard } from '../../components/lms/AuthGuard'
 import { useLmsSidebarVisible } from '../../hooks/useLmsSidebarVisible'
